@@ -255,9 +255,155 @@ def recuperer_cotes(date, API_KEY):
 
     print("✅ Intégration complète des cotes depuis SportsData.io terminée pour toutes les compétitions !")
 
+def mettre_a_jour_stats_globales(date_reference):
+    print("📊 Mise à jour des stats globales des équipes ayant joué le", date_reference)
+
+    # Récupère les équipes concernées par des matchs hier
+    cursor.execute("""
+        SELECT DISTINCT m.saison, m.competition, m.equipe_domicile AS equipe
+        FROM matchs m
+        JOIN stats_matchs s ON m.game_id = s.game_id
+        WHERE m.date::date = %s
+        UNION
+        SELECT DISTINCT m.saison, m.competition, m.equipe_exterieur AS equipe
+        FROM matchs m
+        JOIN stats_matchs s ON m.game_id = s.game_id
+        WHERE m.date::date = %s
+    """, (date_reference, date_reference))
+    equipes = cursor.fetchall()
+
+    for saison, competition, equipe in equipes:
+        cursor.execute("""
+            SELECT m.game_id, m.equipe_domicile, m.equipe_exterieur,
+                   s.buts_dom, s.buts_ext, s.tirs_dom, s.tirs_ext, s.tirs_cadres_dom, s.tirs_cadres_ext,
+                   s.possession_dom, s.possession_ext, s.passes_reussies_dom, s.passes_reussies_ext,
+                   s.corners_dom, s.corners_ext, s.cartons_jaunes_dom, s.cartons_jaunes_ext,
+                   s.cartons_rouges_dom, s.cartons_rouges_ext, s.interceptions_dom, s.interceptions_ext,
+                   s.tacles_dom, s.tacles_ext, s.fautes_dom, s.fautes_ext, s.hors_jeu_dom, s.hors_jeu_ext
+            FROM matchs m
+            JOIN stats_matchs s ON m.game_id = s.game_id
+            WHERE m.saison = %s AND m.competition = %s
+              AND (m.equipe_domicile = %s OR m.equipe_exterieur = %s)
+        """, (saison, competition, equipe, equipe))
+        matchs = cursor.fetchall()
+
+        if not matchs:
+            continue
+
+        total = {
+            "matchs_joues": 0, "victoires": 0, "nuls": 0, "defaites": 0,
+            "buts_marques": 0, "buts_encaisse": 0, "difference_buts": 0,
+            "tirs": 0, "tirs_cadres": 0, "possession": 0, "passes_reussies": 0,
+            "corners": 0, "cartons_jaunes": 0, "cartons_rouges": 0,
+            "interceptions": 0, "tacles": 0, "fautes": 0, "hors_jeu": 0,
+            "btts": 0, "over_2_5": 0, "over_1_5": 0, "clean_sheets": 0
+        }
+
+        for match in matchs:
+            (
+                game_id, dom, ext, bdom, bext, tirs_dom, tirs_ext, tirs_cadres_dom, tirs_cadres_ext,
+                pos_dom, pos_ext, pass_dom, pass_ext,
+                corners_dom, corners_ext, jaunes_dom, jaunes_ext,
+                rouges_dom, rouges_ext, inter_dom, inter_ext,
+                tacles_dom, tacles_ext, fautes_dom, fautes_ext, hj_dom, hj_ext
+            ) = match
+
+            est_domicile = (equipe == dom)
+
+            buts_marques = bdom if est_domicile else bext
+            buts_encaisse = bext if est_domicile else bdom
+
+            total["matchs_joues"] += 1
+            total["buts_marques"] += buts_marques
+            total["buts_encaisse"] += buts_encaisse
+            total["difference_buts"] += (buts_marques - buts_encaisse)
+
+            total["victoires"] += int(buts_marques > buts_encaisse)
+            total["nuls"] += int(buts_marques == buts_encaisse)
+            total["defaites"] += int(buts_marques < buts_encaisse)
+
+            total["tirs"] += tirs_dom if est_domicile else tirs_ext
+            total["tirs_cadres"] += tirs_cadres_dom if est_domicile else tirs_cadres_ext
+            total["possession"] += pos_dom if est_domicile else pos_ext
+            total["passes_reussies"] += pass_dom if est_domicile else pass_ext
+            total["corners"] += corners_dom if est_domicile else corners_ext
+            total["cartons_jaunes"] += jaunes_dom if est_domicile else jaunes_ext
+            total["cartons_rouges"] += rouges_dom if est_domicile else rouges_ext
+            total["interceptions"] += inter_dom if est_domicile else inter_ext
+            total["tacles"] += tacles_dom if est_domicile else tacles_ext
+            total["fautes"] += fautes_dom if est_domicile else fautes_ext
+            total["hors_jeu"] += hj_dom if est_domicile else hj_ext
+
+            if bdom > 0 and bext > 0:
+                total["btts"] += 1
+            if (bdom + bext) > 2.5:
+                total["over_2_5"] += 1
+            if (bdom + bext) > 1.5:
+                total["over_1_5"] += 1
+            if buts_encaisse == 0:
+                total["clean_sheets"] += 1
+
+        def avg(val):
+            return round(val / total["matchs_joues"], 2)
+
+        insert_values = (
+            equipe, competition, saison,
+            total["matchs_joues"], total["victoires"], total["nuls"], total["defaites"],
+            total["buts_marques"], total["buts_encaisse"], total["difference_buts"],
+            total["tirs"], total["tirs_cadres"], avg(total["possession"]),
+            avg(total["passes_reussies"]), total["corners"], total["cartons_jaunes"],
+            total["cartons_rouges"], total["interceptions"], total["tacles"],
+            total["fautes"], total["hors_jeu"],
+            avg(total["buts_marques"]),
+            round(100 * total["btts"] / total["matchs_joues"], 2),
+            round(100 * total["over_2_5"] / total["matchs_joues"], 2),
+            round(100 * total["over_1_5"] / total["matchs_joues"], 2),
+            round(100 * total["clean_sheets"] / total["matchs_joues"], 2)
+        )
+
+        cursor.execute("""
+            INSERT INTO stats_globales (
+                equipe, competition, saison, matchs_joues, victoires, nuls, defaites,
+                buts_marques, buts_encaisse, difference_buts, tirs, tirs_cadres, possession,
+                passes_reussies, corners, cartons_jaunes, cartons_rouges, interceptions,
+                tacles, fautes, hors_jeu, moyenne_buts, pourcentage_BTTS, pourcentage_over_2_5,
+                pourcentage_over_1_5, pourcentage_clean_sheets
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (equipe, competition, saison)
+            DO UPDATE SET
+                matchs_joues = EXCLUDED.matchs_joues,
+                victoires = EXCLUDED.victoires,
+                nuls = EXCLUDED.nuls,
+                defaites = EXCLUDED.defaites,
+                buts_marques = EXCLUDED.buts_marques,
+                buts_encaisse = EXCLUDED.buts_encaisse,
+                difference_buts = EXCLUDED.difference_buts,
+                tirs = EXCLUDED.tirs,
+                tirs_cadres = EXCLUDED.tirs_cadres,
+                possession = EXCLUDED.possession,
+                passes_reussies = EXCLUDED.passes_reussies,
+                corners = EXCLUDED.corners,
+                cartons_jaunes = EXCLUDED.cartons_jaunes,
+                cartons_rouges = EXCLUDED.cartons_rouges,
+                interceptions = EXCLUDED.interceptions,
+                tacles = EXCLUDED.tacles,
+                fautes = EXCLUDED.fautes,
+                hors_jeu = EXCLUDED.hors_jeu,
+                moyenne_buts = EXCLUDED.moyenne_buts,
+                pourcentage_BTTS = EXCLUDED.pourcentage_BTTS,
+                pourcentage_over_2_5 = EXCLUDED.pourcentage_over_2_5,
+                pourcentage_over_1_5 = EXCLUDED.pourcentage_over_1_5,
+                pourcentage_clean_sheets = EXCLUDED.pourcentage_clean_sheets
+        """, insert_values)
+
+    conn.commit()
+    print("✅ stats_globales mise à jour avec succès !")
+
+
 recuperer_matchs(today, API_KEY)
 recuperer_stats_matchs(yesterday, API_KEY)
 recuperer_cotes(today, API_KEY)
+mettre_a_jour_stats_globales(yesterday)
 
 conn.commit()
 
