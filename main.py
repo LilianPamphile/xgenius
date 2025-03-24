@@ -57,7 +57,7 @@ def recuperer_matchs(date, API_KEY):
       #print(f"🔍 Récupération des matchs pour {competition_name} ({competition_id})...")
 
       # 🔗 URL API pour récupérer les matchs
-      url = f"https://api.sportsdata.io/v4/soccer/scores/json/GamesByDate/{competition_id}/{DATE}?key={API_KEY}"
+      url = f"https://api.sportsdata.io/v4/soccer/scores/json/GamesByDate/{competition_id}/{date}?key={API_KEY}"
       response = requests.get(url)
 
       if response.status_code == 200:
@@ -109,7 +109,7 @@ def recuperer_stats_matchs(date, API_KEY):
       #print(f"🔍 Récupération des statistiques pour {competition_name} ({competition_id})...")
 
       # 🔗 URL API pour récupérer les stats des matchs
-      url = f"https://api.sportsdata.io/v4/soccer/stats/json/TeamGameStatsByDateFinal/{competition_id}/{DATE}?key={API_KEY}"
+      url = f"https://api.sportsdata.io/v4/soccer/stats/json/TeamGameStatsByDateFinal/{competition_id}/{date}?key={API_KEY}"
       response = requests.get(url)
 
       if response.status_code == 200:
@@ -187,7 +187,7 @@ def recuperer_stats_matchs(date, API_KEY):
 
 def recuperer_cotes(date, API_KEY):
     for competition_name, competition_id in COMPETITIONS.items():
-        url = f"https://api.sportsdata.io/v4/soccer/odds/json/GameOddsByDate/{competition_id}/{DATE}?key={API_KEY}"
+        url = f"https://api.sportsdata.io/v4/soccer/odds/json/GameOddsByDate/{competition_id}/{date}?key={API_KEY}"
         response = requests.get(url)
 
         if response.status_code == 200:
