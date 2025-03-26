@@ -403,68 +403,6 @@ conn.commit()
 
 print("✅ Récupération des données terminée !")
 
-def normaliser(valeur, min_val, max_val):
-    if valeur is None:
-        return 0
-    return max(0, min(1, (valeur - min_val) / (max_val - min_val)))
-
-def calculer_score_heuristique():
-    cursor = conn.cursor()
-    query = """
-        SELECT 
-            m.game_id, m.equipe_domicile, m.equipe_exterieur,
-            sg1.moyenne_buts, sg1.pourcentage_over_2_5, sg1.pourcentage_BTTS,
-            sg1.tirs_cadres, sg1.possession, sg1.corners, sg1.fautes, sg1.cartons_jaunes, sg1.cartons_rouges,
-            sg2.moyenne_buts, sg2.pourcentage_over_2_5, sg2.pourcentage_BTTS,
-            sg2.tirs_cadres, sg2.possession, sg2.corners, sg2.fautes, sg2.cartons_jaunes, sg2.cartons_rouges,
-            c.cote_over
-        FROM matchs m
-        JOIN stats_globales sg1 ON m.equipe_domicile = sg1.equipe
-        JOIN stats_globales sg2 ON m.equipe_exterieur = sg2.equipe
-        JOIN cotes c ON m.game_id = c.game_id
-        WHERE DATE(m.date) = %s AND c.over_under_ligne = 2.5
-    """
-    cursor.execute(query, (today,))
-    rows = cursor.fetchall()
-    scores = []
-
-    for row in rows:
-        (
-            game_id, dom, ext,
-            buts_dom, over25_dom, btts_dom, tirs_dom, poss_dom, corners_dom, fautes_dom, cj_dom, cr_dom,
-            buts_ext, over25_ext, btts_ext, tirs_ext, poss_ext, corners_ext, fautes_ext, cj_ext, cr_ext,
-            cote_over
-        ) = row
-
-        total_buts = (buts_dom or 0) + (buts_ext or 0)
-        total_over = (over25_dom or 0) + (over25_ext or 0)
-        total_btts = (btts_dom or 0) + (btts_ext or 0)
-        total_tirs_cadres = (tirs_dom or 0) + (tirs_ext or 0)
-        total_possession = (poss_dom or 0) + (poss_ext or 0)
-        total_corners = (corners_dom or 0) + (corners_ext or 0)
-        total_fautes = (fautes_dom or 0) + (fautes_ext or 0)
-        total_cartons = (cj_dom or 0) + (cj_ext or 0) + (cr_dom or 0) * 2 + (cr_ext or 0) * 2
-
-        score = (
-            0.20 * normaliser(total_buts, 1, 3.5) +
-            0.20 * normaliser(total_over, 60, 160) +
-            0.15 * normaliser(total_btts, 50, 160) +
-            0.10 * normaliser(total_tirs_cadres, 4, 16) +
-            0.15 * normaliser(2.5 / float(cote_over or 2.5), 1.0, 1.8) +
-            0.05 * normaliser(total_possession, 80, 130) +
-            0.05 * normaliser(total_corners + total_fautes, 10, 30) +
-            0.05 * normaliser(total_cartons, 1, 6)
-        ) * 100
-
-        scores.append({
-            "match": f"{dom} vs {ext}",
-            "score_heuristique": round(score, 2),
-            "cote_over": cote_over
-        })
-
-    cursor.close()
-    return sorted(scores, key=lambda x: x["score_heuristique"], reverse=True)
-
 """## **Envoie de mail et execution des fonction de récupération de données**"""
 
 import smtplib
@@ -498,21 +436,119 @@ try:
 
     print("✅ Récupération des données terminée !")
 
-    # 🔥 Calcul du score heuristique pour les matchs du jour
-    top_scores = calculer_score_heuristique()
-    
-    # 🧾 Construction du texte à inclure dans le mail
-    if top_scores:
-        scoring_text = "📊 **TOP 5 MATCHS À BUTS (Score Heuristique)**\n\n"
-        for match in top_scores[:5]:
-            scoring_text += f"- {match['match']} | Score: {match['score_heuristique']} | Cote Over 2.5: {match['cote_over']}\n"
-    else:
-        scoring_text = "Aucun match disponible pour le scoring heuristique aujourd'hui."
-    
-    # ✉️ Envoi de l'email quotidien avec scores intégrés
+       # === Chargement du modèle ML et scaler ===
+    with open("model_over25.pkl", "rb") as f:
+        model_ml = pickle.load(f)
+    with open("scaler_over25.pkl", "rb") as f:
+        scaler_ml = pickle.load(f)
+
+    # === Fonction pour récupérer les matchs du jour ===
+    def get_matchs_jour_for_prediction():
+        cursor = conn.cursor()
+        query = """
+            SELECT 
+                m.equipe_domicile, m.equipe_exterieur,
+                sg1.moyenne_buts, sg1.pourcentage_over_2_5, sg1.pourcentage_BTTS,
+                sg1.tirs_cadres, sg1.possession, sg1.corners, sg1.fautes, sg1.cartons_jaunes, sg1.cartons_rouges,
+                sg2.moyenne_buts, sg2.pourcentage_over_2_5, sg2.pourcentage_BTTS,
+                sg2.tirs_cadres, sg2.possession, sg2.corners, sg2.fautes, sg2.cartons_jaunes, sg2.cartons_rouges,
+                c.cote_over
+            FROM matchs m
+            JOIN stats_globales sg1 ON m.equipe_domicile = sg1.equipe
+            JOIN stats_globales sg2 ON m.equipe_exterieur = sg2.equipe
+            JOIN cotes c ON m.game_id = c.game_id
+            WHERE DATE(m.date) = %s AND c.cote_over IS NOT NULL
+        """
+        cursor.execute(query, (today,))
+        rows = cursor.fetchall()
+        matchs = []
+
+        for row in rows:
+            (
+                dom, ext,
+                buts_dom, over25_dom, btts_dom, tirs_dom, poss_dom, corners_dom, fautes_dom, cj_dom, cr_dom,
+                buts_ext, over25_ext, btts_ext, tirs_ext, poss_ext, corners_ext, fautes_ext, cj_ext, cr_ext,
+                cote_over
+            ) = row
+
+            tirs_cadres = (tirs_dom or 0) + (tirs_ext or 0)
+            possession = (poss_dom or 0) + (poss_ext or 0)
+            corners_fautes = (corners_dom or 0) + (corners_ext or 0) + (fautes_dom or 0) + (fautes_ext or 0)
+            cartons = (cj_dom or 0) + (cj_ext or 0) + 2 * (cr_dom or 0) + 2 * (cr_ext or 0)
+
+            score_heuristique = (
+                0.20 * ((buts_dom or 0) + (buts_ext or 0)) +
+                0.20 * ((over25_dom or 0) + (over25_ext or 0)) +
+                0.15 * ((btts_dom or 0) + (btts_ext or 0)) +
+                0.10 * tirs_cadres +
+                0.15 * (2.5 / float(cote_over or 2.5)) +
+                0.05 * possession +
+                0.05 * corners_fautes +
+                0.05 * cartons
+            )
+
+            features = [
+                buts_dom, buts_ext,
+                over25_dom, over25_ext,
+                btts_dom, btts_ext,
+                tirs_cadres, possession, corners_fautes, cartons,
+                cote_over, score_heuristique
+            ]
+            matchs.append({
+                "match": f"{dom} vs {ext}",
+                "features": features,
+                "score_heuristique": round(score_heuristique, 2),
+                "cote_over": cote_over
+            })
+
+        cursor.close()
+        return matchs
+
+    # === Prédiction ML ===
+    matchs_jour = get_matchs_jour_for_prediction()
+    X_live = scaler_ml.transform([m["features"] for m in matchs_jour])
+    probas = model_ml.predict_proba(X_live)[:, 1]
+
+    # === Classement + Value Bet ===
+    over_matches = []
+    under_matches = []
+
+    for i, match in enumerate(matchs_jour):
+        proba_ml = probas[i]
+        cote = match['cote_over']
+        proba_cote = 1 / cote if cote else 0
+        is_value_bet = proba_ml > proba_cote
+
+        line = (
+            f"- {match['match']} | Heuristique: {match['score_heuristique']} | "
+            f"Proba ML: {round(proba_ml*100, 1)}% | Cote Over: {cote}"
+        )
+        if is_value_bet:
+            line += " 💰 Value Bet"
+
+        if proba_ml >= 0.5:
+            over_matches.append((proba_ml, line))
+        else:
+            under_matches.append((proba_ml, line))
+
+    # Trier & limiter à 5
+    over_matches.sort(reverse=True)
+    under_matches.sort()
+
+    top_over = [line for _, line in over_matches[:5]]
+    top_under = [line for _, line in under_matches[:5]]
+
+    # === Construction contenu du mail ===
+    mail_lines = ["📈 MATCHS À BUTS (Over 2.5 probables)\n"]
+    mail_lines.extend(top_over or ["Aucun match fort en buts aujourd’hui."])
+    mail_lines.append("\n🔒 MATCHS BLOQUÉS (Under 2.5 probables)\n")
+    mail_lines.extend(top_under or ["Aucun match fermé détecté."])
+
+    mail_content = "\n".join(mail_lines)
+
     send_email(
-        subject="✅ Succès - Script de récupération des matchs",
-        body=f"Le script s'est exécuté avec succès le {today}.\n\n{scoring_text}",
+        subject="🔥 Analyse Matchs Over/Under - Score, Proba ML & Value Bets",
+        body=f"Voici les prévisions du {today} :\n\n{mail_content}",
         to_email="lilian.pamphile.bts@gmail.com"
     )
 
