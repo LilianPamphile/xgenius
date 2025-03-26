@@ -41,12 +41,6 @@ conn = psycopg2.connect(DATABASE_URL)
 cursor = conn.cursor()
 
 
-# 📆 Générer les dates de la saison
-#date_debut = datetime(2025, 3, 8)
-#date_fin = datetime(2025, 3, 23)
-#nb_jours = (date_fin - date_debut).days
-
-
 print("Fin de la défintion de variables")
 
 """# **📌 1️⃣ Récupération des Matchs**"""
