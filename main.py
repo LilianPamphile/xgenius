@@ -425,12 +425,43 @@ def send_email(subject, body, to_email):
     except Exception as e:
         print("❌ Erreur lors de l'envoi de l'email :", e)
 
+import os
+import requests
+
+# --- Téléchargement des fichiers modèle/scaler depuis GitHub ---
+def telecharger_model_depuis_github():
+    # Infos du repo
+    REPO = "LilianPamphile/paris-sportifs"
+    BRANCH = "main"
+    TOKEN = "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"
+
+    # Liste des fichiers à télécharger
+    fichiers = ["model_over25.pkl", "scaler_over25.pkl"]
+    dossier_local = "models"
+
+    if not os.path.exists(dossier_local):
+        os.makedirs(dossier_local)
+
+    for fichier in fichiers:
+        url = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/{fichier}"
+        headers = {"Authorization": f"token {TOKEN}"}
+
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            with open(os.path.join(dossier_local, fichier), "wb") as f:
+                f.write(response.content)
+            print(f"✅ Fichier téléchargé : {fichier}")
+        else:
+            print(f"❌ Échec du téléchargement de {fichier} ({response.status_code})")
+
 ################################################################
 
 try:
     recuperer_matchs(today, API_KEY)
     recuperer_stats_matchs(yesterday, API_KEY)
     recuperer_cotes(today, API_KEY)
+
+    telecharger_model_depuis_github()
 
     conn.commit()
 
