@@ -435,24 +435,28 @@ def telecharger_model_depuis_github():
     BRANCH = "main"
     TOKEN = "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"
 
-    # Liste des fichiers à télécharger
-    fichiers = ["model_over25.pkl", "scaler_over25.pkl"]
-    dossier_local = "model_files"
+    # Liste des fichiers à télécharger (avec chemin dans le repo GitHub)
+    fichiers = {
+        "model_files/model_over25.pkl": "model_files/model_over25.pkl",
+        "model_files/scaler_over25.pkl": "model_files/scaler_over25.pkl"
+    }
 
-    if not os.path.exists(dossier_local):
-        os.makedirs(dossier_local)
-
-    for fichier in fichiers:
-        url = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/{fichier}"
+    for chemin_dist, chemin_local in fichiers.items():
+        url = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/{chemin_dist}"
         headers = {"Authorization": f"token {TOKEN}"}
+
+        # Crée le dossier local si besoin
+        dossier = os.path.dirname(chemin_local)
+        if not os.path.exists(dossier):
+            os.makedirs(dossier)
 
         response = requests.get(url, headers=headers)
         if response.status_code == 200:
-            with open(os.path.join(dossier_local, fichier), "wb") as f:
+            with open(chemin_local, "wb") as f:
                 f.write(response.content)
-            print(f"✅ Fichier téléchargé : {fichier}")
+            print(f"✅ Fichier téléchargé : {chemin_local}")
         else:
-            print(f"❌ Échec du téléchargement de {fichier} ({response.status_code})")
+            print(f"❌ Échec du téléchargement de {chemin_local} ({response.status_code})")
 
 ################################################################
 
@@ -468,10 +472,10 @@ try:
     print("✅ Récupération des données terminée !")
 
        # === Chargement du modèle ML et scaler ===
-    with open("model_over25.pkl", "rb") as f:
-        model_ml = pickle.load(f)
-    with open("scaler_over25.pkl", "rb") as f:
-        scaler_ml = pickle.load(f)
+    with open("model_files/model_over25.pkl", "rb") as f:
+    model_ml = pickle.load(f)
+    with open("model_files/scaler_over25.pkl", "rb") as f:
+    scaler_ml = pickle.load(f)
 
     # === Fonction pour récupérer les matchs du jour ===
     def get_matchs_jour_for_prediction():
