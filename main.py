@@ -598,7 +598,7 @@ try:
     # === Construction contenu du mail ===
     mail_lines = ["📈 MATCHS À BUTS (Over 2.5 probables)\n"]
     mail_lines.extend(top_over or ["Aucun match fort en buts aujourd’hui."])
-    mail_lines.append("\n🔒 MATCHS BLOQUÉS (Under 2.5 probables)\n")
+    mail_lines.append("\n🔒 MATCHS FERMÉS (Under 2.5 probables)\n")
     mail_lines.extend(top_under or ["Aucun match fermé détecté."])
 
     mail_content = "\n".join(mail_lines)
