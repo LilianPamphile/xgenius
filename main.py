@@ -437,7 +437,7 @@ def telecharger_model_depuis_github():
 
     # Liste des fichiers à télécharger
     fichiers = ["model_over25.pkl", "scaler_over25.pkl"]
-    dossier_local = "models"
+    dossier_local = "model_files"
 
     if not os.path.exists(dossier_local):
         os.makedirs(dossier_local)
