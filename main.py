@@ -488,6 +488,7 @@ try:
         cursor = conn.cursor()
         query = """
             SELECT 
+                m.game_id,
                 m.equipe_domicile, m.equipe_exterieur,
                 sg1.moyenne_buts, sg1.pourcentage_over_2_5, sg1.pourcentage_BTTS,
                 sg1.tirs_cadres, sg1.possession, sg1.corners, sg1.fautes, sg1.cartons_jaunes, sg1.cartons_rouges,
@@ -495,17 +496,25 @@ try:
                 sg2.tirs_cadres, sg2.possession, sg2.corners, sg2.fautes, sg2.cartons_jaunes, sg2.cartons_rouges,
                 c.cote_over
             FROM matchs m
-            JOIN stats_globales sg1 ON m.equipe_domicile = sg1.equipe AND m.saison = sg1.saison
-            JOIN stats_globales sg2 ON m.equipe_exterieur = sg2.equipe AND m.saison = sg2.saison
+            JOIN stats_globales sg1 ON m.equipe_domicile = sg1.equipe
+            JOIN stats_globales sg2 ON m.equipe_exterieur = sg2.equipe
             JOIN cotes c ON m.game_id = c.game_id
             WHERE DATE(m.date) = %s AND c.cote_over IS NOT NULL
         """
+
         cursor.execute(query, (today,))
         rows = cursor.fetchall()
         matchs = []
+        seen_game_ids = set()
     
         for row in rows:
+            game_id = row[0]
+            if game_id in seen_game_ids:
+                continue
+            seen_game_ids.add(game_id)
+        
             (
+                _,
                 dom, ext,
                 buts_dom, over25_dom, btts_dom, tirs_dom, poss_dom, corners_dom, fautes_dom, cj_dom, cr_dom,
                 buts_ext, over25_ext, btts_ext, tirs_ext, poss_ext, corners_ext, fautes_ext, cj_ext, cr_ext,
