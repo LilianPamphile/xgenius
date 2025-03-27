@@ -495,8 +495,8 @@ try:
                 sg2.tirs_cadres, sg2.possession, sg2.corners, sg2.fautes, sg2.cartons_jaunes, sg2.cartons_rouges,
                 c.cote_over
             FROM matchs m
-            JOIN stats_globales sg1 ON m.equipe_domicile = sg1.equipe
-            JOIN stats_globales sg2 ON m.equipe_exterieur = sg2.equipe
+            JOIN stats_globales sg1 ON m.equipe_domicile = sg1.equipe AND m.saison = sg1.saison
+            JOIN stats_globales sg2 ON m.equipe_exterieur = sg2.equipe AND m.saison = sg2.saison
             JOIN cotes c ON m.game_id = c.game_id
             WHERE DATE(m.date) = %s AND c.cote_over IS NOT NULL
         """
