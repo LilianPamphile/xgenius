@@ -473,9 +473,9 @@ try:
 
        # === Chargement du modèle ML et scaler ===
     with open("model_files/model_over25.pkl", "rb") as f:
-    model_ml = pickle.load(f)
+        model_ml = pickle.load(f)
     with open("model_files/scaler_over25.pkl", "rb") as f:
-    scaler_ml = pickle.load(f)
+        scaler_ml = pickle.load(f)
 
     # === Fonction pour récupérer les matchs du jour ===
     def get_matchs_jour_for_prediction():
