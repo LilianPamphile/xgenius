@@ -40,6 +40,11 @@ DATABASE_URL = "postgresql://postgres:jDDqfaqpspVDBBwsqxuaiSDNXjTxjMmP@shortline
 conn = psycopg2.connect(DATABASE_URL)
 cursor = conn.cursor()
 
+def to_float(x):
+    try:
+        return float(x)
+    except:
+        return 0.0
 
 print("Fin de la défintion de variables")
 
@@ -513,14 +518,14 @@ try:
             cartons = (cj_dom or 0) + (cj_ext or 0) + 2 * (cr_dom or 0) + 2 * (cr_ext or 0)
 
             score_heuristique = (
-                0.20 * ((buts_dom or 0) + (buts_ext or 0)) +
-                0.20 * ((over25_dom or 0) + (over25_ext or 0)) +
-                0.15 * ((btts_dom or 0) + (btts_ext or 0)) +
-                0.10 * tirs_cadres +
-                0.15 * (2.5 / float(cote_over or 2.5)) +
-                0.05 * possession +
-                0.05 * corners_fautes +
-                0.05 * cartons
+              0.20 * (to_float(buts_dom) + to_float(buts_ext)) +
+              0.20 * (to_float(over25_dom) + to_float(over25_ext)) +
+              0.15 * (to_float(btts_dom) + to_float(btts_ext)) +
+              0.10 * to_float(tirs_cadres) +
+              0.15 * (2.5 / float(to_float(cote_over) or 2.5)) +
+              0.05 * to_float(possession) +
+              0.05 * to_float(corners_fautes) +
+              0.05 * to_float(cartons)
             )
 
             features = [
