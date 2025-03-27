@@ -427,6 +427,7 @@ def send_email(subject, body, to_email):
 
 import os
 import requests
+import pickle
 
 # --- Téléchargement des fichiers modèle/scaler depuis GitHub ---
 def telecharger_model_depuis_github():
