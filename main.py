@@ -597,18 +597,47 @@ try:
 
     # === Construction contenu du mail ===
     mail_lines = ["📈 MATCHS À BUTS (Over 2.5 probables)\n"]
-    mail_lines.extend(top_over or ["Aucun match fort en buts aujourd’hui."])
+    
+    if top_over:
+        mail_lines.extend(top_over)
+    else:
+        mail_lines.append("Aucun match fort en buts aujourd’hui. ❄️")
+    
     mail_lines.append("\n🔒 MATCHS FERMÉS (Under 2.5 probables)\n")
-    mail_lines.extend(top_under or ["Aucun match fermé détecté."])
-
+    
+    if top_under:
+        for line in top_under:
+            # On récupère la proba ML depuis la ligne
+            proba_str = line.split("Proba ML: ")[1].split("%")[0]
+            proba_ml = float(proba_str.replace(",", ".")) / 100
+            proba_under = round((1 - proba_ml) * 100, 1)
+    
+            # Ajout de l'indicateur visuel avec emojis
+            if proba_ml >= 0.8:
+                emoji_bar = "🔥⚽⚽⚽🔥"
+            elif proba_ml >= 0.6:
+                emoji_bar = "⚽⚽⚽"
+            elif proba_ml >= 0.4:
+                emoji_bar = "⚽⚽"
+            elif proba_ml >= 0.2:
+                emoji_bar = "⚽"
+            else:
+                emoji_bar = "⚪"
+    
+            # Nettoyer la ligne et ajouter la synthèse
+            line_clean = line.split(" |")[0]  # Supprime tout après le nom du match
+            new_line = f"{line_clean} | 🔻 {proba_under}% de chance d'être en dessous de 2.5 {emoji_bar}"
+            mail_lines.append(new_line)
+    else:
+        mail_lines.append("Aucun match fermé détecté.")
+    
     mail_content = "\n".join(mail_lines)
-
+    
     send_email(
         subject="🔥 Analyse Matchs Over/Under - Score, Proba ML & Value Bets",
         body=f"Voici les prévisions du {today} :\n\n{mail_content}",
         to_email="lilian.pamphile.bts@gmail.com"
     )
-
 
 except Exception as e:
     # Si une erreur survient à n’importe quelle cellule
