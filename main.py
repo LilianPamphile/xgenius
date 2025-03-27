@@ -485,65 +485,72 @@ try:
 
     # === Fonction pour récupérer les matchs du jour ===
     def get_matchs_jour_for_prediction():
-        cursor = conn.cursor()
-        query = """
-            SELECT 
-                m.equipe_domicile, m.equipe_exterieur,
-                sg1.moyenne_buts, sg1.pourcentage_over_2_5, sg1.pourcentage_BTTS,
-                sg1.tirs_cadres, sg1.possession, sg1.corners, sg1.fautes, sg1.cartons_jaunes, sg1.cartons_rouges,
-                sg2.moyenne_buts, sg2.pourcentage_over_2_5, sg2.pourcentage_BTTS,
-                sg2.tirs_cadres, sg2.possession, sg2.corners, sg2.fautes, sg2.cartons_jaunes, sg2.cartons_rouges,
-                c.cote_over
-            FROM matchs m
-            JOIN stats_globales sg1 ON m.equipe_domicile = sg1.equipe
-            JOIN stats_globales sg2 ON m.equipe_exterieur = sg2.equipe
-            JOIN cotes c ON m.game_id = c.game_id
-            WHERE DATE(m.date) = %s AND c.cote_over IS NOT NULL
-        """
-        cursor.execute(query, (today,))
-        rows = cursor.fetchall()
-        matchs = []
+         cursor = conn.cursor()
+         query = """
+        SELECT 
+            m.equipe_domicile, m.equipe_exterieur,
+            sg1.moyenne_buts, sg1.pourcentage_over_2_5, sg1.pourcentage_BTTS,
+            sg1.tirs_cadres, sg1.possession, sg1.corners, sg1.fautes, sg1.cartons_jaunes, sg1.cartons_rouges,
+            sg2.moyenne_buts, sg2.pourcentage_over_2_5, sg2.pourcentage_BTTS,
+            sg2.tirs_cadres, sg2.possession, sg2.corners, sg2.fautes, sg2.cartons_jaunes, sg2.cartons_rouges,
+            c.cote_over
+        FROM matchs m
+        JOIN stats_globales sg1 ON m.equipe_domicile = sg1.equipe
+        JOIN stats_globales sg2 ON m.equipe_exterieur = sg2.equipe
+        JOIN cotes c ON m.game_id = c.game_id
+        WHERE DATE(m.date) = %s AND c.cote_over IS NOT NULL
+    """
+    cursor.execute(query, (today,))
+    rows = cursor.fetchall()
+    matchs = []
 
-        for row in rows:
-            (
-                dom, ext,
-                buts_dom, over25_dom, btts_dom, tirs_dom, poss_dom, corners_dom, fautes_dom, cj_dom, cr_dom,
-                buts_ext, over25_ext, btts_ext, tirs_ext, poss_ext, corners_ext, fautes_ext, cj_ext, cr_ext,
-                cote_over
-            ) = row
+    for row in rows:
+        (
+            dom, ext,
+            buts_dom, over25_dom, btts_dom, tirs_dom, poss_dom, corners_dom, fautes_dom, cj_dom, cr_dom,
+            buts_ext, over25_ext, btts_ext, tirs_ext, poss_ext, corners_ext, fautes_ext, cj_ext, cr_ext,
+            cote_over
+        ) = row
 
-            tirs_cadres = (tirs_dom or 0) + (tirs_ext or 0)
-            possession = (poss_dom or 0) + (poss_ext or 0)
-            corners_fautes = (corners_dom or 0) + (corners_ext or 0) + (fautes_dom or 0) + (fautes_ext or 0)
-            cartons = (cj_dom or 0) + (cj_ext or 0) + 2 * (cr_dom or 0) + 2 * (cr_ext or 0)
+        tirs_cadres = to_float(tirs_dom) + to_float(tirs_ext)
+        possession = to_float(poss_dom) + to_float(poss_ext)
+        corners_fautes = (
+            to_float(corners_dom) + to_float(corners_ext) +
+            to_float(fautes_dom) + to_float(fautes_ext)
+        )
+        cartons = (
+            to_float(cj_dom) + to_float(cj_ext) +
+            2 * to_float(cr_dom) + 2 * to_float(cr_ext)
+        )
 
-            score_heuristique = (
-              0.20 * (to_float(buts_dom) + to_float(buts_ext)) +
-              0.20 * (to_float(over25_dom) + to_float(over25_ext)) +
-              0.15 * (to_float(btts_dom) + to_float(btts_ext)) +
-              0.10 * to_float(tirs_cadres) +
-              0.15 * (2.5 / float(to_float(cote_over) or 2.5)) +
-              0.05 * to_float(possession) +
-              0.05 * to_float(corners_fautes) +
-              0.05 * to_float(cartons)
-            )
+        score_heuristique = (
+            0.20 * (to_float(buts_dom) + to_float(buts_ext)) +
+            0.20 * (to_float(over25_dom) + to_float(over25_ext)) +
+            0.15 * (to_float(btts_dom) + to_float(btts_ext)) +
+            0.10 * tirs_cadres +
+            0.15 * (2.5 / float(to_float(cote_over) or 2.5)) +
+            0.05 * possession +
+            0.05 * corners_fautes +
+            0.05 * cartons
+        )
 
-            features = [
-                buts_dom, buts_ext,
-                over25_dom, over25_ext,
-                btts_dom, btts_ext,
-                tirs_cadres, possession, corners_fautes, cartons,
-                cote_over, score_heuristique
-            ]
-            matchs.append({
-                "match": f"{dom} vs {ext}",
-                "features": features,
-                "score_heuristique": round(score_heuristique, 2),
-                "cote_over": cote_over
-            })
+        features = [
+            to_float(buts_dom), to_float(buts_ext),
+            to_float(over25_dom), to_float(over25_ext),
+            to_float(btts_dom), to_float(btts_ext),
+            tirs_cadres, possession, corners_fautes, cartons,
+            to_float(cote_over), score_heuristique
+        ]
 
-        cursor.close()
-        return matchs
+        matchs.append({
+            "match": f"{dom} vs {ext}",
+            "features": features,
+            "score_heuristique": round(score_heuristique, 2),
+            "cote_over": to_float(cote_over)
+        })
+
+    cursor.close()
+    return matchs
 
     # === Prédiction ML ===
     matchs_jour = get_matchs_jour_for_prediction()
