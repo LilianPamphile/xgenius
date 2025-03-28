@@ -22,7 +22,7 @@ cursor = conn.cursor()
 # --- Extraction des donnees historiques enrichies ---
 query = """
     SELECT 
-        m.game_id, m.equipe_domicile, m.equipe_exterieur,
+        m.game_id, m.date::date AS date_match, m.equipe_domicile, m.equipe_exterieur,
         sg1.moyenne_buts AS buts_dom, sg1.buts_encaisse::FLOAT / NULLIF(sg1.matchs_joues, 0) AS buts_encaissés_dom,
         sg1.pourcentage_over_2_5 AS over25_dom, sg1.pourcentage_BTTS AS btts_dom,
         sg1.tirs_cadres AS tirs_dom, sg1.possession AS poss_dom, sg1.corners AS corners_dom, sg1.fautes AS fautes_dom, 
@@ -33,6 +33,7 @@ query = """
         sg2.tirs_cadres AS tirs_ext, sg2.possession AS poss_ext, sg2.corners AS corners_ext, sg2.fautes AS fautes_ext,
         sg2.cartons_jaunes AS cj_ext, sg2.cartons_rouges AS cr_ext,
 
+        s.buts_dom AS buts_m_dom, s.buts_ext AS buts_m_ext,
         s.buts_dom + s.buts_ext AS total_buts
     FROM matchs m
     JOIN stats_globales sg1 ON m.equipe_domicile = sg1.equipe AND m.competition = sg1.competition AND m.saison = sg1.saison
@@ -45,12 +46,59 @@ cursor.execute(query)
 rows = cursor.fetchall()
 cols = [desc[0] for desc in cursor.description]
 df = pd.DataFrame(rows, columns=cols)
-cursor.close()
+
+# --- Préchargement de tous les anciens matchs pour calcul de forme ---
+query_all = """
+    SELECT m.date::date AS date_match, m.equipe_domicile, m.equipe_exterieur,
+           s.buts_dom, s.buts_ext
+    FROM matchs m
+    JOIN stats_matchs s ON m.game_id = s.game_id
+    WHERE s.buts_dom IS NOT NULL AND s.buts_ext IS NOT NULL
+"""
+cursor.execute(query_all)
+rows_all = cursor.fetchall()
+df_all_matchs = pd.DataFrame(rows_all, columns=["date", "dom", "ext", "buts_dom", "buts_ext"])
+
 conn.close()
+
+# --- Nouvelle fonction de forme sans SQL ---
+def get_forme(df_hist, equipe, date_ref):
+    matchs = df_hist[(
+        (df_hist["dom"] == equipe) | (df_hist["ext"] == equipe)) &
+        (df_hist["date"] < date_ref)
+    ].sort_values("date", ascending=False).head(5)
+
+    if matchs.empty:
+        return 0.0, 0.0
+
+    buts_marques, buts_encaissés = [], []
+    for _, row in matchs.iterrows():
+        est_dom = (equipe == row["dom"])
+        buts_marques.append(row["buts_dom"] if est_dom else row["buts_ext"])
+        buts_encaissés.append(row["buts_ext"] if est_dom else row["buts_dom"])
+
+    return sum(buts_marques) / len(buts_marques), sum(buts_encaissés) / len(buts_encaissés)
+
+forme_buts_dom, forme_enc_dom = [], []
+forme_buts_ext, forme_enc_ext = [], []
+
+for _, row in df.iterrows():
+    b_m, b_e = get_forme(df_all_matchs, row['equipe_domicile'], row['date_match'])
+    forme_buts_dom.append(b_m)
+    forme_enc_dom.append(b_e)
+    b_m2, b_e2 = get_forme(df_all_matchs, row['equipe_exterieur'], row['date_match'])
+    forme_buts_ext.append(b_m2)
+    forme_enc_ext.append(b_e2)
+
+# Ajout au DataFrame
+df["forme_buts_dom"] = forme_buts_dom
+df["forme_buts_ext"] = forme_buts_ext
+df["forme_encaissés_dom"] = forme_enc_dom
+df["forme_encaissés_ext"] = forme_enc_ext
 
 # --- Convertir Decimal → float ---
 for col in df.columns:
-    if df[col].dtype == 'object' and isinstance(df[col].dropna().iloc[0], Decimal):
+    if df[col].dtype == 'object' and not df[col].dropna().empty and isinstance(df[col].dropna().iloc[0], Decimal):
         df[col] = df[col].astype(float)
 
 # --- Feature engineering enrichie ---
@@ -61,13 +109,15 @@ df["cartons"] = df["cj_dom"] + df["cj_ext"] + 2 * df["cr_dom"] + 2 * df["cr_ext"
 
 # Score heuristique réajusté
 df["score_heuristique"] = (
-    0.25 * (df["buts_dom"] + df["buts_ext"]) +
-    0.20 * (df["over25_dom"] + df["over25_ext"]) +
-    0.20 * (df["btts_dom"] + df["btts_ext"]) +
-    0.15 * df["tirs_cadres"] +
+    0.20 * (df["buts_dom"] + df["buts_ext"]) +
+    0.15 * (df["forme_buts_dom"] + df["forme_buts_ext"]) +
+    0.15 * (df["over25_dom"] + df["over25_ext"]) +
+    0.15 * (df["btts_dom"] + df["btts_ext"]) +
+    0.10 * df["tirs_cadres"] +
     0.10 * df["possession"] +
+    0.05 * (df["forme_encaissés_dom"] + df["forme_encaissés_ext"]) +
     0.05 * df["corners_fautes"] +
-    0.05 * (df["buts_encaissés_dom"] + df["buts_encaissés_ext"])
+    0.05 * df["cartons"]
 )
 
 # Cible
@@ -77,6 +127,7 @@ df["over_2_5"] = df["total_buts"] > 2.5
 features = [
     "buts_dom", "buts_ext",
     "buts_encaissés_dom", "buts_encaissés_ext",
+    "forme_buts_dom", "forme_buts_ext", "forme_encaissés_dom", "forme_encaissés_ext",
     "over25_dom", "over25_ext",
     "btts_dom", "btts_ext",
     "tirs_cadres", "possession", "corners_fautes", "cartons",
