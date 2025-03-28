@@ -179,7 +179,7 @@ print("✅ Modèle XGBoost entraîné, validé et sauvegardé avec succès.")
 # === Envoi sur GitHub ===
 print("📦 Push vers GitHub...")
 
-GITHUB_REPO = "https://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@github.com/LilianPamphile/paris-sportifs.git"
+GITHUB_REPO = "https://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@github.com/LilianPamphile/paris-sportifs.git"
 CLONE_DIR = "model_push"
 MODEL_DIR = f"{CLONE_DIR}/model_files"
 
