@@ -188,10 +188,14 @@ os.system(f"rm -rf {CLONE_DIR}")
 os.system(f"git clone {GITHUB_REPO} {CLONE_DIR}")
 os.makedirs(f"{CLONE_DIR}/model_files", exist_ok=True)
 
+# Copier les fichiers dans le bon dossier
 shutil.copy("model_over25.pkl", f"{CLONE_DIR}/model_files/model_over25.pkl")
 shutil.copy("scaler_over25.pkl", f"{CLONE_DIR}/model_files/scaler_over25.pkl")
 
-os.system(f"cd {CLONE_DIR} && git add model_files && git commit -m '🧠 Update model files' && git push")
+# S'assurer que Git suive à nouveau le dossier
+os.system(f"cd {CLONE_DIR} && git add model_files/*.pkl")
+os.system(f"cd {CLONE_DIR} && git commit -m '🧠 Update model files' || echo '🔁 Rien à commit'")
+os.system(f"cd {CLONE_DIR} && git push")
 
 print("✅ Modèle pushé sur GitHub avec succès.")
 
@@ -224,7 +228,7 @@ if auc_test < 0.70:
         "Vérifie les données ou réentraîne manuellement si besoin.\n\n"
         "📁 Fichiers générés : model_over25.pkl, scaler_over25.pkl\n"
         "📤 Upload GitHub : ✅ effectué avec succès\n"
-        "🔗 https://github.com/LilianPamphile/paris-sportifs/tree/main/model_files"
+        "🔗 https://github.com/LilianPamphile/paris-sportifs/model_files"
     )
 else:
     subject = "✅ Modèle mis à jour avec succès"
@@ -233,7 +237,7 @@ else:
         f"AUC Test : {auc_test:.4f} ✅\n\n"
         "📁 Fichiers générés : model_over25.pkl & scaler_over25.pkl\n"
         "📤 Upload GitHub : ✅ effectué avec succès\n"
-        "🔗 https://github.com/LilianPamphile/paris-sportifs/tree/main/model_files"
+        "🔗 https://github.com/LilianPamphile/paris-sportifs/model_files"
     )
 
 send_email(subject, body, to_email="lilian.pamphile.bts@gmail.com")
