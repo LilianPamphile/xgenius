@@ -181,23 +181,32 @@ print("📦 Push vers GitHub...")
 
 GITHUB_REPO = "https://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@github.com/LilianPamphile/paris-sportifs.git"
 CLONE_DIR = "model_push"
+MODEL_DIR = f"{CLONE_DIR}/model_files"
 
+# Config Git + nettoyage + clone
 os.system(f"git config --global user.email 'lilian.pamphile.bts@gmail.com'")
 os.system(f"git config --global user.name 'LilianPamphile'")
 os.system(f"rm -rf {CLONE_DIR}")
 os.system(f"git clone {GITHUB_REPO} {CLONE_DIR}")
-os.makedirs(f"{CLONE_DIR}/model_files", exist_ok=True)
 
-# Copier les fichiers dans le bon dossier
-shutil.copy("model_over25.pkl", f"{CLONE_DIR}/model_files/model_over25.pkl")
-shutil.copy("scaler_over25.pkl", f"{CLONE_DIR}/model_files/scaler_over25.pkl")
+# Crée dossier model_files s'il n'existe pas
+os.makedirs(MODEL_DIR, exist_ok=True)
 
-# S'assurer que Git suive à nouveau le dossier
-os.system(f"cd {CLONE_DIR} && git add model_files/*.pkl")
-os.system(f"cd {CLONE_DIR} && git commit -m '🧠 Update model files' || echo '🔁 Rien à commit'")
+# Copie les fichiers dans le dossier
+shutil.copy("model_over25.pkl", f"{MODEL_DIR}/model_over25.pkl")
+shutil.copy("scaler_over25.pkl", f"{MODEL_DIR}/scaler_over25.pkl")
+
+# Ajoute un .gitkeep pour forcer le suivi
+with open(f"{MODEL_DIR}/.gitkeep", "w") as f:
+    f.write("")
+
+# Ajout + commit + push
+os.system(f"cd {CLONE_DIR} && git add model_files")
+os.system(f"cd {CLONE_DIR} && git commit -m '🧠 Update model files' || echo '🔁 Aucun changement détecté'")
 os.system(f"cd {CLONE_DIR} && git push")
 
 print("✅ Modèle pushé sur GitHub avec succès.")
+
 
 # === Envoi d'email final ===
 def send_email(subject, body, to_email):
