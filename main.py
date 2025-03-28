@@ -460,7 +460,6 @@ try:
                 0.20 * (to_float(over25_dom) + to_float(over25_ext)) +
                 0.15 * (to_float(btts_dom) + to_float(btts_ext)) +
                 0.10 * tirs_cadres +
-                0.15 * (2.5 / float(to_float(cote_over) or 2.5)) +
                 0.05 * possession +
                 0.05 * corners_fautes +
                 0.05 * cartons
@@ -494,16 +493,11 @@ try:
 
     for i, match in enumerate(matchs_jour):
         proba_ml = probas[i]
-        cote = match['cote_over']
-        proba_cote = 1 / cote if cote else 0
-        is_value_bet = proba_ml > proba_cote
 
         line = (
             f"- {match['match']} | Heuristique: {match['score_heuristique']} | "
             f"Proba ML: {round(proba_ml*100, 1)}% "
         )
-        if is_value_bet:
-            line += " 💰 Value Bet"
 
         if proba_ml >= 0.5:
             over_matches.append((proba_ml, line))
