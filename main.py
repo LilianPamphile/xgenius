@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 
 
 # 🔑 Clé API SportsData.io
-API_KEY = "f5dfafaf901b41b0898c6277c72300ea"
+API_KEY = "0b342d05a0a748d5ac840a9e4898cbf1"
 
 today = datetime.today().date()
 yesterday = today - timedelta(days=1)
