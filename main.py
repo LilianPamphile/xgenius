@@ -523,72 +523,81 @@ try:
     matchs_jour = get_matchs_jour_for_prediction()
     X_live = scaler_ml.transform([m["features"] for m in matchs_jour])
     probas = model_ml.predict_proba(X_live)[:, 1]
-
+    
     # === Classement + Value Bet ===
     over_matches = []
     under_matches = []
-
+    
     for i, match in enumerate(matchs_jour):
         proba_ml = probas[i]
-
-        line = (
-            f"- {match['match']} | Heuristique: {match['score_heuristique']} | "
-            f"Proba ML: {round(proba_ml*100, 1)}% "
-        )
-
-        if proba_ml >= 0.5:
-            over_matches.append((proba_ml, line))
+        score_heuristique = match['score_heuristique']
+    
+        if score_heuristique > 60:
+            niveau = "🔥 Élevé"
+        elif score_heuristique >= 40:
+            niveau = "⚽ Modéré"
         else:
-            under_matches.append((proba_ml, line))
-
+            niveau = "⚪ Faible"
+    
+        if proba_ml >= 0.5:
+            proba_over = round(proba_ml * 100, 1)
+            line = (
+                f"🧠 Score heuristique : {score_heuristique} ({niveau})\n"
+                f"🔼 {proba_over}% de chance d'être en au dessus de 2.5 | ⚽⚽"
+            )
+            over_matches.append((proba_ml, match['match'], line))
+        else:
+            proba_under = round((1 - proba_ml) * 100, 1)
+            if proba_under >= 80:
+                emoji_bar = "⚽⚽⚽⚽⚽"
+            elif proba_under >= 60:
+                emoji_bar = "⚽⚽⚽⚽"
+            elif proba_under >= 40:
+                emoji_bar = "⚽⚽⚽"
+            elif proba_under >= 20:
+                emoji_bar = "⚽⚽"
+            else:
+                emoji_bar = "⚽"
+            line = (
+                f"🧠 Score heuristique : {score_heuristique} ({niveau})\n"
+                f"🔻 {proba_under}% de chance d'être en dessous de 2.5 | {emoji_bar}"
+            )
+            under_matches.append((proba_under, match['match'], line))
+    
     # Trier & limiter à 5
     over_matches.sort(reverse=True)
-    under_matches.sort()
-
-    top_over = [line for _, line in over_matches[:5]]
-    top_under = [line for _, line in under_matches[:5]]
-
+    under_matches.sort(reverse=True)
+    
     # === Construction contenu du mail ===
-    mail_lines = ["📈 MATCHS À BUTS (Over 2.5 probables)\n"]
+    mail_lines = [f"Voici les prévisions du {today} 📅\n"]
     
-    if top_over:
-        mail_lines.extend(top_over)
+    mail_lines.append("🧠 Score heuristique : Un score heuristique élevé indique un fort potentiel offensif dans la rencontre.\n")
+    mail_lines.append("🔍 Barème du score heuristique :\n")
+    mail_lines.append("🔥 Élevé : Supérieur à 60\n")
+    mail_lines.append("⚽ Modéré : Entre 40 et 60\n")
+    mail_lines.append("⚪ Faible : Inférieur à 40\n")
+    
+    mail_lines.append("📈 MATCHS À BUTS (Over 2.5 probables)\n")
+    
+    if over_matches:
+        for idx, (_, match_name, details) in enumerate(over_matches[:5], 1):
+            mail_lines.append(f"{idx}️⃣ {match_name}\n{details}\n")
     else:
-        mail_lines.append("Aucun match fort en buts aujourd’hui. ❄️")
+        mail_lines.append("Aucun match fort en buts aujourd’hui. ❄️\n")
     
-    mail_lines.append("\n🔒 MATCHS FERMÉS (Under 2.5 probables)\n")
+    mail_lines.append("🔒 MATCHS FERMÉS (Under 2.5 probables)\n")
     
-    if top_under:
-        for line in top_under:
-            # On récupère la proba ML depuis la ligne
-            proba_str = line.split("Proba ML: ")[1].split("%")[0]
-            proba_ml = float(proba_str.replace(",", ".")) / 100
-            proba_under = round((1 - proba_ml) * 100, 1)
-    
-            # Ajout de l'indicateur visuel avec emojis
-            if proba_ml >= 0.8:
-                emoji_bar = "🔥⚽⚽⚽🔥"
-            elif proba_ml >= 0.6:
-                emoji_bar = "⚽⚽⚽"
-            elif proba_ml >= 0.4:
-                emoji_bar = "⚽⚽"
-            elif proba_ml >= 0.2:
-                emoji_bar = "⚽"
-            else:
-                emoji_bar = "⚪"
-    
-            # Nettoyer la ligne et ajouter la synthèse
-            line_clean = line.split(" |")[0]  # Supprime tout après le nom du match
-            new_line = f"{line_clean} | 🔻 {proba_under}% de chance d'être en dessous de 2.5 {emoji_bar}"
-            mail_lines.append(new_line)
+    if under_matches:
+        for idx, (_, match_name, details) in enumerate(under_matches[:5], 1):
+            mail_lines.append(f"{idx}️⃣ {match_name}\n{details}\n")
     else:
-        mail_lines.append("Aucun match fermé détecté.")
+        mail_lines.append("Aucun match fermé détecté.\n")
     
     mail_content = "\n".join(mail_lines)
     
     send_email(
         subject="🔥 Analyse Matchs Over/Under - Score, Proba ML & Value Bets",
-        body=f"Voici les prévisions du {today} :\n\n{mail_content}",
+        body=mail_content,
         to_email="lilian.pamphile.bts@gmail.com"
     )
 
