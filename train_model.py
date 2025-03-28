@@ -196,10 +196,6 @@ os.makedirs(MODEL_DIR, exist_ok=True)
 shutil.copy("model_over25.pkl", f"{MODEL_DIR}/model_over25.pkl")
 shutil.copy("scaler_over25.pkl", f"{MODEL_DIR}/scaler_over25.pkl")
 
-# Ajoute un .gitkeep pour forcer le suivi
-with open(f"{MODEL_DIR}/.gitkeep", "w") as f:
-    f.write("")
-
 # Ajout + commit + push
 os.system(f"cd {CLONE_DIR} && git add model_files")
 os.system(f"cd {CLONE_DIR} && git commit -m '🧠 Update model files' || echo '🔁 Aucun changement détecté'")
