@@ -11,7 +11,8 @@ import numpy as np
 import smtplib
 from email.mime.text import MIMEText
 from datetime import date
-
+import os
+import shutil
 
 # --- Connexion BDD PostgreSQL ---
 DATABASE_URL = "postgresql://postgres:jDDqfaqpspVDBBwsqxuaiSDNXjTxjMmP@shortline.proxy.rlwy.net:36536/railway"
@@ -28,14 +29,12 @@ query = """
         sg2.moyenne_buts AS buts_ext, sg2.pourcentage_over_2_5 AS over25_ext, sg2.pourcentage_BTTS AS btts_ext,
         sg2.tirs_cadres AS tirs_ext, sg2.possession AS poss_ext, sg2.corners AS corners_ext, sg2.fautes AS fautes_ext,
         sg2.cartons_jaunes AS cj_ext, sg2.cartons_rouges AS cr_ext,
-        c.cote_over, 
         s.buts_dom + s.buts_ext AS total_buts
     FROM matchs m
     JOIN stats_globales sg1 ON m.equipe_domicile = sg1.equipe
     JOIN stats_globales sg2 ON m.equipe_exterieur = sg2.equipe
     JOIN stats_matchs s ON m.game_id = s.game_id
-    JOIN cotes c ON m.game_id = c.game_id
-    WHERE s.buts_dom IS NOT NULL AND s.buts_ext IS NOT NULL AND c.cote_over IS NOT NULL
+    WHERE s.buts_dom IS NOT NULL AND s.buts_ext IS NOT NULL
 """
 
 cursor.execute(query)
@@ -56,13 +55,12 @@ df["possession"] = df["poss_dom"] + df["poss_ext"]
 df["corners_fautes"] = df["corners_dom"] + df["corners_ext"] + df["fautes_dom"] + df["fautes_ext"]
 df["cartons"] = df["cj_dom"] + df["cj_ext"] + 2 * df["cr_dom"] + 2 * df["cr_ext"]
 df["score_heuristique"] = (
-    0.20 * (df["buts_dom"] + df["buts_ext"]) +
+    0.25 * (df["buts_dom"] + df["buts_ext"]) +
     0.20 * (df["over25_dom"] + df["over25_ext"]) +
-    0.15 * (df["btts_dom"] + df["btts_ext"]) +
+    0.20 * (df["btts_dom"] + df["btts_ext"]) +
     0.10 * df["tirs_cadres"] +
-    0.15 * (2.5 / df["cote_over"]) +
-    0.05 * df["possession"] +
-    0.05 * df["corners_fautes"] +
+    0.10 * df["possession"] +
+    0.10 * df["corners_fautes"] +
     0.05 * df["cartons"]
 )
 df["over_2_5"] = df["total_buts"] > 2.5
@@ -73,7 +71,7 @@ features = [
     "over25_dom", "over25_ext",
     "btts_dom", "btts_ext",
     "tirs_cadres", "possession", "corners_fautes", "cartons",
-    "cote_over", "score_heuristique"
+    "score_heuristique"
 ]
 X = df[features]
 y = df["over_2_5"].astype(int)
@@ -118,40 +116,29 @@ with open("scaler_over25.pkl", "wb") as f:
 
 print("✅ Modèle XGBoost entraîné, validé et sauvegardé avec succès.")
 
-
-import os
-import shutil
-
 # === Envoi sur GitHub ===
 print("📦 Push vers GitHub...")
 
 GITHUB_REPO = "https://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@github.com/LilianPamphile/paris-sportifs.git"
 CLONE_DIR = "model_push"
 
-# Config git (si pas déjà globalement configuré)
 os.system(f"git config --global user.email 'lilian.pamphile.bts@gmail.com'")
 os.system(f"git config --global user.name 'LilianPamphile'")
-
-# Clone propre
 os.system(f"rm -rf {CLONE_DIR}")
 os.system(f"git clone {GITHUB_REPO} {CLONE_DIR}")
-
-# Créer le dossier si pas là
 os.makedirs(f"{CLONE_DIR}/model_files", exist_ok=True)
 
-# Copier les fichiers modèles
 shutil.copy("model_over25.pkl", f"{CLONE_DIR}/model_files/model_over25.pkl")
 shutil.copy("scaler_over25.pkl", f"{CLONE_DIR}/model_files/scaler_over25.pkl")
 
-# Commit + push
 os.system(f"cd {CLONE_DIR} && git add model_files && git commit -m '🧠 Update model files' && git push")
 
 print("✅ Modèle pushé sur GitHub avec succès.")
 
-
+# === Envoi d'email final ===
 def send_email(subject, body, to_email):
     from_email = "lilian.pamphile.bts@gmail.com"
-    password = "fifkktsenfxsqiob"  # mot de passe d'application
+    password = "fifkktsenfxsqiob"
 
     msg = MIMEText(body)
     msg["Subject"] = subject
@@ -166,11 +153,10 @@ def send_email(subject, body, to_email):
     except Exception as e:
         print("❌ Erreur lors de l'envoi de l'email :", e)
 
-# === Envoi d'email final avec confirmation GitHub ===
+# === Confirmation ===
 today = date.today()
 auc_test = roc_auc_score(y_test, y_proba)
 
-# Statut du modèle
 if auc_test < 0.70:
     subject = "⚠️ Alerte - AUC du modèle en baisse"
     body = (
