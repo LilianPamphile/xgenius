@@ -403,11 +403,42 @@ try:
 
     print("✅ Récupération des données terminée !")
 
-       # === Chargement du modèle ML et scaler ===
+    # === Chargement du modèle ML et scaler ===
     with open("model_files/model_over25.pkl", "rb") as f:
         model_ml = pickle.load(f)
     with open("model_files/scaler_over25.pkl", "rb") as f:
         scaler_ml = pickle.load(f)
+
+    # === Récupération historique des anciens matchs ===
+    query_hist = """
+        SELECT m.date::date AS date_match, m.equipe_domicile AS dom, m.equipe_exterieur AS ext,
+               s.buts_dom, s.buts_ext
+        FROM matchs m
+        JOIN stats_matchs s ON m.game_id = s.game_id
+        WHERE s.buts_dom IS NOT NULL AND s.buts_ext IS NOT NULL
+    """
+    cursor = conn.cursor()
+    cursor.execute(query_hist)
+    rows_hist = cursor.fetchall()
+    df_all = pd.DataFrame(rows_hist, columns=["date", "dom", "ext", "buts_dom", "buts_ext"])
+
+    def get_forme(df_hist, equipe, date_ref):
+        matchs = df_hist[
+            ((df_hist["dom"] == equipe) | (df_hist["ext"] == equipe)) &
+            (df_hist["date"] < date_ref)
+        ].sort_values("date", ascending=False).head(5)
+    
+        if matchs.empty:
+            return 0.0, 0.0
+    
+        buts_marques, buts_encaissés = [], []
+        for _, row in matchs.iterrows():
+            est_dom = (equipe == row["dom"])
+            buts_marques.append(row["buts_dom"] if est_dom else row["buts_ext"])
+            buts_encaissés.append(row["buts_ext"] if est_dom else row["buts_dom"])
+    
+        return sum(buts_marques)/len(buts_marques), sum(buts_encaissés)/len(buts_encaissés)
+
 
     # === Fonction pour récupérer les matchs du jour ===
     def get_matchs_jour_for_prediction():
@@ -419,7 +450,9 @@ try:
                 sg1.moyenne_buts, sg1.pourcentage_over_2_5, sg1.pourcentage_BTTS,
                 sg1.tirs_cadres, sg1.possession, sg1.corners, sg1.fautes, sg1.cartons_jaunes, sg1.cartons_rouges,
                 sg2.moyenne_buts, sg2.pourcentage_over_2_5, sg2.pourcentage_BTTS,
-                sg2.tirs_cadres, sg2.possession, sg2.corners, sg2.fautes, sg2.cartons_jaunes, sg2.cartons_rouges
+                sg2.tirs_cadres, sg2.possession, sg2.corners, sg2.fautes, sg2.cartons_jaunes, sg2.cartons_rouges,
+                sg1.buts_encaisse::FLOAT / NULLIF(sg1.matchs_joues, 0) AS buts_enc_dom,
+                sg2.buts_encaisse::FLOAT / NULLIF(sg2.matchs_joues, 0) AS buts_enc_ext
             FROM matchs m
             JOIN stats_globales sg1 ON m.equipe_domicile = sg1.equipe
             JOIN stats_globales sg2 ON m.equipe_exterieur = sg2.equipe
@@ -441,8 +474,10 @@ try:
                 _,
                 dom, ext,
                 buts_dom, over25_dom, btts_dom, tirs_dom, poss_dom, corners_dom, fautes_dom, cj_dom, cr_dom,
-                buts_ext, over25_ext, btts_ext, tirs_ext, poss_ext, corners_ext, fautes_ext, cj_ext, cr_ext
+                buts_ext, over25_ext, btts_ext, tirs_ext, poss_ext, corners_ext, fautes_ext, cj_ext, cr_ext,
+                buts_enc_dom, buts_enc_ext
             ) = row
+
     
             tirs_cadres = to_float(tirs_dom) + to_float(tirs_ext)
             possession = to_float(poss_dom) + to_float(poss_ext)
@@ -465,14 +500,21 @@ try:
                 0.05 * cartons
             )
     
+            # Calcul des formes + buts encaissés
+            b_m_dom, b_e_dom = get_forme(df_all, dom, today)
+            b_m_ext, b_e_ext = get_forme(df_all, ext, today)
+            
             features = [
                 to_float(buts_dom), to_float(buts_ext),
+                to_float(buts_enc_dom), to_float(buts_enc_ext),
+                to_float(b_m_dom), to_float(b_m_ext),
+                to_float(b_e_dom), to_float(b_e_ext),
                 to_float(over25_dom), to_float(over25_ext),
                 to_float(btts_dom), to_float(btts_ext),
                 tirs_cadres, possession, corners_fautes, cartons,
                 score_heuristique
             ]
-    
+
             matchs.append({
                 "match": f"{dom} vs {ext}",
                 "features": features,
