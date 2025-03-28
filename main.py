@@ -543,7 +543,7 @@ try:
             proba_over = f"{round(proba_ml * 100, 1):.1f}"
             line = (
                 f"    🧠 Score heuristique : {score_heuristique} ({niveau})\n"
-                f"    🔼 {proba_over}% de chance d'être en au dessus de 2.5 | ⚽⚽"
+                f"    🔼 {proba_over}% de chance d'être en au dessus de 2.5"
             )
             over_matches.append((proba_ml, match['match'], line))
         else:
