@@ -11,8 +11,15 @@ Original file is located at
 
 import requests
 import psycopg2
+# Fonction de conversion sécurisée
+import math
 from datetime import datetime, timedelta
-
+import smtplib
+from email.mime.text import MIMEText
+import os
+import requests
+import pickle
+import pandas as pd
 
 # 🔑 Clé API SportsData.io
 API_KEY = "0b342d05a0a748d5ac840a9e4898cbf1"
@@ -90,10 +97,6 @@ def recuperer_matchs(date, API_KEY):
   print("✅ Données des matchs insérées avec succès !")
 
 """# **📌 2️⃣ Récupération des Statistiques des Matchs**"""
-
-# Fonction de conversion sécurisée
-import math
-
 def convert_to_int(value):
     """Convertit une valeur en int, arrondie à l'entier inférieur sauf si cela tombe en dessous de 0."""
     try:
@@ -336,10 +339,6 @@ conn.commit()
 print("✅ Récupération des données terminée !")
 
 """## **Envoie de mail et execution des fonction de récupération de données**"""
-
-import smtplib
-from email.mime.text import MIMEText
-
 def send_email(subject, body, to_email):
     from_email = "lilian.pamphile.bts@gmail.com"
     password = "fifkktsenfxsqiob"  # mot de passe d'application
@@ -356,10 +355,6 @@ def send_email(subject, body, to_email):
         print("📬 Email envoyé avec succès.")
     except Exception as e:
         print("❌ Erreur lors de l'envoi de l'email :", e)
-
-import os
-import requests
-import pickle
 
 # --- Téléchargement des fichiers modèle/scaler depuis GitHub ---
 def telecharger_model_depuis_github():
