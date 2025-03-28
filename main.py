@@ -540,27 +540,17 @@ try:
             niveau = "⚪ Faible"
     
         if proba_ml >= 0.5:
-            proba_over = round(proba_ml * 100, 1)
+            proba_over = f"{round(proba_ml * 100, 1):.1f}"
             line = (
-                f"🧠 Score heuristique : {score_heuristique} ({niveau})\n"
-                f"🔼 {proba_over}% de chance d'être en au dessus de 2.5 | ⚽⚽"
+                f"    🧠 Score heuristique : {score_heuristique} ({niveau})\n"
+                f"    🔼 {proba_over}% de chance d'être en au dessus de 2.5 | ⚽⚽"
             )
             over_matches.append((proba_ml, match['match'], line))
         else:
-            proba_under = round((1 - proba_ml) * 100, 1)
-            if proba_under >= 80:
-                emoji_bar = "⚽⚽⚽⚽⚽"
-            elif proba_under >= 60:
-                emoji_bar = "⚽⚽⚽⚽"
-            elif proba_under >= 40:
-                emoji_bar = "⚽⚽⚽"
-            elif proba_under >= 20:
-                emoji_bar = "⚽⚽"
-            else:
-                emoji_bar = "⚽"
+            proba_under = f"{(1 - proba_ml) * 100:.1f}"
             line = (
-                f"🧠 Score heuristique : {score_heuristique} ({niveau})\n"
-                f"🔻 {proba_under}% de chance d'être en dessous de 2.5 | {emoji_bar}"
+                f"    🧠 Score heuristique : {score_heuristique} ({niveau})\n"
+                f"    🔻 {proba_under}% de chance d'être en dessous de 2.5"
             )
             under_matches.append((proba_under, match['match'], line))
     
@@ -571,11 +561,7 @@ try:
     # === Construction contenu du mail ===
     mail_lines = [f"Voici les prévisions du {today} 📅\n"]
     
-    mail_lines.append("🧠 Score heuristique : Un score heuristique élevé indique un fort potentiel offensif dans la rencontre.\n")
-    mail_lines.append("🔍 Barème du score heuristique :\n")
-    mail_lines.append("🔥 Élevé : Supérieur à 60\n")
-    mail_lines.append("⚽ Modéré : Entre 40 et 60\n")
-    mail_lines.append("⚪ Faible : Inférieur à 40\n")
+    mail_lines.append("🧠 Score heuristique : Un score heuristique élevé indique un fort potentiel offensif dans la rencontre. 🔥 Élevé : Supérieur à 60, ⚽ Modéré : Entre 40 et 60, ⚪ Faible : Inférieur à 40\n")
     
     mail_lines.append("📈 MATCHS À BUTS (Over 2.5 probables)\n")
     
