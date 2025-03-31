@@ -102,8 +102,7 @@ def telecharger_model_depuis_github():
     # Infos du repo
     REPO = "LilianPamphile/paris-sportifs"
     BRANCH = "main"
-    TOKEN = os.getenv("GITHUB_TOKEN")
-
+    GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 
     # Liste des fichiers à télécharger (avec chemin dans le repo GitHub)
     fichiers = {
@@ -517,7 +516,7 @@ try:
                 sg1.pourcentage_over_1_5, sg1.pourcentage_BTTS, sg1.passes_pourcent, sg1.passes_reussies,
                 sg1.possession, sg1.corners, sg1.fautes, sg1.cartons_jaunes, sg1.cartons_rouges,
                 sg1.moyenne_xg_dom, sg1.tirs, sg1.tirs_cadres,
-
+                sg1.pourcentage_clean_sheets, sg2.pourcentage_clean_sheets,
                 sg2.moyenne_buts, sg2.buts_encaisse::FLOAT / NULLIF(sg2.matchs_joues, 0), sg2.pourcentage_over_2_5,
                 sg2.pourcentage_over_1_5, sg2.pourcentage_BTTS, sg2.passes_pourcent,
                 sg2.passes_reussies, sg2.possession, sg2.corners, sg2.fautes,
@@ -558,7 +557,7 @@ try:
                 game_id, date_match, dom, ext,
                 buts_dom, enc_dom, over25_dom, over15_dom, btts_dom, pass_pct_dom, pass_reussies_dom,
                 poss_dom, corners_dom, fautes_dom, cj_dom, cr_dom, xg_dom, tirs_dom, tirs_cadres_dom,
-
+                clean_sheets_dom, clean_sheets_ext,  
                 buts_ext, enc_ext, over25_ext, over15_ext, btts_ext, pass_pct_ext, pass_reussies_ext,
                 poss_ext, corners_ext, fautes_ext, cj_ext, cr_ext, xg_ext, tirs_ext, tirs_cadres_ext
             ) = row
@@ -579,20 +578,48 @@ try:
             total_tirs = to_float(tirs_dom + tirs_ext)
             total_tirs_cadres = to_float(tirs_cadres_dom + tirs_cadres_ext)
 
-            # Ordre des features conforme au modèle
+            solidite_dom = 100 - to_float(clean_sheets_dom)
+            solidite_ext = 100 - to_float(clean_sheets_ext)
+
+            # Nouvelles features à calculer
+            clean_sheets_dom = 100 - to_float(btts_dom)
+            clean_sheets_ext = 100 - to_float(btts_ext)
+            solidite_dom = 1 / (to_float(enc_dom) + 0.1)
+            solidite_ext = 1 / (to_float(enc_ext) + 0.1)
+
+            # Moyennes pondérées
+            forme_pond_dom = 0.6 * fdm + 0.4 * fdo25
+            forme_pond_ext = 0.6 * fem + 0.4 * feo25
+
+            # Ordre EXACT utilisé à l’entraînement (34 features)
             features = [
                 to_float(buts_dom), to_float(buts_ext), to_float(enc_dom), to_float(enc_ext),
                 to_float(over25_dom), to_float(over25_ext), to_float(btts_dom), to_float(btts_ext),
                 to_float(xg_dom), to_float(xg_ext), diff_xg, sum_xg,
-                fdm, fde, fdo25,
-                fem, fee, feo25,
-                sum_btts, diff_over25, total_tirs, total_tirs_cadres
+                fdm, fde, fdo25, fem, fee, feo25,
+                sum_btts, diff_over25, total_tirs, total_tirs_cadres,
+                clean_sheets_dom, clean_sheets_ext,
+                solidite_dom, solidite_ext,
+                forme_pond_dom, forme_pond_ext,
+                to_float(pass_pct_dom), to_float(pass_pct_ext),
+                to_float(corners_dom), to_float(corners_ext),
+                to_float(fautes_dom), to_float(fautes_ext)
             ]
 
             matchs.append({
                 "match": f"{dom} vs {ext}",
-                "features": features
+                "features": features,
+                "poss": float((poss_dom + poss_ext) / 2),
+                "corners": float(corners_dom + corners_ext),
+                "fautes": float(fautes_dom + fautes_ext),
+                "cartons": float(cj_dom + cr_dom + cj_ext + cr_ext),
+                "solidite_dom": float(solidite_dom),
+                "solidite_ext": float(solidite_ext),
+                "clean_sheets_dom": float(clean_sheets_dom),
+                "clean_sheets_ext": float(clean_sheets_ext),
             })
+
+
 
         cursor.close()
         return matchs
@@ -625,32 +652,62 @@ try:
         features = match["features"]
 
         # Variables utiles
-        buts_dom, buts_ext = features[0], features[1]
-        over25_dom, over25_ext = features[4], features[5]
-        btts_dom, btts_ext = features[6], features[7]
-        xg_dom, xg_ext = features[8], features[9]
-        tirs_cadres_total = features[21]
+        buts_dom, buts_ext = float(features[0]), float(features[1])
+        over25_dom, over25_ext = float(features[4]), float(features[5])
+        btts_dom, btts_ext = float(features[6]), float(features[7])
+        xg_dom, xg_ext = float(features[8]), float(features[9])
+        tirs_cadres_total = float(features[21])
+
+        fdm, fdo25 = float(features[12]), float(features[14])
+        fem, feo25 = float(features[15]), float(features[17])
+
+        forme_pond_dom = 0.6 * fdm + 0.4 * fdo25
+        forme_pond_ext = 0.6 * fem + 0.4 * feo25
+
+        solidite_dom = float(100 - match.get("clean_sheets_dom", 0))
+        solidite_ext = float(100 - match.get("clean_sheets_ext", 0))
+
+        poss = float(match.get("poss", 50))
+        corners = float(match.get("corners", 8))
+        fautes = float(match.get("fautes", 20))
+        cartons = float(match.get("cartons", 3))
+
+
+
 
         # Score heuristique enrichi (indépendant)
         score_heuristique = (
-            0.20 * (buts_dom + buts_ext) +
-            0.15 * (over25_dom + over25_ext) +
-            0.15 * (btts_dom + btts_ext) +
-            0.10 * tirs_cadres_total +
+            # ⚽ Potentiel offensif équilibré
+            0.12 * (buts_dom + buts_ext) +
+            0.10 * (over25_dom + over25_ext) +
+            0.08 * (btts_dom + btts_ext) +
             0.10 * (xg_dom + xg_ext) +
-            0.10 * match.get("poss", 50) +
-            0.10 * match.get("corners", 8) +
-            0.05 * match.get("fautes", 20) +
-            0.05 * match.get("cartons", 3)
+            0.05 * tirs_cadres_total +
+
+            # 📈 Forme dynamique (à privilégier)
+            0.12 * forme_pond_dom +
+            0.12 * forme_pond_ext +
+
+            # 🧱 Solidité défensive (attention : malus ici)
+            -0.08 * solidite_dom -
+            -0.08 * solidite_ext +
+
+            # 🎯 Discipline et tempo
+            0.06 * match.get("corners", 8) +
+            0.04 * match.get("fautes", 20) +
+            0.02 * match.get("cartons", 3) +
+            0.03 * match.get("poss", 50)
         )
+
+
 
         score_ml = min(pred_total / 5, 1.0) * 100
         value_score = round(0.6 * score_ml + 0.4 * score_heuristique, 2)
 
         line = (
             f"    🔮 Prédiction ML : {round(pred_total, 2)} buts\n"
-            f"    🧠 Score heuristique : {round(score_heuristique, 2)}\n"
-            f"    📊 Value Score (60/40) : {round(value_score, 2)}"
+            f"    🧠 Score heuristique : {round(score_heuristique)}\n"
+            f"    📊 Value Score (60/40) : {value_score}"
         )
 
         if value_score >= 70:
