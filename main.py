@@ -14,7 +14,6 @@ import numpy as np
 
 # 🔑 Clé API SportsData.io
 API_KEY = "b63f99b8e4mshb5383731d310a85p103ea1jsn47e34368f5df"
-api_calls_count = 0
 
 today = datetime.today().date()
 yesterday = today - timedelta(days=1)
@@ -57,10 +56,6 @@ def convert_to_int(value):
     except:
         return 0
 
-def counted_get(url, **kwargs):
-    global api_calls_count
-    api_calls_count += 1
-    return requests.get(url, **kwargs)
 
 def extract_stat(stats, stat_name):
     for s in stats.get("statistics", []):
@@ -76,7 +71,7 @@ def extract_stat(stats, stat_name):
 
 def get_fixture_with_goals(fixture_id, headers):
     url = "https://api-football-v1.p.rapidapi.com/v3/fixtures"
-    response = counted_get(url, headers=headers, params={"ids": fixture_id})
+    response = requests.get(url, headers=headers, params={"ids": fixture_id})
     if response.status_code == 200:
         data = response.json().get("response", [])
         if data:
@@ -157,7 +152,7 @@ def recuperer_matchs(date, API_KEY):
             "timezone": "Europe/Paris"
         }
 
-        response = counted_get(url_base, headers=headers, params=params)
+        response = requests.get(url_base, headers=headers, params=params)
 
         if response.status_code == 200:
             data = response.json().get("response", [])
@@ -211,7 +206,7 @@ def recuperer_stats_matchs(date, API_KEY):
             "timezone": "Europe/Paris"
         }
 
-        response = counted_get(url_fixtures, headers=headers, params=params)
+        response = requests.get(url_fixtures, headers=headers, params=params)
         if response.status_code != 200:
             continue
 
@@ -225,7 +220,7 @@ def recuperer_stats_matchs(date, API_KEY):
             equipe_ext = match["teams"]["away"]["name"]
 
             try:
-                response_stats = counted_get(url_stats, headers=headers, params={"fixture": fixture_id})
+                response_stats = requests.get(url_stats, headers=headers, params={"fixture": fixture_id})
                 response_stats.raise_for_status()
             except:
                 continue
@@ -615,92 +610,99 @@ try:
         else:
             return 100
 
-
     # === Prédiction ML ===
     matchs_jour = get_matchs_jour_for_prediction()
     X_live = scaler_ml.transform([m["features"] for m in matchs_jour])
     pred_buts = model_ml.predict(X_live)
 
-    # === Classement + Value Score ===
+    # === Classement par Value Score ===
     over_matches = []
     under_matches = []
+    matches_neutres = []
 
     for i, match in enumerate(matchs_jour):
         pred_total = pred_buts[i]
-        score_heuristique = convertir_pred_en_score_heuristique(pred_total)
+        features = match["features"]
 
-        # Niveau du score
-        if score_heuristique > 85:
-            niveau = "🔥 Très Élevé"
-        elif score_heuristique > 70:
-            niveau = "⚽ Élevé"
-        elif score_heuristique >= 55:
-            niveau = "🟡 Moyen"
-        else:
-            niveau = "⚪ Faible"
+        # Variables utiles
+        buts_dom, buts_ext = features[0], features[1]
+        over25_dom, over25_ext = features[4], features[5]
+        btts_dom, btts_ext = features[6], features[7]
+        xg_dom, xg_ext = features[8], features[9]
+        tirs_cadres_total = features[21]
 
-        # Value Score : 60% ML, 40% heuristique
+        # Score heuristique enrichi (indépendant)
+        score_heuristique = (
+            0.20 * (buts_dom + buts_ext) +
+            0.15 * (over25_dom + over25_ext) +
+            0.15 * (btts_dom + btts_ext) +
+            0.10 * tirs_cadres_total +
+            0.10 * (xg_dom + xg_ext) +
+            0.10 * match.get("poss", 50) +
+            0.10 * match.get("corners", 8) +
+            0.05 * match.get("fautes", 20) +
+            0.05 * match.get("cartons", 3)
+        )
+
         score_ml = min(pred_total / 5, 1.0) * 100
         value_score = round(0.6 * score_ml + 0.4 * score_heuristique, 2)
 
-        # Classification par type + ajout dans bonne liste
         line = (
             f"    🔮 Prédiction ML : {round(pred_total, 2)} buts\n"
-            f"    🧠 Score heuristique : {round(score_heuristique)} ({niveau})"
+            f"    🧠 Score heuristique : {round(score_heuristique, 2)}\n"
+            f"    📊 Value Score (60/40) : {round(value_score, 2)}"
         )
 
-        if pred_total >= 2.6:
+        if value_score >= 70:
             over_matches.append((value_score, match['match'], line))
-        elif pred_total <= 2.4:
+        elif value_score <= 55:
             under_matches.append((value_score, match['match'], line))
-        # Sinon, on ne garde pas le match (trop borderline)
+        else:
+            matches_neutres.append((value_score, match['match'], line))
 
-    # Tri des listes et top 5
+    # === Tri & top 5
     over_matches.sort(reverse=True)
     under_matches.sort(reverse=True)
+    matches_neutres.sort(reverse=True)
+
     top_5_over = over_matches[:5]
     top_5_under = under_matches[:5]
 
-    # === Construction contenu du mail ===
-    mail_lines = [f"Voici les prévisions du {today} 📅\n"]
+    # === Construction contenu mail ===
+    mail_lines = [f"📅 Prévisions du {today}\n"]
+    mail_lines.append("🎯 Value Score = 60% ML + 40% Score heuristique\n")
 
-    mail_lines.append(
-        "🔁 Conversion de la prédiction ML en score offensif :\n"
-        "    • ≤ 2.5 buts → 65\n"
-        "    • 3.5 buts → 75\n"
-        "    • 4.5 buts → 90\n"
-        "    • ≥ 5.0 buts → 100\n"
-        "\n"
-        "🧠 Interprétation du score offensif :\n"
-        "    🔥 Très Élevé : > 85\n"
-        "    ⚽ Élevé : 70–85\n"
-        "    🟡 Moyen : 55–70\n"
-        "    ⚪ Faible : < 55\n"
-    )
-
-    mail_lines.append("📈 MATCHS À BUTS (Over 2.5 probables - Top Value Score)\n")
+    # Over
+    mail_lines.append("📈 MATCHS À BUTS (Value Score ≥ 70)\n")
     if top_5_over:
-        for idx, (_, match_name, details) in enumerate(top_5_over, 1):
-            mail_lines.append(f"{idx}️⃣ {match_name}\n{details}\n")
+        for idx, (_, name, details) in enumerate(top_5_over, 1):
+            mail_lines.append(f"{idx}️⃣ {name}\n{details}\n")
     else:
-        mail_lines.append("Aucun match fort en buts aujourd’hui. ❄️\n")
+        mail_lines.append("Aucun match à fort potentiel offensif aujourd’hui ❄️\n")
 
-    mail_lines.append("🔒 MATCHS FERMÉS (Under 2.5 probables - Top Value Score)\n")
+    # Under
+    mail_lines.append("🔒 MATCHS FERMÉS (Value Score ≤ 55)\n")
     if top_5_under:
-        for idx, (_, match_name, details) in enumerate(top_5_under, 1):
-            mail_lines.append(f"{idx}️⃣ {match_name}\n{details}\n")
+        for idx, (_, name, details) in enumerate(top_5_under, 1):
+            mail_lines.append(f"{idx}️⃣ {name}\n{details}\n")
     else:
-        mail_lines.append("Aucun match fermé détecté.\n")
+        mail_lines.append("Aucun match fermé détecté aujourd’hui.\n")
 
-    mail_lines.append(f"\n📊 Total d'appels API aujourd’hui : {api_calls_count}")
+    # Neutres
+    mail_lines.append("⚪ MATCHS NEUTRES (Value Score entre 56 et 69)\n")
+    if matches_neutres:
+        for idx, (_, name, details) in enumerate(matches_neutres, 1):
+            mail_lines.append(f"{idx}️⃣ {name}\n{details}\n")
+    else:
+        mail_lines.append("Aucun match dans la zone neutre.\n")
 
-    mail_content = "\n".join(mail_lines)
-
+    # Envoi email
     send_email(
-        subject="🔥 Analyse Matchs Over/Under - Score & Prédiction ML",
-        body=mail_content,
+        subject="📊 Analyse quotidienne Over/Under (Value Score)",
+        body="\n".join(mail_lines),
         to_email="lilian.pamphile.bts@gmail.com"
     )
+
 
 # Gestion erreur
 except Exception as e:
