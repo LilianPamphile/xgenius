@@ -102,8 +102,6 @@ def telecharger_model_depuis_github():
     # Infos du repo
     REPO = "LilianPamphile/paris-sportifs"
     BRANCH = "main"
-    
-    import os
     TOKEN = os.getenv("GITHUB_TOKEN")
 
 
