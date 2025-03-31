@@ -7,6 +7,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 from xgboost import XGBRegressor
 import numpy as np
+import matplotlib.pyplot as plt
 
 # --- Connexion BDD ---
 DATABASE_URL = "postgresql://postgres:jDDqfaqpspVDBBwsqxuaiSDNXjTxjMmP@shortline.proxy.rlwy.net:36536/railway"
@@ -88,24 +89,42 @@ df["diff_over25"] = df["over25_dom"] - df["over25_ext"]
 df["total_tirs"] = df["tirs_dom"] + df["tirs_ext"]
 df["total_tirs_cadres"] = df["tirs_cadres_dom"] + df["tirs_cadres_ext"]
 
-# --- Features sélectionnées pour la régression ---
+# --- Nouvelles features défensives ---
+df["clean_sheets_dom"] = 100 - df["btts_dom"]
+df["clean_sheets_ext"] = 100 - df["btts_ext"]
+df["solidite_dom"] = 1 / (df["buts_encaissés_dom"] + 0.1)
+df["solidite_ext"] = 1 / (df["buts_encaissés_ext"] + 0.1)
+
+# --- Clip des outliers ---
+df["total_buts"] = df["total_buts"].clip(upper=5)
+
+# --- Distribution
+plt.hist(df["total_buts"], bins=20, edgecolor='black')
+plt.title("Distribution des buts totaux dans les matchs")
+plt.xlabel("Total de buts")
+plt.ylabel("Nombre de matchs")
+plt.grid(True)
+plt.show()
+
+# --- Features sélectionnées ---
 features = [
     "buts_dom", "buts_ext", "buts_encaissés_dom", "buts_encaissés_ext",
     "over25_dom", "over25_ext", "btts_dom", "btts_ext",
     "moyenne_xg_dom", "moyenne_xg_ext", "diff_xg", "sum_xg",
     "forme_dom_marq", "forme_dom_enc", "forme_dom_over25",
     "forme_ext_marq", "forme_ext_enc", "forme_ext_over25",
-    "sum_btts", "diff_over25", "total_tirs", "total_tirs_cadres"
+    "sum_btts", "diff_over25", "total_tirs", "total_tirs_cadres",
+    "clean_sheets_dom", "clean_sheets_ext", "solidite_dom", "solidite_ext"
 ]
 
 X = df[features]
-y = df["total_buts"]  # <== Changement de la cible : régression directe
+y = df["total_buts"]
 
 # --- Standardisation ---
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
-# --- Entraînement modèle de régression ---
+# --- Entraînement modèle ---
 model = XGBRegressor(
     n_estimators=300,
     max_depth=6,
@@ -122,7 +141,6 @@ model.fit(X_train, y_train)
 y_pred = model.predict(X_test)
 print(f"✅ MAE: {mean_absolute_error(y_test, y_pred):.4f}")
 print(f"✅ RMSE: {np.sqrt(mean_squared_error(y_test, y_pred)):.4f}")
-
 
 import os
 from datetime import date
