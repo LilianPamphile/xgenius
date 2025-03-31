@@ -14,6 +14,7 @@ import numpy as np
 
 # 🔑 Clé API SportsData.io
 API_KEY = "b63f99b8e4mshb5383731d310a85p103ea1jsn47e34368f5df"
+api_calls_count = 0
 
 today = datetime.today().date()
 yesterday = today - timedelta(days=1)
@@ -56,6 +57,10 @@ def convert_to_int(value):
     except:
         return 0
 
+def counted_get(url, **kwargs):
+    global api_calls_count
+    api_calls_count += 1
+    return requests.get(url, **kwargs)
 
 def extract_stat(stats, stat_name):
     for s in stats.get("statistics", []):
@@ -71,7 +76,7 @@ def extract_stat(stats, stat_name):
 
 def get_fixture_with_goals(fixture_id, headers):
     url = "https://api-football-v1.p.rapidapi.com/v3/fixtures"
-    response = requests.get(url, headers=headers, params={"ids": fixture_id})
+    response = counted_get(url, headers=headers, params={"ids": fixture_id})
     if response.status_code == 200:
         data = response.json().get("response", [])
         if data:
@@ -152,7 +157,7 @@ def recuperer_matchs(date, API_KEY):
             "timezone": "Europe/Paris"
         }
 
-        response = requests.get(url_base, headers=headers, params=params)
+        response = counted_get(url_base, headers=headers, params=params)
 
         if response.status_code == 200:
             data = response.json().get("response", [])
@@ -206,7 +211,7 @@ def recuperer_stats_matchs(date, API_KEY):
             "timezone": "Europe/Paris"
         }
 
-        response = requests.get(url_fixtures, headers=headers, params=params)
+        response = counted_get(url_fixtures, headers=headers, params=params)
         if response.status_code != 200:
             continue
 
@@ -220,7 +225,7 @@ def recuperer_stats_matchs(date, API_KEY):
             equipe_ext = match["teams"]["away"]["name"]
 
             try:
-                response_stats = requests.get(url_stats, headers=headers, params={"fixture": fixture_id})
+                response_stats = counted_get(url_stats, headers=headers, params={"fixture": fixture_id})
                 response_stats.raise_for_status()
             except:
                 continue
@@ -686,6 +691,8 @@ try:
             mail_lines.append(f"{idx}️⃣ {match_name}\n{details}\n")
     else:
         mail_lines.append("Aucun match fermé détecté.\n")
+
+    mail_lines.append(f"\n📊 Total d'appels API aujourd’hui : {api_calls_count}")
 
     mail_content = "\n".join(mail_lines)
 
