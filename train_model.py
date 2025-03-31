@@ -98,14 +98,6 @@ df["solidite_ext"] = 1 / (df["buts_encaissés_ext"] + 0.1)
 # --- Clip des outliers ---
 df["total_buts"] = df["total_buts"].clip(upper=5)
 
-# --- Distribution
-plt.hist(df["total_buts"], bins=20, edgecolor='black')
-plt.title("Distribution des buts totaux dans les matchs")
-plt.xlabel("Total de buts")
-plt.ylabel("Nombre de matchs")
-plt.grid(True)
-plt.show()
-
 # --- Features sélectionnées ---
 features = [
     "buts_dom", "buts_ext", "buts_encaissés_dom", "buts_encaissés_ext",
