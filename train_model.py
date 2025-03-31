@@ -139,7 +139,7 @@ rmse_score = np.sqrt(mean_squared_error(y_test, y_pred))
 # === GitHub - Push automatique ===
 print("📦 Push vers GitHub...")
 
-GITHUB_REPO = "https://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@github.com/LilianPamphile/paris-sportifs.git"
+GITHUB_REPO = "https://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@github.com/LilianPamphile/paris-sportifs.git"
 CLONE_DIR = "model_push"
 
 # Config git
