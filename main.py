@@ -728,6 +728,7 @@ try:
     # === Construction contenu mail ===
     mail_lines = [f"📅 Prévisions du {today}\n"]
     mail_lines.append("🎯 Value Score = 60% ML + 40% Score heuristique\n")
+    
 
     # Over
     mail_lines.append("📈 MATCHS À BUTS (Value Score ≥ 70)\n")
@@ -752,6 +753,8 @@ try:
             mail_lines.append(f"{idx}️⃣ {name}\n{details}\n")
     else:
         mail_lines.append("Aucun match dans la zone neutre.\n")
+
+    mail_lines.append("Suivi des perfomances : https://docs.google.com/forms/d/e/1FAIpQLSdRKd8ui1gy8lNfhMYYsLesglR9JJeAI7VgqrASbr0Ocdl7Tg/viewform?usp=header\n")
 
     # Envoi email
     send_email(
