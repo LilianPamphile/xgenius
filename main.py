@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+aaaaaa# -*- coding: utf-8 -*-
 import requests
 import psycopg2
 # Fonction de conversion sécurisée
@@ -106,7 +106,9 @@ def telecharger_model_depuis_github():
 
     # Liste des fichiers à télécharger (avec chemin dans le repo GitHub)
     fichiers = {
-        "model_files/model_total_buts.pkl": "model_files/model_total_buts.pkl",
+        "model_files/model_total_buts_catboost.pkl": "model_files/model_total_buts_catboost.pkl",
+        "model_files/model_total_buts_lightgbm.pkl": "model_files/model_total_buts_lightgbm.pkl",
+        "model_files/model_total_buts_mlp.pkl": "model_files/model_total_buts_mlp.pkl",
         "model_files/scaler_total_buts.pkl": "model_files/scaler_total_buts.pkl"
     }
 
@@ -460,10 +462,15 @@ try:
     print("✅ Récupération des données terminée !")
 
     # === Chargement du modèle ML et scaler ===
-    with open("model_files/model_total_buts.pkl", "rb") as f:
-        model_ml = pickle.load(f)
     with open("model_files/scaler_total_buts.pkl", "rb") as f:
-        scaler_ml = pickle.load(f)
+    scaler_ml = pickle.load(f)
+    with open("model_files/model_total_buts_catboost.pkl", "rb") as f:
+        model_cat = pickle.load(f)
+    with open("model_files/model_total_buts_lightgbm.pkl", "rb") as f:
+        model_lgb = pickle.load(f)
+    with open("model_files/model_total_buts_mlp.pkl", "rb") as f:
+        model_mlp = pickle.load(f)
+
 
 
     # === Récupération historique des anciens matchs ===
@@ -557,7 +564,7 @@ try:
                 game_id, date_match, dom, ext,
                 buts_dom, enc_dom, over25_dom, over15_dom, btts_dom, pass_pct_dom, pass_reussies_dom,
                 poss_dom, corners_dom, fautes_dom, cj_dom, cr_dom, xg_dom, tirs_dom, tirs_cadres_dom,
-                clean_sheets_dom, clean_sheets_ext,  
+                clean_sheets_dom, clean_sheets_ext,
                 buts_ext, enc_ext, over25_ext, over15_ext, btts_ext, pass_pct_ext, pass_reussies_ext,
                 poss_ext, corners_ext, fautes_ext, cj_ext, cr_ext, xg_ext, tirs_ext, tirs_cadres_ext
             ) = row
@@ -626,21 +633,26 @@ try:
 
 
     def convertir_pred_en_score_heuristique(pred_total):
-        if pred_total <= 2:
-            return 60
-        elif pred_total <= 3:
-            return 70
-        elif pred_total <= 4:
-            return 80
+        if pred_total <= 2.5:
+            return 65
+        elif pred_total <= 3.5:
+            return 65 + (pred_total - 2.5) * 10  # 65 → 75
+        elif pred_total <= 4.5:
+            return 75 + (pred_total - 3.5) * 15  # 75 → 90
         elif pred_total <= 5.0:
-            return 90
+            return 90 + (pred_total - 4.5) * 10  # 90 → 100
         else:
             return 100
 
     # === Prédiction ML ===
     matchs_jour = get_matchs_jour_for_prediction()
     X_live = scaler_ml.transform([m["features"] for m in matchs_jour])
-    pred_buts = model_ml.predict(X_live)
+    preds_cat = model_cat.predict(X_live)
+    preds_lgb = model_lgb.predict(X_live)
+    preds_mlp = model_mlp.predict(X_live)
+
+    # Moyenne pondérée (tu peux ajuster les poids)
+    pred_buts = 0.5 * preds_cat + 0.3 * preds_lgb + 0.2 * preds_mlp
 
     # === Classement par Value Score ===
     over_matches = []
@@ -705,9 +717,10 @@ try:
         value_score = round(0.6 * score_ml + 0.4 * score_heuristique, 2)
 
         line = (
-            f"    🔮 Prédiction ML : {round(pred_total, 2)} buts\n"
+            f"    🔮 Prédiction ML (ensemble) : {round(pred_total, 2)} buts\n"
+            f"       ↳ CatBoost: {round(preds_cat[i], 2)} | LightGBM: {round(preds_lgb[i], 2)} | MLP: {round(preds_mlp[i], 2)}\n"
             f"    🧠 Score heuristique : {round(score_heuristique)}\n"
-            f"    📊 Value Score (60/40) : {value_score}"
+            f"    📊 Value Score (60/40) : {round(value_score, 2)}"
         )
 
         if value_score >= 70:
@@ -728,7 +741,6 @@ try:
     # === Construction contenu mail ===
     mail_lines = [f"📅 Prévisions du {today}\n"]
     mail_lines.append("🎯 Value Score = 60% ML + 40% Score heuristique\n")
-    
 
     # Over
     mail_lines.append("📈 MATCHS À BUTS (Value Score ≥ 70)\n")
@@ -753,8 +765,6 @@ try:
             mail_lines.append(f"{idx}️⃣ {name}\n{details}\n")
     else:
         mail_lines.append("Aucun match dans la zone neutre.\n")
-
-    mail_lines.append("Suivi des perfomances : https://docs.google.com/forms/d/e/1FAIpQLSdRKd8ui1gy8lNfhMYYsLesglR9JJeAI7VgqrASbr0Ocdl7Tg/viewform?usp=header\n")
 
     # Envoi email
     send_email(
