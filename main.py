@@ -102,7 +102,7 @@ def telecharger_model_depuis_github():
     # Infos du repo
     REPO = "LilianPamphile/paris-sportifs"
     BRANCH = "main"
-    GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+    TOKEN = os.getenv("GITHUB_TOKEN")
 
     # Liste des fichiers à télécharger (avec chemin dans le repo GitHub)
     fichiers = {
