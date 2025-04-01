@@ -60,7 +60,7 @@ def calculer_forme(equipe, date_ref, df_hist):
 
 # Nouvelle fonction : forme pondérée + std + clean_sheets
 def enrichir_forme(df_hist, equipe, date_ref):
-    matchs = df_hist[((df_hist["equipe_domicile"] == equipe) | (df_hist["equipe_exterieur"] == equipe)) & 
+    matchs = df_hist[((df_hist["equipe_domicile"] == equipe) | (df_hist["equipe_exterieur"] == equipe)) &
                      (df_hist["date_match"] < date_ref)].sort_values("date_match", ascending=False).head(5)
 
     if matchs.empty:
@@ -153,7 +153,7 @@ df["solidite_ext"] = 1 / (df["buts_encaissés_ext"] + 0.1)
 # --- Clip des outliers ---
 df["total_buts"] = df["total_buts"].clip(upper=5)
 
-# --- Features sélectionnées ---
+# Features finales (neutres, attaque + défense)
 features = [
     "buts_dom", "buts_ext", "buts_encaissés_dom", "buts_encaissés_ext",
     "over25_dom", "over25_ext", "btts_dom", "btts_ext",
@@ -164,92 +164,68 @@ features = [
     "clean_sheets_dom", "clean_sheets_ext", "solidite_dom", "solidite_ext",
     "std_marq_dom", "std_enc_dom", "std_marq_ext", "std_enc_ext",
     "clean_dom", "clean_ext", "solidite_def_dom", "solidite_def_ext"
-
 ]
 
 X = df[features]
 y = df["total_buts"]
 
-# --- Standardisation ---
+# Standardisation
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
-
-# --- Entraînement modèle ---
-model = XGBRegressor(
-    n_estimators=300,
-    max_depth=6,
-    learning_rate=0.05,
-    subsample=0.8,
-    colsample_bytree=0.8,
-    random_state=42
-)
-
 X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
-model.fit(X_train, y_train)
 
-# --- Évaluation ---
-y_pred = model.predict(X_test)
-print(f"✅ MAE: {mean_absolute_error(y_test, y_pred):.4f}")
-print(f"✅ RMSE: {np.sqrt(mean_squared_error(y_test, y_pred)):.4f}")
+# Modèles
+models = {
+    "catboost": CatBoostRegressor(iterations=300, learning_rate=0.05, depth=6, random_seed=42, verbose=0),
+    "lightgbm": LGBMRegressor(n_estimators=300, learning_rate=0.05, max_depth=6, random_state=42),
+    "mlp": MLPRegressor(hidden_layer_sizes=(128, 64), max_iter=500, random_state=42)
+}
 
-import os
-from datetime import date
-import smtplib
-from email.mime.text import MIMEText
-import pickle
-import numpy as np
+results = {}
+for name, model in models.items():
+    model.fit(X_train, y_train)
+    preds = model.predict(X_test)
+    mae = mean_absolute_error(y_test, preds)
+    rmse = np.sqrt(mean_squared_error(y_test, preds))
+    results[name] = (model, mae, rmse)
+    print(f"{name} - MAE: {mae:.4f} | RMSE: {rmse:.4f}")
 
-# === Variables venant de ton script principal (à adapter si tu es dans un script séparé)
-# y_test et y_pred doivent être définis avant
-mae_score = mean_absolute_error(y_test, y_pred)
-rmse_score = np.sqrt(mean_squared_error(y_test, y_pred))
-
-# === GitHub - Push automatique ===
-print("📦 Push vers GitHub...")
-
+# Push sur GitHub
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 GITHUB_REPO = f"https://{GITHUB_TOKEN}@github.com/LilianPamphile/paris-sportifs.git"
 CLONE_DIR = "model_push"
-
-# Config git
-os.system("git config --global user.email 'lilian.pamphile.bts@gmail.com'")
-os.system("git config --global user.name 'LilianPamphile'")
-
-# Cloner le dépôt
 os.system(f"rm -rf {CLONE_DIR}")
 os.system(f"git clone {GITHUB_REPO} {CLONE_DIR}")
-
-# Création dossier model_files
 model_path = f"{CLONE_DIR}/model_files"
 os.makedirs(model_path, exist_ok=True)
 
-# Sauvegarde des fichiers modèles directement dans le dossier cloné
-with open(f"{model_path}/model_total_buts.pkl", "wb") as f:
-    pickle.dump(model, f)
+# Sauvegarde des modèles
+for name, (model, _, _) in results.items():
+    with open(f"{model_path}/model_total_buts_{name}.pkl", "wb") as f:
+        pickle.dump(model, f)
+
+# Sauvegarde scaler
 with open(f"{model_path}/scaler_total_buts.pkl", "wb") as f:
     pickle.dump(scaler, f)
 
-# Git add + commit + push
-os.system(f"cd {CLONE_DIR} && git add model_files && git commit -m '📈 Update model_total_buts.pkl' && git push")
-print("✅ Modèle pushé sur GitHub avec succès.")
+# Git push
+os.system(f"cd {CLONE_DIR} && git add model_files && git commit -m '🔁 Update models v3' && git push")
 
-# === Email notification ===
+# Email notif
 def send_email(subject, body, to_email):
-    from_email = "lilian.pamphile.bts@gmail.com"
-    password = "fifkktsenfxsqiob"  # mot de passe d'application Gmail
-
+    from email.mime.text import MIMEText
+    import smtplib
     msg = MIMEText(body)
     msg["Subject"] = subject
-    msg["From"] = from_email
+    msg["From"] = "lilian.pamphile.bts@gmail.com"
     msg["To"] = to_email
-
     try:
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(from_email, password)
+            server.login("lilian.pamphile.bts@gmail.com", "fifkktsenfxsqiob")
             server.send_message(msg)
-        print("📬 Mail de confirmation envoyé.")
+        print("📬 Email envoyé.")
     except Exception as e:
-        print("❌ Erreur lors de l'envoi de l'email :", e)
+        print("❌ Email erreur:", e)
 
 # === Génération contenu du mail ===
 today = date.today()
