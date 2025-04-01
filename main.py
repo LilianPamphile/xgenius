@@ -626,14 +626,14 @@ try:
 
 
     def convertir_pred_en_score_heuristique(pred_total):
-        if pred_total <= 2.5:
-            return 65
-        elif pred_total <= 3.5:
-            return 65 + (pred_total - 2.5) * 10  # 65 → 75
-        elif pred_total <= 4.5:
-            return 75 + (pred_total - 3.5) * 15  # 75 → 90
+        if pred_total <= 2:
+            return 60
+        elif pred_total <= 3:
+            return 70
+        elif pred_total <= 4:
+            return 80
         elif pred_total <= 5.0:
-            return 90 + (pred_total - 4.5) * 10  # 90 → 100
+            return 90
         else:
             return 100
 
