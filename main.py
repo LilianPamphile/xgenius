@@ -722,9 +722,9 @@ try:
             f"    📊 Value Score (60/40) : {round(value_score, 2)}"
         )
 
-        if value_score >= 70:
+        if value_score >= 68:
             over_matches.append((value_score, match['match'], line))
-        elif value_score <= 55:
+        elif value_score <= 60:
             under_matches.append((value_score, match['match'], line))
         else:
             matches_neutres.append((value_score, match['match'], line))
