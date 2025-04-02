@@ -182,8 +182,22 @@ scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
 # --- Clustering des types de matchs ---
-kmeans = KMeans(n_clusters=3, random_state=42)
-cluster_labels = kmeans.fit_predict(X_scaled)
+best_k = 2
+best_score = -1
+best_model = None
+
+for k in range(2, 6):  # tester de k=2 à 5
+    km = KMeans(n_clusters=k, random_state=42)
+    labels = km.fit_predict(X_scaled)
+    score = silhouette_score(X_scaled, labels)
+    if score > best_score:
+        best_score = score
+        best_k = k
+        best_model = km
+
+cluster_labels = best_model.labels_
+kmeans = best_model
+
 df["cluster_type"] = cluster_labels
 X["cluster_type"] = cluster_labels
 
@@ -233,8 +247,16 @@ results["rf_simul"] = (rf_simul, None, None)
 # Quantile Evaluation
 pred_p25 = q_models[0.25].predict(X_test)
 pred_p75 = q_models[0.75].predict(X_test)
-coverage = np.mean((y_test >= pred_p25) & (y_test <= pred_p75))
-width = np.mean(pred_p75 - pred_p25)
+
+# ✅ Calibration simple des bornes (tu peux ajuster l'offset)
+OFFSET = 0.25  # entre 0.2 et 0.4 selon largeur moyenne
+
+pred_p25_adj = pred_p25 - OFFSET
+pred_p75_adj = pred_p75 + OFFSET
+
+# Recalcul coverage & largeur
+coverage = np.mean((y_test >= pred_p25_adj) & (y_test <= pred_p75_adj))
+width = np.mean(pred_p75_adj - pred_p25_adj)
 
 results["quantile"] = {
     "model": (q_models[0.25], q_models[0.75]),
@@ -283,6 +305,14 @@ os.makedirs(model_path, exist_ok=True)
 for name, infos in results.items():
     model = infos["model"] if isinstance(infos, dict) and "model" in infos else None
     if model:
+        # 🔁 Cas spécial : quantile p25 / p75
+        if name == "quantile":
+            with open(f"{model_path}/model_total_buts_quantile_p25.pkl", "wb") as f:
+                pickle.dump(q_models[0.25], f)
+            with open(f"{model_path}/model_total_buts_quantile_p75.pkl", "wb") as f:
+                pickle.dump(q_models[0.75], f)
+            continue  # on saute ce cas pour pas l'écraser dans la suite
+
         with open(f"{model_path}/model_total_buts_{name}.pkl", "wb") as f:
             pickle.dump(model, f)
 
