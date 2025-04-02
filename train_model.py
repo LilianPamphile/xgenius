@@ -5,9 +5,13 @@ from decimal import Decimal
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_squared_error, mean_absolute_error
+from sklearn.metrics import r2_score, silhouette_score
 from xgboost import XGBRegressor
 from lightgbm import LGBMRegressor
 from catboost import CatBoostRegressor
+from sklearn.ensemble import RandomForestRegressor
+from lightgbm import LGBMRegressor, LGBMQuantileRegressor
+from sklearn.cluster import KMeans
 import numpy as np
 import os
 from datetime import date
@@ -176,6 +180,17 @@ y = df["total_buts"]
 # Standardisation
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
+
+# --- Clustering des types de matchs ---
+kmeans = KMeans(n_clusters=3, random_state=42)
+cluster_labels = kmeans.fit_predict(X_scaled)
+df["cluster_type"] = cluster_labels
+X["cluster_type"] = cluster_labels
+
+# Re-standardiser après ajout
+X_scaled = scaler.fit_transform(X)
+
+
 X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
 
 # Modèles
@@ -185,6 +200,16 @@ models = {
     "xgboost": XGBRegressor(n_estimators=300, learning_rate=0.05, max_depth=6, subsample=0.8, colsample_bytree=0.8, random_state=42)
 }
 
+# RandomForest pour Simulation Monte Carlo
+rf_simul = RandomForestRegressor(n_estimators=200, max_depth=6, random_state=42)
+rf_simul.fit(X_train, y_train)
+
+quantiles = [0.25, 0.75]
+q_models = {}
+for q in quantiles:
+    model_q = LGBMRegressor(objective="quantile", alpha=q, n_estimators=200, max_depth=6, learning_rate=0.05)
+    model_q.fit(X_train, y_train)
+    q_models[q] = model_q
 
 results = {}
 for name, model in models.items():
@@ -192,8 +217,49 @@ for name, model in models.items():
     preds = model.predict(X_test)
     mae = mean_absolute_error(y_test, preds)
     rmse = np.sqrt(mean_squared_error(y_test, preds))
-    results[name] = (model, mae, rmse)
-    print(f"{name} - MAE: {mae:.4f} | RMSE: {rmse:.4f}")
+    r2 = r2_score(y_test, preds)
+    results[name] = {
+        "model": model,
+        "mae": mae,
+        "rmse": rmse,
+        "r2": r2
+    }
+
+# Ajout des modèles quantiles au dico
+results["quantile_p25"] = (q_models[0.25], None, None)
+results["quantile_p75"] = (q_models[0.75], None, None)
+results["rf_simul"] = (rf_simul, None, None)
+
+# Quantile Evaluation
+pred_p25 = q_models[0.25].predict(X_test)
+pred_p75 = q_models[0.75].predict(X_test)
+coverage = np.mean((y_test >= pred_p25) & (y_test <= pred_p75))
+width = np.mean(pred_p75 - pred_p25)
+
+results["quantile"] = {
+    "model": (q_models[0.25], q_models[0.75]),
+    "coverage": coverage,
+    "width": width
+}
+
+# Simulation Monte Carlo
+sim_preds = [rf_simul.predict(X_test + np.random.normal(0, 0.1, X_test.shape)) for _ in range(100)]
+sim_preds = np.array(sim_preds)
+sim_mean = np.mean(sim_preds)
+sim_std = np.std(sim_preds)
+
+results["rf_simul"] = {
+    "model": rf_simul,
+    "mean": sim_mean,
+    "std": sim_std
+}
+
+sil_score = silhouette_score(X_scaled, cluster_labels)
+results["kmeans"] = {
+    "model": kmeans,
+    "silhouette": sil_score
+}
+
 
 # Git config
 os.system("git config --global user.email 'lilian.pamphile.bts@gmail.com'")
@@ -214,12 +280,18 @@ model_path = f"{CLONE_DIR}/model_files"
 os.makedirs(model_path, exist_ok=True)
 
 # Sauvegarde
-for name, (model, _, _) in results.items():
-    with open(f"{model_path}/model_total_buts_{name}.pkl", "wb") as f:
-        pickle.dump(model, f)
+for name, infos in results.items():
+    model = infos["model"] if isinstance(infos, dict) and "model" in infos else None
+    if model:
+        with open(f"{model_path}/model_total_buts_{name}.pkl", "wb") as f:
+            pickle.dump(model, f)
 
 with open(f"{model_path}/scaler_total_buts.pkl", "wb") as f:
     pickle.dump(scaler, f)
+
+with open(f"{model_path}/kmeans_cluster.pkl", "wb") as f:
+    pickle.dump(kmeans, f)
+
 
 # Commit + push
 os.system(f"cd {CLONE_DIR} && git add model_files && git commit -m '🔁 Update models v3' && git push")
@@ -247,21 +319,38 @@ today = date.today()
 subject = "📊 Modèles total_buts mis à jour"
 body_lines = [f"Les modèles `total_buts` ont été réentraînés le {today}.\n"]
 
-for name, (_, mae, rmse) in results.items():
-    # Analyse qualitative
-    if rmse < 1.8:
-        perf = "🟢 Excellent (faible écart avec le réel)"
-    elif rmse < 2.2:
-        perf = "🟡 Correct (modèle utilisable)"
-    else:
-        perf = "🔴 À surveiller (précision insuffisante)"
+for name, infos in results.items():
+    body_lines.append(f"\n🔧 **{name.upper()}**")
 
-    body_lines.append(
-        f"🔧 **{name}**\n"
-        f"   📉 MAE : {mae:.4f} — Erreur absolue moyenne\n"
-        f"   📉 RMSE : {rmse:.4f} — Erreur quadratique moyenne\n"
-        f"   🔎 Interprétation : {perf}\n"
-    )
+    if name in ["catboost", "lightgbm", "xgboost"]:
+        mae = infos["mae"]
+        rmse = infos["rmse"]
+        r2 = infos["r2"]
+        if rmse < 1.8:
+            perf = "🟢 Excellent"
+        elif rmse < 2.2:
+            perf = "🟡 Correct"
+        else:
+            perf = "🔴 À surveiller"
+        body_lines.append(
+            f"\n• MAE : {mae:.4f}\n• RMSE : {rmse:.4f}\n• R² : {r2:.4f}\n• Interprétation : {perf}"
+        )
+
+    elif name == "quantile":
+        body_lines.append(
+            f"\n• Coverage (p25–p75) : {infos['coverage']:.2%}\n• Largeur moyenne : {infos['width']:.2f} buts"
+        )
+
+    elif name == "rf_simul":
+        body_lines.append(
+            f"\n• Moyenne (simulée) : {infos['mean']:.2f} buts\n• Écart-type : {infos['std']:.2f}"
+        )
+
+    elif name == "kmeans":
+        body_lines.append(
+            f"\n• Silhouette Score (clustering matchs) : {infos['silhouette']:.4f}"
+        )
+
 
 body_lines += [
     "\n📁 Fichiers générés : modèles + scaler",
