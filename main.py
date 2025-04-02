@@ -108,7 +108,7 @@ def telecharger_model_depuis_github():
     fichiers = {
         "model_files/model_total_buts_catboost.pkl": "model_files/model_total_buts_catboost.pkl",
         "model_files/model_total_buts_lightgbm.pkl": "model_files/model_total_buts_lightgbm.pkl",
-        "model_files/model_total_buts_mlp.pkl": "model_files/model_total_buts_mlp.pkl",
+        "model_files/model_total_buts_xgboost.pkl": "model_files/model_total_buts_xgboost.pkl",
         "model_files/scaler_total_buts.pkl": "model_files/scaler_total_buts.pkl"
     }
 
@@ -468,9 +468,8 @@ try:
         model_cat = pickle.load(f)
     with open("model_files/model_total_buts_lightgbm.pkl", "rb") as f:
         model_lgb = pickle.load(f)
-    with open("model_files/model_total_buts_mlp.pkl", "rb") as f:
-        model_mlp = pickle.load(f)
-
+    with open("model_files/model_total_buts_xgboost.pkl", "rb") as f:
+        model_xgb = pickle.load(f)
 
 
     # === Récupération historique des anciens matchs ===
@@ -633,14 +632,14 @@ try:
 
 
     def convertir_pred_en_score_heuristique(pred_total):
-        if pred_total <= 2.5:
-            return 65
-        elif pred_total <= 3.5:
-            return 65 + (pred_total - 2.5) * 10  # 65 → 75
-        elif pred_total <= 4.5:
-            return 75 + (pred_total - 3.5) * 15  # 75 → 90
-        elif pred_total <= 5.0:
-            return 90 + (pred_total - 4.5) * 10  # 90 → 100
+        if pred_total <= 2:
+            return 60
+        elif pred_total <= 3:
+            return 70
+        elif pred_total <= 4:
+            return 80 
+        elif pred_total <= 5:
+            return 90 
         else:
             return 100
 
@@ -649,10 +648,11 @@ try:
     X_live = scaler_ml.transform([m["features"] for m in matchs_jour])
     preds_cat = model_cat.predict(X_live)
     preds_lgb = model_lgb.predict(X_live)
-    preds_mlp = model_mlp.predict(X_live)
+    preds_xgb = model_xgb.predict(X_live)
 
     # Moyenne pondérée (tu peux ajuster les poids)
-    pred_buts = 0.5 * preds_cat + 0.3 * preds_lgb + 0.2 * preds_mlp
+    pred_buts = 0.5 * preds_cat + 0.25 * preds_lgb + 0.25 * preds_xgb
+
 
     # === Classement par Value Score ===
     over_matches = []
@@ -685,15 +685,13 @@ try:
         cartons = float(match.get("cartons", 3))
 
 
-
-
         # Score heuristique enrichi (indépendant)
         score_heuristique = (
             # ⚽ Potentiel offensif équilibré
-            0.12 * (buts_dom + buts_ext) +
+            0.10 * (buts_dom + buts_ext) +
             0.10 * (over25_dom + over25_ext) +
             0.08 * (btts_dom + btts_ext) +
-            0.10 * (xg_dom + xg_ext) +
+            0.08 * (xg_dom + xg_ext) +
             0.05 * tirs_cadres_total +
 
             # 📈 Forme dynamique (à privilégier)
@@ -701,24 +699,22 @@ try:
             0.12 * forme_pond_ext +
 
             # 🧱 Solidité défensive (attention : malus ici)
-            -0.08 * solidite_dom -
-            -0.08 * solidite_ext +
+            -0.10 * solidite_dom -
+            -0.10 * solidite_ext +
 
             # 🎯 Discipline et tempo
-            0.06 * match.get("corners", 8) +
-            0.04 * match.get("fautes", 20) +
+            0.03 * match.get("corners", 8) +
+            0.03 * match.get("fautes", 20) +
             0.02 * match.get("cartons", 3) +
-            0.03 * match.get("poss", 50)
+            0.05 * match.get("poss", 50)
         )
-
-
 
         score_ml = min(pred_total / 5, 1.0) * 100
         value_score = round(0.6 * score_ml + 0.4 * score_heuristique, 2)
 
         line = (
             f"    🔮 Prédiction ML (ensemble) : {round(pred_total, 2)} buts\n"
-            f"       ↳ CatBoost: {round(preds_cat[i], 2)} | LightGBM: {round(preds_lgb[i], 2)} | MLP: {round(preds_mlp[i], 2)}\n"
+            f"       ↳ CatBoost: {round(preds_cat[i], 2)} | LightGBM: {round(preds_lgb[i], 2)} | XGBoost: {round(preds_xgb[i], 2)}\n"
             f"    🧠 Score heuristique : {round(score_heuristique)}\n"
             f"    📊 Value Score (60/40) : {round(value_score, 2)}"
         )
