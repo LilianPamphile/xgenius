@@ -109,7 +109,12 @@ def telecharger_model_depuis_github():
         "model_files/model_total_buts_catboost.pkl": "model_files/model_total_buts_catboost.pkl",
         "model_files/model_total_buts_lightgbm.pkl": "model_files/model_total_buts_lightgbm.pkl",
         "model_files/model_total_buts_xgboost.pkl": "model_files/model_total_buts_xgboost.pkl",
-        "model_files/scaler_total_buts.pkl": "model_files/scaler_total_buts.pkl"
+        "model_files/scaler_total_buts.pkl": "model_files/scaler_total_buts.pkl",
+        "model_files/model_total_buts_rf_simul.pkl": "model_files/model_total_buts_rf_simul.pkl",
+        "model_files/model_total_buts_quantile_p25.pkl": "model_files/model_total_buts_quantile_p25.pkl",
+        "model_files/model_total_buts_quantile_p75.pkl": "model_files/model_total_buts_quantile_p75.pkl",
+        "model_files/kmeans_cluster.pkl": "model_files/kmeans_cluster.pkl"
+
     }
 
     for chemin_dist, chemin_local in fichiers.items():
@@ -126,6 +131,7 @@ def telecharger_model_depuis_github():
             with open(chemin_local, "wb") as f:
                 f.write(response.content)
             print(f"✅ Fichier téléchargé : {chemin_local}")
+
         else:
             print(f"❌ Échec du téléchargement de {chemin_local} ({response.status_code})")
 
@@ -470,6 +476,15 @@ try:
         model_lgb = pickle.load(f)
     with open("model_files/model_total_buts_xgboost.pkl", "rb") as f:
         model_xgb = pickle.load(f)
+    with open("model_files/model_total_buts_rf_simul.pkl", "rb") as f:
+        model_rf_simul = pickle.load(f)
+    with open("model_files/model_total_buts_quantile_p25.pkl", "rb") as f:
+        model_p25 = pickle.load(f)
+    with open("model_files/model_total_buts_quantile_p75.pkl", "rb") as f:
+        model_p75 = pickle.load(f)
+    with open("model_files/kmeans_cluster.pkl", "rb") as f:
+        model_kmeans = pickle.load(f)
+
 
 
     # === Récupération historique des anciens matchs ===
@@ -646,12 +661,29 @@ try:
     # === Prédiction ML ===
     matchs_jour = get_matchs_jour_for_prediction()
     X_live = scaler_ml.transform([m["features"] for m in matchs_jour])
+    # Clustering (optionnel mais utile)
+    cluster_labels = model_kmeans.predict(X_live)
+    for i, match in enumerate(matchs_jour):
+        match["cluster_type"] = int(cluster_labels[i])
+
     preds_cat = model_cat.predict(X_live)
     preds_lgb = model_lgb.predict(X_live)
     preds_xgb = model_xgb.predict(X_live)
 
     # Moyenne pondérée (tu peux ajuster les poids)
     pred_buts = 0.5 * preds_cat + 0.25 * preds_lgb + 0.25 * preds_xgb
+
+    pred_p25 = model_p25.predict(X_live)
+    pred_p75 = model_p75.predict(X_live)
+
+    sim_preds = [model_rf_simul.predict(X_live + np.random.normal(0, 0.1, X_live.shape)) for _ in range(100)]
+    sim_preds = np.array(sim_preds)
+    sim_mean = np.mean(sim_preds, axis=0)
+    sim_std = np.std(sim_preds, axis=0)
+
+# Affichage (dans boucle matchs)
+f"    🎲 Moy. simulée : {round(sim_mean[i], 2)} | Std : {round(sim_std[i], 2)}\n"
+
 
     # === Classement par Value Score ===
     over_matches = []
