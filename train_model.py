@@ -195,26 +195,35 @@ for name, model in models.items():
     results[name] = (model, mae, rmse)
     print(f"{name} - MAE: {mae:.4f} | RMSE: {rmse:.4f}")
 
-# Push sur GitHub
+# Git config
+os.system("git config --global user.email 'lilian.pamphile.bts@gmail.com'")
+os.system("git config --global user.name 'LilianPamphile'")
+
+# Token
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+if not GITHUB_TOKEN:
+    raise ValueError("❌ Le token GitHub n'est pas défini.")
+
 GITHUB_REPO = f"https://{GITHUB_TOKEN}@github.com/LilianPamphile/paris-sportifs.git"
 CLONE_DIR = "model_push"
+
 os.system(f"rm -rf {CLONE_DIR}")
 os.system(f"git clone {GITHUB_REPO} {CLONE_DIR}")
+
 model_path = f"{CLONE_DIR}/model_files"
 os.makedirs(model_path, exist_ok=True)
 
-# Sauvegarde des modèles
+# Sauvegarde
 for name, (model, _, _) in results.items():
     with open(f"{model_path}/model_total_buts_{name}.pkl", "wb") as f:
         pickle.dump(model, f)
 
-# Sauvegarde scaler
 with open(f"{model_path}/scaler_total_buts.pkl", "wb") as f:
     pickle.dump(scaler, f)
 
-# Git push
+# Commit + push
 os.system(f"cd {CLONE_DIR} && git add model_files && git commit -m '🔁 Update models v3' && git push")
+print("✅ Modèles commités et poussés sur GitHub.")
 
 # Email notif
 def send_email(subject, body, to_email):
