@@ -236,14 +236,16 @@ def send_email(subject, body, to_email):
 today = date.today()
 
 # Analyse qualitative du score
-if rmse_score < 1.8:
-    perf = "🟢 Excellent (faible écart avec le réel)"
-elif rmse_score < 2.2:
-    perf = "🟡 Correct (modèle utilisable)"
-else:
-    perf = "🔴 À surveiller (précision insuffisante)"
+for name, (_, mae, rmse) in results.items():
+    if rmse < 1.8:
+        perf = "🟢 Excellent"
+    elif rmse < 2.2:
+        perf = "🟡 Correct"
+    else:
+        perf = "🔴 À surveiller"
 
-subject = "📊 Modèle total_buts mis à jour"
+    body_lines.append(f"🔧 **{name}**\n - MAE: {mae:.4f} | RMSE: {rmse:.4f} → {perf}")subject = "📊 Modèle total_buts mis à jour"
+    
 body = (
     f"Le modèle `total_buts` a été réentraîné le {today}.\n\n"
     f"📉 **MAE** : {mae_score:.4f} — Erreur absolue moyenne (but près). ➡️ En moyenne, le modèle se trompe d’environ {mae_score:.4f} but sur ses prédictions.\n"
