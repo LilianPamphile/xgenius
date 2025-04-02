@@ -8,7 +8,6 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error
 from xgboost import XGBRegressor
 from lightgbm import LGBMRegressor
 from catboost import CatBoostRegressor
-from sklearn.neural_network import MLPRegressor
 import numpy as np
 import os
 from datetime import date
@@ -183,8 +182,9 @@ X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, 
 models = {
     "catboost": CatBoostRegressor(iterations=300, learning_rate=0.05, depth=6, random_seed=42, verbose=0),
     "lightgbm": LGBMRegressor(n_estimators=300, learning_rate=0.05, max_depth=6, random_state=42),
-    "mlp": MLPRegressor(hidden_layer_sizes=(128, 64), max_iter=500, random_state=42)
+    "xgboost": XGBRegressor(n_estimators=300, learning_rate=0.05, max_depth=6, subsample=0.8, colsample_bytree=0.8, random_state=42)
 }
+
 
 results = {}
 for name, model in models.items():
