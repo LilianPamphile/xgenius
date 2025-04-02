@@ -650,6 +650,9 @@ try:
     preds_lgb = model_lgb.predict(X_live)
     preds_xgb = model_xgb.predict(X_live)
 
+    #Round
+    preds_xgb = np.round(preds_xgb, 2)
+
     # Moyenne pondérée (tu peux ajuster les poids)
     pred_buts = 0.5 * preds_cat + 0.25 * preds_lgb + 0.25 * preds_xgb
 
@@ -715,7 +718,7 @@ try:
         line = (
             f"    🔮 Prédiction ML (ensemble) : {round(pred_total, 2)} buts\n"
             f"       ↳ CatBoost: {round(preds_cat[i], 2)} | LightGBM: {round(preds_lgb[i], 2)} | XGBoost: {round(preds_xgb[i], 2)}\n"
-            f"    🧠 Score heuristique : {round(score_heuristique)}\n"
+            f"    🧠 Score heuristique : {round(score_heuristique, 2)}\n"
             f"    📊 Value Score (60/40) : {round(value_score, 2)}"
         )
 
