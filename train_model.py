@@ -10,7 +10,7 @@ from xgboost import XGBRegressor
 from lightgbm import LGBMRegressor
 from catboost import CatBoostRegressor
 from sklearn.ensemble import RandomForestRegressor
-from lightgbm import LGBMRegressor, LGBMQuantileRegressor
+from lightgbm import LGBMRegressor
 from sklearn.cluster import KMeans
 import numpy as np
 import os
