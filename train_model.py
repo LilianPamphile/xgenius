@@ -235,28 +235,31 @@ def send_email(subject, body, to_email):
 # === Génération contenu du mail ===
 today = date.today()
 
-# Analyse qualitative du score
+subject = "📊 Modèles total_buts mis à jour"
+body_lines = [f"Les modèles `total_buts` ont été réentraînés le {today}.\n"]
+
 for name, (_, mae, rmse) in results.items():
+    # Analyse qualitative
     if rmse < 1.8:
-        perf = "🟢 Excellent"
+        perf = "🟢 Excellent (faible écart avec le réel)"
     elif rmse < 2.2:
-        perf = "🟡 Correct"
+        perf = "🟡 Correct (modèle utilisable)"
     else:
-        perf = "🔴 À surveiller"
+        perf = "🔴 À surveiller (précision insuffisante)"
 
-    body_lines.append(f"🔧 **{name}**\n - MAE: {mae:.4f} | RMSE: {rmse:.4f} → {perf}")subject = "📊 Modèle total_buts mis à jour"
-    
-body = (
-    f"Le modèle `total_buts` a été réentraîné le {today}.\n\n"
-    f"📉 **MAE** : {mae_score:.4f} — Erreur absolue moyenne (but près). ➡️ En moyenne, le modèle se trompe d’environ {mae_score:.4f} but sur ses prédictions.\n"
-    f"📉 **RMSE** : {rmse_score:.4f} — Racine de l’erreur quadratique moyenne. ➡️ Cela donne une idée de l’écart-type des erreurs de prédiction : plus c’est bas, mieux c’est.\n"
+    body_lines.append(
+        f"🔧 **{name}**\n"
+        f"   📉 MAE : {mae:.4f} — Erreur absolue moyenne\n"
+        f"   📉 RMSE : {rmse:.4f} — Erreur quadratique moyenne\n"
+        f"   🔎 Interprétation : {perf}\n"
+    )
 
-
-    f"🔎 Interprétation : {perf}\n\n"
-    "📁 Fichiers générés : model_total_buts.pkl & scaler_total_buts.pkl\n"
-    "📤 Upload GitHub : ✅ effectué avec succès\n"
+body_lines += [
+    "\n📁 Fichiers générés : modèles + scaler",
+    "📤 Upload GitHub : ✅ effectué avec succès",
     "🔗 https://github.com/LilianPamphile/paris-sportifs/tree/main/model_files"
-)
+]
 
-# Envoi
+body = "\n".join(body_lines)
+
 send_email(subject, body, "lilian.pamphile.bts@gmail.com")
