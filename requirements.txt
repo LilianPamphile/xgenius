@@ -3,4 +3,6 @@ numpy
 psycopg2-binary
 scikit-learn
 xgboost
+lightgbm
+catboost
 requests
