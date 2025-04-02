@@ -582,8 +582,9 @@ try:
             WHERE s.buts_dom IS NOT NULL AND s.buts_ext IS NOT NULL
         """)
         df_hist = pd.DataFrame(cursor.fetchall(), columns=["date_match", "equipe_domicile", "equipe_exterieur", "buts_m_dom", "buts_m_ext", "total_buts"])
-
+        
         def calculer_forme(equipe, date_ref):
+            matchs = []
             matchs = df_hist[((df_hist["equipe_domicile"] == equipe) | (df_hist["equipe_exterieur"] == equipe)) & (df_hist["date_match"] < date_ref)].sort_values("date_match", ascending=False).head(5)
             if matchs.empty:
                 return 0.0, 0.0, 0.0
@@ -592,7 +593,7 @@ try:
             over25 = np.mean([row["total_buts"] > 2.5 for _, row in matchs.iterrows()])
             return buts_marques, buts_encaisses, over25
 
-        matchs = []
+        
         seen_game_ids = set()
 
         for row in rows:
