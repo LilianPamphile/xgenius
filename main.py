@@ -742,7 +742,7 @@ try:
     mail_lines.append("🎯 Value Score = 60% ML + 40% Score heuristique\n")
 
     # Over
-    mail_lines.append("📈 MATCHS À BUTS (Value Score ≥ 70)\n")
+    mail_lines.append("📈 MATCHS À BUTS (Value Score ≥ 68)\n")
     if top_5_over:
         for idx, (_, name, details) in enumerate(top_5_over, 1):
             mail_lines.append(f"{idx}️⃣ {name}\n{details}\n")
@@ -750,7 +750,7 @@ try:
         mail_lines.append("Aucun match à fort potentiel offensif aujourd’hui ❄️\n")
 
     # Under
-    mail_lines.append("🔒 MATCHS FERMÉS (Value Score ≤ 55)\n")
+    mail_lines.append("🔒 MATCHS FERMÉS (Value Score ≤ 60)\n")
     if top_5_under:
         for idx, (_, name, details) in enumerate(top_5_under, 1):
             mail_lines.append(f"{idx}️⃣ {name}\n{details}\n")
@@ -758,7 +758,7 @@ try:
         mail_lines.append("Aucun match fermé détecté aujourd’hui.\n")
 
     # Neutres
-    mail_lines.append("⚪ MATCHS NEUTRES (Value Score entre 56 et 69)\n")
+    mail_lines.append("⚪ MATCHS NEUTRES (Value Score entre 61 et 67)\n")
     if matches_neutres:
         for idx, (_, name, details) in enumerate(matches_neutres, 1):
             mail_lines.append(f"{idx}️⃣ {name}\n{details}\n")
