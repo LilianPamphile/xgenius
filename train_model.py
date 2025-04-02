@@ -10,6 +10,7 @@ from lightgbm import LGBMRegressor
 from catboost import CatBoostRegressor
 from sklearn.neural_network import MLPRegressor
 import numpy as np
+import os
 
 # --- Connexion BDD ---
 DATABASE_URL = "postgresql://postgres:jDDqfaqpspVDBBwsqxuaiSDNXjTxjMmP@shortline.proxy.rlwy.net:36536/railway"
