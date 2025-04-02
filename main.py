@@ -135,6 +135,28 @@ def telecharger_model_depuis_github():
         else:
             print(f"❌ Échec du téléchargement de {chemin_local} ({response.status_code})")
 
+def compute_gmos(pred_ml, p25, p75, score_heuristique, cluster_type):
+    """Calcule un score GMOS (entre 0 et 100) à partir des éléments clés."""
+    cluster_bonus = {
+        0: 3,   # 💥 Match Ouvert
+        1: -5,  # 🔒 Match Fermé
+        2: 0    # ⚖️ Équilibré
+    }
+
+    variance_range = max(p75 - p25, 0.1)  # éviter division par 0
+    range_score = 1 - (variance_range / 5)  # plus c’est resserré, mieux c’est
+
+    base_score = 0.6 * (min(pred_ml / 5, 1) * 100) + 0.3 * score_heuristique + 0.1 * (range_score * 100)
+    bonus = cluster_bonus.get(cluster_type, 0)
+    return round(min(max(base_score + bonus, 0), 100), 2)
+
+
+CLUSTERS_MAP = {
+    0: "💥 Match Ouvert",
+    1: "🔒 Match Fermé",
+    2: "⚖️ Équilibré"
+}
+
 ###################################################################################################
 
 # === 📌 1️⃣ Récupération des Matchs ===
@@ -640,8 +662,6 @@ try:
                 "clean_sheets_ext": float(clean_sheets_ext),
             })
 
-
-
         cursor.close()
         return matchs
 
@@ -658,146 +678,107 @@ try:
         else:
             return 100
 
-    # === Prédiction ML ===
+    # === Prédictions ===
     matchs_jour = get_matchs_jour_for_prediction()
     X_live = scaler_ml.transform([m["features"] for m in matchs_jour])
-    # Clustering (optionnel mais utile)
+    
     cluster_labels = model_kmeans.predict(X_live)
     for i, match in enumerate(matchs_jour):
         match["cluster_type"] = int(cluster_labels[i])
-
+    
     preds_cat = model_cat.predict(X_live)
     preds_lgb = model_lgb.predict(X_live)
     preds_xgb = model_xgb.predict(X_live)
-
-    # Moyenne pondérée (tu peux ajuster les poids)
     pred_buts = 0.5 * preds_cat + 0.25 * preds_lgb + 0.25 * preds_xgb
-
     pred_p25 = model_p25.predict(X_live)
     pred_p75 = model_p75.predict(X_live)
-
+    
     sim_preds = [model_rf_simul.predict(X_live + np.random.normal(0, 0.1, X_live.shape)) for _ in range(100)]
     sim_preds = np.array(sim_preds)
     sim_mean = np.mean(sim_preds, axis=0)
     sim_std = np.std(sim_preds, axis=0)
-
-# Affichage (dans boucle matchs)
-f"    🎲 Moy. simulée : {round(sim_mean[i], 2)} | Std : {round(sim_std[i], 2)}\n"
-
-
-    # === Classement par Value Score ===
-    over_matches = []
-    under_matches = []
-    matches_neutres = []
-
+    
+    matchs_ouverts = []
+    matchs_fermes = []
+    matchs_neutres = []
+    
     for i, match in enumerate(matchs_jour):
-        pred_total = pred_buts[i]
         features = match["features"]
-
-        # Variables utiles
+        pred_total = pred_buts[i]
+        p25 = pred_p25[i]
+        p75 = pred_p75[i]
+    
+        # Variables heuristiques
         buts_dom, buts_ext = float(features[0]), float(features[1])
         over25_dom, over25_ext = float(features[4]), float(features[5])
         btts_dom, btts_ext = float(features[6]), float(features[7])
         xg_dom, xg_ext = float(features[8]), float(features[9])
         tirs_cadres_total = float(features[21])
-
         fdm, fdo25 = float(features[12]), float(features[14])
         fem, feo25 = float(features[15]), float(features[17])
-
         forme_pond_dom = 0.6 * fdm + 0.4 * fdo25
         forme_pond_ext = 0.6 * fem + 0.4 * feo25
-
         solidite_dom = float(100 - match.get("clean_sheets_dom", 0))
         solidite_ext = float(100 - match.get("clean_sheets_ext", 0))
-
         poss = float(match.get("poss", 50))
         corners = float(match.get("corners", 8))
         fautes = float(match.get("fautes", 20))
         cartons = float(match.get("cartons", 3))
-
-
-        # Score heuristique enrichi (indépendant)
+    
         score_heuristique = (
-            # ⚽ Potentiel offensif équilibré
             0.10 * (buts_dom + buts_ext) +
             0.10 * (over25_dom + over25_ext) +
             0.08 * (btts_dom + btts_ext) +
             0.08 * (xg_dom + xg_ext) +
             0.05 * tirs_cadres_total +
-
-            # 📈 Forme dynamique (à privilégier)
-            0.12 * forme_pond_dom +
-            0.12 * forme_pond_ext +
-
-            # 🧱 Solidité défensive (attention : malus ici)
-            -0.10 * solidite_dom -
-            -0.10 * solidite_ext +
-
-            # 🎯 Discipline et tempo
-            0.03 * match.get("corners", 8) +
-            0.03 * match.get("fautes", 20) +
-            0.02 * match.get("cartons", 3) +
-            0.05 * match.get("poss", 50)
+            0.12 * forme_pond_dom + 0.12 * forme_pond_ext -
+            0.10 * solidite_dom - 0.10 * solidite_ext +
+            0.03 * corners + 0.03 * fautes + 0.02 * cartons + 0.05 * poss
         )
-
-        score_ml = min(pred_total / 5, 1.0) * 100
-        value_score = round(0.6 * score_ml + 0.4 * score_heuristique, 2)
-
-        line = (
-            f"    🔮 Prédiction ML (ensemble) : {round(pred_total, 2)} buts\n"
-            f"       ↳ CatBoost: {round(preds_cat[i], 2)} | LightGBM: {round(preds_lgb[i], 2)} | XGBoost: {round(preds_xgb[i], 3)}\n"
-            f"    🧠 Score heuristique : {round(score_heuristique, 2)}\n"
-            f"    📊 Value Score (60/40) : {round(value_score, 2)}"
+    
+        gmos_score = compute_gmos(pred_total, p25, p75, score_heuristique, match["cluster_type"])
+        match["gmos_score"] = gmos_score
+    
+        ligne = (
+            f"🔮 GMOS : {gmos_score}\n"
+            f"📊 Estimé entre {int(p25)} et {int(p75)} buts\n"
+            f"🧬 Cluster : {CLUSTERS_MAP.get(match['cluster_type'], '❓ Inconnu')}"
         )
-
-        if value_score >= 68:
-            over_matches.append((value_score, match['match'], line))
-        elif value_score <= 60:
-            under_matches.append((value_score, match['match'], line))
+    
+        if gmos_score >= 67:
+            matchs_ouverts.append((gmos_score, match["match"], ligne))
+        elif gmos_score <= 50:
+            matchs_fermes.append((gmos_score, match["match"], ligne))
         else:
-            matches_neutres.append((value_score, match['match'], line))
+            matchs_neutres.append((gmos_score, match["match"], ligne))
 
-    # === Tri & top 5
-    over_matches.sort(reverse=True)
-    under_matches.sort(reverse=True)
-    matches_neutres.sort(reverse=True)
-
-    top_5_over = over_matches[:5]
-    top_5_under = under_matches[:5]
-
-    # === Construction contenu mail ===
+    
+    # === Génération du mail GMOS ===
     mail_lines = [f"📅 Prévisions du {today}\n"]
-    mail_lines.append("🎯 Value Score = 60% ML + 40% Score heuristique\n")
-
-    # Over
-    mail_lines.append("📈 MATCHS À BUTS (Value Score ≥ 68)\n")
-    if top_5_over:
-        for idx, (_, name, details) in enumerate(top_5_over, 1):
-            mail_lines.append(f"{idx}️⃣ {name}\n{details}\n")
-    else:
-        mail_lines.append("Aucun match à fort potentiel offensif aujourd’hui ❄️\n")
-
-    # Under
-    mail_lines.append("🔒 MATCHS FERMÉS (Value Score ≤ 60)\n")
-    if top_5_under:
-        for idx, (_, name, details) in enumerate(top_5_under, 1):
-            mail_lines.append(f"{idx}️⃣ {name}\n{details}\n")
-    else:
+    mail_lines.append("📈 Top 5 Matchs Ouverts (GMOS ≥ 67)\n")
+    
+    for idx, (_, name, ligne) in enumerate(sorted(matchs_ouverts, reverse=True)[:5], 1):
+        mail_lines.append(f"{idx}️⃣ {name}\n{ligne}\n")
+    if not matchs_ouverts:
+        mail_lines.append("Aucun match ouvert détecté aujourd’hui ❄️\n")
+    
+    mail_lines.append("🔒 Top 5 Matchs Fermés (GMOS ≤ 50)\n")
+    for idx, (_, name, ligne) in enumerate(sorted(matchs_fermes)[:5], 1):
+        mail_lines.append(f"{idx}️⃣ {name}\n{ligne}\n")
+    if not matchs_fermes:
         mail_lines.append("Aucun match fermé détecté aujourd’hui.\n")
-
-    # Neutres
-    mail_lines.append("⚪ MATCHS NEUTRES (Value Score entre 61 et 67)\n")
-    if matches_neutres:
-        for idx, (_, name, details) in enumerate(matches_neutres, 1):
-            mail_lines.append(f"{idx}️⃣ {name}\n{details}\n")
-    else:
-        mail_lines.append("Aucun match dans la zone neutre.\n")
-
-    mail_lines.append("Suivi : https://docs.google.com/forms/d/e/1FAIpQLSdRKd8ui1gy8lNfhMYYsLesglR9JJeAI7VgqrASbr0Ocdl7Tg/viewform?usp=header ")
-
-    # Envoi email
+    
+    mail_lines.append("⚪ Matchs Neutres (GMOS entre 51 et 66)\n")
+    for idx, (_, name, ligne) in enumerate(sorted(matchs_neutres, reverse=True), 1):
+        mail_lines.append(f"{idx}️⃣ {name}\n{ligne}\n")
+    if not matchs_neutres:
+        mail_lines.append("Aucun match neutre aujourd’hui.\n")
+    
+    mail_lines.append("🔥 GMOS = le meilleur résumé de tous tes modèles 💡")
+    mail_lines.append("Suivi : https://docs.google.com/forms/d/e/1FAIpQLSdRKd8ui1gy8lNfhMYYsLesglR9JJeAI7VgqrASbr0Ocdl7Tg/viewform?usp=header")
+    
     send_email(
-        subject="📊 Analyse quotidienne Over/Under (Value Score)",
+        subject="📊 Analyse quotidienne GMOS (Top matchs ouverts/fermés/neutres)",
         body="\n".join(mail_lines),
         to_email="lilian.pamphile.bts@gmail.com"
     )
