@@ -686,12 +686,14 @@ try:
     # === Prédictions ===
     # === Ajout cluster_type (avant scaler)
     X_live = pd.DataFrame([m["features"] for m in matchs_jour], columns=features)  # 34 colonnes
-    X_live["cluster_type"] = model_kmeans.predict(X_live)  # ➕ 35e colonne
-    X_live.columns = X_live.columns.astype(str)
+    # Avant d’ajouter cluster_type
+    cluster_labels = model_kmeans.predict(X_live[features])  # ✅ seulement les 34 colonnes originales
     
-    X_live_scaled = scaler_ml.transform(X_live)  # ✅ fonctionne car correspond au scaler entraîné
+    # Ensuite tu l’ajoutes à X_live
+    X_live["cluster_type"] = cluster_labels
 
-    cluster_labels = model_kmeans.predict(X_live)
+    X_live.columns = X_live.columns.astype(str)
+    X_live_scaled = scaler_ml.transform(X_live)
 
     for i, match in enumerate(matchs_jour):
         match["cluster_type"] = int(cluster_labels[i])
