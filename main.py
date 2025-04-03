@@ -664,7 +664,7 @@ try:
             })
 
         cursor.close()
-        return matchs
+        return matchs, features
 
 
     def convertir_pred_en_score_heuristique(pred_total):
@@ -679,12 +679,12 @@ try:
         else:
             return 100
 
-    matchs_jour = get_matchs_jour_for_prediction()
+    matchs_jour, features = get_matchs_jour_for_prediction()
     # === Prédictions ===
     # === Ajout cluster_type (avant scaler)
     X_live = pd.DataFrame([m["features"] for m in matchs_jour], columns=features)  # 34 colonnes
     X_live["cluster_type"] = model_kmeans.predict(X_live)  # ➕ 35e colonne
-    X_live_scaled = scaler.transform(X_live)  # ✅ fonctionne car correspond au scaler entraîné
+    X_live_scaled = scaler_ml.transform(X_live)  # ✅ fonctionne car correspond au scaler entraîné
 
     cluster_labels = model_kmeans.predict(X_live)
     for i, match in enumerate(matchs_jour):
