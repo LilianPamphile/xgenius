@@ -682,7 +682,7 @@ try:
     matchs_jour = get_matchs_jour_for_prediction()
     # === Prédictions ===
     # === Ajout cluster_type (avant scaler)
-    X_live = pd.DataFrame([m["features"] for m in matchs_jour], columns=feature_names_without_cluster)  # 34 colonnes
+    X_live = pd.DataFrame([m["features"] for m in matchs_jour], columns=features)  # 34 colonnes
     X_live["cluster_type"] = model_kmeans.predict(X_live)  # ➕ 35e colonne
     X_live_scaled = scaler.transform(X_live)  # ✅ fonctionne car correspond au scaler entraîné
 
