@@ -639,7 +639,7 @@ try:
             forme_pond_ext = 0.6 * fem + 0.4 * feo25
 
             # Ordre EXACT utilisé à l’entraînement (34 features)
-            features = [
+            feature_vector  = [
                 to_float(buts_dom), to_float(buts_ext), to_float(enc_dom), to_float(enc_ext),
                 to_float(over25_dom), to_float(over25_ext), to_float(btts_dom), to_float(btts_ext),
                 to_float(xg_dom), to_float(xg_ext), diff_xg, sum_xg,
@@ -655,7 +655,7 @@ try:
 
             matchs.append({
                 "match": f"{dom} vs {ext}",
-                "features": features,
+                "features": feature_vector,
                 "poss": float((poss_dom + poss_ext) / 2),
                 "corners": float(corners_dom + corners_ext),
                 "fautes": float(fautes_dom + fautes_ext),
