@@ -754,6 +754,7 @@ try:
         ligne = (
             f"🔮 GMOS : {gmos_score}\n"
             f"📊 Estimé entre {int(p25)} et {int(p75)} buts\n"
+            f"📈 Prédiction (CAT/LGB/XGB) : {pred_buts[i]:.2f}\n"
             f"🧬 Cluster : {CLUSTERS_MAP.get(match['cluster_type'], '❓ Inconnu')}"
         )
     
@@ -787,6 +788,7 @@ try:
         mail_lines.append("Aucun match neutre aujourd’hui.\n")
     
     mail_lines.append("🔥 GMOS = le meilleur résumé de tous tes modèles 💡")
+    mail_lines.append("🧠 Cluster = profil historique | GMOS = prédictions + forme actuelle")
     mail_lines.append("Suivi : https://docs.google.com/forms/d/e/1FAIpQLSdRKd8ui1gy8lNfhMYYsLesglR9JJeAI7VgqrASbr0Ocdl7Tg/viewform?usp=header")
     
     send_email(
