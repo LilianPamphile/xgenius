@@ -508,7 +508,6 @@ try:
         model_kmeans = pickle.load(f)
 
 
-
     # === Récupération historique des anciens matchs ===
     query_hist = """
         SELECT m.date::date AS date_match, m.equipe_domicile AS dom, m.equipe_exterieur AS ext,
@@ -684,6 +683,8 @@ try:
     # === Ajout cluster_type (avant scaler)
     X_live = pd.DataFrame([m["features"] for m in matchs_jour], columns=features)  # 34 colonnes
     X_live["cluster_type"] = model_kmeans.predict(X_live)  # ➕ 35e colonne
+    X_live.columns = X_live.columns.astype(str)
+    
     X_live_scaled = scaler_ml.transform(X_live)  # ✅ fonctionne car correspond au scaler entraîné
 
     cluster_labels = model_kmeans.predict(X_live)
