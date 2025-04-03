@@ -322,6 +322,9 @@ with open(f"{model_path}/scaler_total_buts.pkl", "wb") as f:
 with open(f"{model_path}/kmeans_cluster.pkl", "wb") as f:
     pickle.dump(kmeans, f)
 
+with open(f"{model_path}/features_list.pkl", "wb") as f:
+    pickle.dump(features, f)
+
 
 # Commit + push
 os.system(f"cd {CLONE_DIR} && git add model_files && git commit -m '🔁 Update models v3' && git push")
