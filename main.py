@@ -506,6 +506,10 @@ try:
         model_p75 = pickle.load(f)
     with open("model_files/kmeans_cluster.pkl", "rb") as f:
         model_kmeans = pickle.load(f)
+    # Charger la liste des noms de colonnes d'origine
+    with open("model_files/features_list.pkl", "rb") as f:
+        features = pickle.load(f)
+
 
 
     # === Récupération historique des anciens matchs ===
@@ -663,7 +667,7 @@ try:
             })
 
         cursor.close()
-        return matchs, features
+        return matchs
 
 
     def convertir_pred_en_score_heuristique(pred_total):
@@ -678,7 +682,7 @@ try:
         else:
             return 100
 
-    matchs_jour, features = get_matchs_jour_for_prediction()
+    matchs_jour = get_matchs_jour_for_prediction()
     # === Prédictions ===
     # === Ajout cluster_type (avant scaler)
     X_live = pd.DataFrame([m["features"] for m in matchs_jour], columns=features)  # 34 colonnes
@@ -688,6 +692,7 @@ try:
     X_live_scaled = scaler_ml.transform(X_live)  # ✅ fonctionne car correspond au scaler entraîné
 
     cluster_labels = model_kmeans.predict(X_live)
+
     for i, match in enumerate(matchs_jour):
         match["cluster_type"] = int(cluster_labels[i])
     
