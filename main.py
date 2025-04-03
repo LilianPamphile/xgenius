@@ -682,7 +682,7 @@ try:
     matchs_jour = get_matchs_jour_for_prediction()
     # === Prédictions ===
     # === Ajout cluster_type (avant scaler)
-    X_live = pd.DataFrame([m["features"] for m in matchs], columns=feature_names_without_cluster)  # 34 colonnes
+    X_live = pd.DataFrame([m["features"] for m in matchs_jour], columns=feature_names_without_cluster)  # 34 colonnes
     X_live["cluster_type"] = model_kmeans.predict(X_live)  # ➕ 35e colonne
     X_live_scaled = scaler.transform(X_live)  # ✅ fonctionne car correspond au scaler entraîné
 
@@ -696,7 +696,7 @@ try:
     pred_buts = 0.5 * preds_cat + 0.25 * preds_lgb + 0.25 * preds_xgb
     pred_p25 = model_p25.predict(X_live)
     pred_p75 = model_p75.predict(X_live)
-    
+
     sim_preds = [model_rf_simul.predict(X_live + np.random.normal(0, 0.1, X_live.shape)) for _ in range(100)]
     sim_preds = np.array(sim_preds)
     sim_mean = np.mean(sim_preds, axis=0)
