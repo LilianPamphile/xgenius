@@ -593,7 +593,7 @@ try:
             over25 = np.mean([row["total_buts"] > 2.5 for _, row in matchs.iterrows()])
             return buts_marques, buts_encaisses, over25
 
-        
+        matchs = []
         seen_game_ids = set()
 
         for row in rows:
@@ -679,6 +679,7 @@ try:
         else:
             return 100
 
+    matchs_jour = get_matchs_jour_for_prediction()
     # === Prédictions ===
     # === Ajout cluster_type (avant scaler)
     X_live = pd.DataFrame([m["features"] for m in matchs], columns=feature_names_without_cluster)  # 34 colonnes
