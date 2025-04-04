@@ -181,22 +181,31 @@ y = df["total_buts"]
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
-# --- Clustering des types de matchs ---
-best_k = 2
-best_score = -1
-best_model = None
+# --- Clustering enrichi (attaque + défense + forme + std) ---
 
-for k in range(2, 6):  # tester de k=2 à 5
-    km = KMeans(n_clusters=k, random_state=42)
-    labels = km.fit_predict(X_scaled)
-    score = silhouette_score(X_scaled, labels)
-    if score > best_score:
-        best_score = score
-        best_k = k
-        best_model = km
+# Reprise des mêmes features que pour l'entraînement ML
+X_kmeans = df[features]
+scaler_kmeans = StandardScaler()
+X_kmeans_scaled = scaler_kmeans.fit_transform(X_kmeans)
 
-cluster_labels = best_model.labels_
-kmeans = best_model
+# 🔒 Forçage à 3 clusters pour mieux distinguer les profils
+kmeans = KMeans(n_clusters=3, random_state=42)
+cluster_labels = kmeans.fit_predict(X_kmeans_scaled)
+
+df["cluster_type"] = cluster_labels
+X["cluster_type"] = cluster_labels  # Ajout au X principal pour les modèles
+
+# ♻️ Re-standardise avec la nouvelle colonne
+X_scaled = scaler.fit_transform(X)
+
+# 📊 Logging pour vérification
+unique, counts = np.unique(cluster_labels, return_counts=True)
+for label, count in zip(unique, counts):
+    print(f"🔍 Cluster {label} → {count} matchs ({(count / len(cluster_labels)):.1%})")
+
+sil_score = silhouette_score(X_kmeans_scaled, cluster_labels)
+print(f"✅ Silhouette Score (k=3 enrichi) : {sil_score:.4f}")
+
 
 df["cluster_type"] = cluster_labels
 X["cluster_type"] = cluster_labels
