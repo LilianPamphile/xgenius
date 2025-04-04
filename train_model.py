@@ -10,7 +10,6 @@ from xgboost import XGBRegressor
 from lightgbm import LGBMRegressor
 from catboost import CatBoostRegressor
 from sklearn.ensemble import RandomForestRegressor
-from lightgbm import LGBMRegressor
 from sklearn.cluster import KMeans
 import numpy as np
 import os
@@ -21,7 +20,7 @@ DATABASE_URL = "postgresql://postgres:jDDqfaqpspVDBBwsqxuaiSDNXjTxjMmP@shortline
 conn = psycopg2.connect(DATABASE_URL)
 cursor = conn.cursor()
 
-# --- Récupération des données ---
+# ========== 🗃️ Récupération des données historiques ========== #
 query = """
     SELECT
         m.game_id, m.date::date AS date_match, m.equipe_domicile, m.equipe_exterieur,
@@ -50,6 +49,9 @@ query = """
 cursor.execute(query)
 df = pd.DataFrame(cursor.fetchall(), columns=[desc[0] for desc in cursor.description])
 conn.close()
+
+# ========== 🗃️ Récupération des données historiques ========== #
+
 
 # --- Convertir Decimal en float ---
 for col in df.columns:
@@ -107,6 +109,8 @@ std_marq_dom, std_enc_dom, std_marq_ext, std_enc_ext = [], [], [], []
 clean_dom, clean_ext = [], []
 
 df_hist = df.copy()
+
+
 
 for _, row in df.iterrows():
     fdm, fde, fdo25, stdm, stde, cldm = enrichir_forme(df_hist, row["equipe_domicile"], row["date_match"])
@@ -215,15 +219,13 @@ for label, count in zip(unique, counts):
     print(f"🔍 Cluster {label} → {count} matchs ({(count / len(cluster_labels)):.1%})")
 
 sil_score = silhouette_score(X_kmeans_scaled, cluster_labels)
+results["kmeans"] = {
+    "model": kmeans,
+    "silhouette": sil_score
+}
 print(f"✅ Silhouette Score (k=3 enrichi) : {sil_score:.4f}")
 
-
-df["cluster_type"] = cluster_labels
-X["cluster_type"] = cluster_labels
-
-# Re-standardiser après ajout
-X_scaled = scaler.fit_transform(X)
-
+# --- FIN KMEANS --- #
 
 X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
 
@@ -296,12 +298,6 @@ results["rf_simul"] = {
     "std": sim_std
 }
 
-sil_score = silhouette_score(X_scaled, cluster_labels)
-results["kmeans"] = {
-    "model": kmeans,
-    "silhouette": sil_score
-}
-
 
 # Git config
 os.system("git config --global user.email 'lilian.pamphile.bts@gmail.com'")
@@ -338,9 +334,6 @@ for name, infos in results.items():
 
 with open(f"{model_path}/scaler_total_buts.pkl", "wb") as f:
     pickle.dump(scaler, f)
-
-with open(f"{model_path}/kmeans_cluster.pkl", "wb") as f:
-    pickle.dump(kmeans, f)
 
 with open(f"{model_path}/features_list.pkl", "wb") as f:
     pickle.dump(features, f)
