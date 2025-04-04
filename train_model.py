@@ -181,19 +181,30 @@ y = df["total_buts"]
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
-# --- Clustering enrichi (attaque + défense + forme + std) ---
+# --- KMEANS --- #
+features_kmeans = [
+    # 🔒 Défense et solidité
+    "forme_dom_enc", "forme_ext_enc",
+    "std_enc_dom", "std_enc_ext",
+    "solidite_dom", "solidite_ext",
+    "clean_sheets_dom", "clean_sheets_ext",
+    
+    # 💥 Menace offensive potentielle
+    "diff_xg", "sum_xg",
+    "total_tirs", "total_tirs_cadres",
+    
+    # ⚖️ Caractéristiques croisées utiles
+    "diff_over25", "sum_btts",
+]
 
-# Reprise des mêmes features que pour l'entraînement ML
-X_kmeans = df[features]
+X_kmeans = df[features_kmeans]
 scaler_kmeans = StandardScaler()
 X_kmeans_scaled = scaler_kmeans.fit_transform(X_kmeans)
 
-# 🔒 Forçage à 3 clusters pour mieux distinguer les profils
 kmeans = KMeans(n_clusters=3, random_state=42)
 cluster_labels = kmeans.fit_predict(X_kmeans_scaled)
 
 df["cluster_type"] = cluster_labels
-X["cluster_type"] = cluster_labels  # Ajout au X principal pour les modèles
 
 # ♻️ Re-standardise avec la nouvelle colonne
 X_scaled = scaler.fit_transform(X)
@@ -333,6 +344,17 @@ with open(f"{model_path}/kmeans_cluster.pkl", "wb") as f:
 
 with open(f"{model_path}/features_list.pkl", "wb") as f:
     pickle.dump(features, f)
+
+# --- KMEANS ---#
+with open(f"{model_path}/features_kmeans_list.pkl", "wb") as f:
+    pickle.dump(features_kmeans, f)
+
+with open(f"{model_path}/scaler_kmeans.pkl", "wb") as f:
+    pickle.dump(scaler_kmeans, f)
+
+with open(f"{model_path}/kmeans_cluster.pkl", "wb") as f:
+    pickle.dump(kmeans, f)
+
 
 
 # Commit + push
