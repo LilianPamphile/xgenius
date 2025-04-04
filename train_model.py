@@ -10,7 +10,8 @@ from xgboost import XGBRegressor
 from lightgbm import LGBMRegressor
 from catboost import CatBoostRegressor
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.cluster import KMeans
+from sklearn.cluster import KMeans, DBSCAN
+from sklearn.decomposition import PCA
 import numpy as np
 import os
 from datetime import date
@@ -19,6 +20,32 @@ from datetime import date
 DATABASE_URL = "postgresql://postgres:jDDqfaqpspVDBBwsqxuaiSDNXjTxjMmP@shortline.proxy.rlwy.net:36536/railway"
 conn = psycopg2.connect(DATABASE_URL)
 cursor = conn.cursor()
+
+# === Constantes ===
+FEATURES_TOTAL_BUTS = [
+    "buts_dom", "buts_ext", "buts_encaissés_dom", "buts_encaissés_ext",
+    "over25_dom", "over25_ext", "btts_dom", "btts_ext",
+    "moyenne_xg_dom", "moyenne_xg_ext", "diff_xg", "sum_xg",
+    "forme_dom_marq", "forme_dom_enc", "forme_dom_over25",
+    "forme_ext_marq", "forme_ext_enc", "forme_ext_over25",
+    "sum_btts", "diff_over25", "total_tirs", "total_tirs_cadres",
+    "clean_sheets_dom", "clean_sheets_ext", "solidite_dom", "solidite_ext",
+    "std_marq_dom", "std_enc_dom", "std_marq_ext", "std_enc_ext",
+    "clean_dom", "clean_ext", "solidite_def_dom", "solidite_def_ext"
+]
+
+FEATURES_KMEANS = [
+    "forme_dom_enc", "forme_ext_enc", "std_enc_dom", "std_enc_ext",
+    "solidite_dom", "solidite_ext", "clean_sheets_dom", "clean_sheets_ext",
+    "diff_xg", "sum_xg", "total_tirs", "total_tirs_cadres",
+    "diff_over25", "sum_btts",
+    "forme_dom_marq", "forme_ext_marq",
+    "std_marq_dom", "std_marq_ext",
+    "solidite_def_dom", "solidite_def_ext",
+    "clean_dom", "clean_ext",
+    "moyenne_xg_dom", "moyenne_xg_ext",
+    "buts_encaissés_dom", "buts_encaissés_ext"
+]
 
 # ========== 🗃️ Récupération des données historiques ========== #
 query = """
@@ -50,23 +77,11 @@ cursor.execute(query)
 df = pd.DataFrame(cursor.fetchall(), columns=[desc[0] for desc in cursor.description])
 conn.close()
 
-# ========== 🗃️ Récupération des données historiques ========== #
-
 
 # --- Convertir Decimal en float ---
 for col in df.columns:
     if df[col].dtype == 'object' and not df[col].dropna().empty and isinstance(df[col].dropna().iloc[0], Decimal):
         df[col] = df[col].astype(float)
-
-# --- Calcul forme récente ---
-def calculer_forme(equipe, date_ref, df_hist):
-    matchs = df_hist[((df_hist["equipe_domicile"] == equipe) | (df_hist["equipe_exterieur"] == equipe)) & (df_hist["date_match"] < date_ref)].sort_values("date_match", ascending=False).head(5)
-    if matchs.empty:
-        return 0, 0, 0
-    buts_marques = np.mean([row["buts_m_dom"] if row["equipe_domicile"] == equipe else row["buts_m_ext"] for _, row in matchs.iterrows()])
-    buts_encaisses = np.mean([row["buts_m_ext"] if row["equipe_domicile"] == equipe else row["buts_m_dom"] for _, row in matchs.iterrows()])
-    over25 = np.mean([row["total_buts"] > 2.5 for _, row in matchs.iterrows()])
-    return buts_marques, buts_encaisses, over25
 
 # Nouvelle fonction : forme pondérée + std + clean_sheets
 def enrichir_forme(df_hist, equipe, date_ref):
@@ -109,7 +124,6 @@ std_marq_dom, std_enc_dom, std_marq_ext, std_enc_ext = [], [], [], []
 clean_dom, clean_ext = [], []
 
 df_hist = df.copy()
-
 
 
 for _, row in df.iterrows():
@@ -165,65 +179,58 @@ df["solidite_ext"] = 1 / (df["buts_encaissés_ext"] + 0.1)
 # --- Clip des outliers ---
 df["total_buts"] = df["total_buts"].clip(upper=5)
 
-# Features finales (neutres, attaque + défense)
-features = [
-    "buts_dom", "buts_ext", "buts_encaissés_dom", "buts_encaissés_ext",
-    "over25_dom", "over25_ext", "btts_dom", "btts_ext",
-    "moyenne_xg_dom", "moyenne_xg_ext", "diff_xg", "sum_xg",
-    "forme_dom_marq", "forme_dom_enc", "forme_dom_over25",
-    "forme_ext_marq", "forme_ext_enc", "forme_ext_over25",
-    "sum_btts", "diff_over25", "total_tirs", "total_tirs_cadres",
-    "clean_sheets_dom", "clean_sheets_ext", "solidite_dom", "solidite_ext",
-    "std_marq_dom", "std_enc_dom", "std_marq_ext", "std_enc_ext",
-    "clean_dom", "clean_ext", "solidite_def_dom", "solidite_def_ext"
-]
+# Enrichissements features + dérivées (inchangé)
 
-X = df[features]
+X = df[FEATURES_TOTAL_BUTS]
 y = df["total_buts"]
-
-# Standardisation
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
-# --- KMEANS --- #
-features_kmeans = [
-    # 🔒 Défense et solidité
-    "forme_dom_enc", "forme_ext_enc",
-    "std_enc_dom", "std_enc_ext",
-    "solidite_dom", "solidite_ext",
-    "clean_sheets_dom", "clean_sheets_ext",
-    
-    # 💥 Menace offensive potentielle
-    "diff_xg", "sum_xg",
-    "total_tirs", "total_tirs_cadres",
-    
-    # ⚖️ Caractéristiques croisées utiles
-    "diff_over25", "sum_btts",
-]
-
-X_kmeans = df[features_kmeans]
+# KMEANS
+X_kmeans = df[FEATURES_KMEANS]
 scaler_kmeans = StandardScaler()
 X_kmeans_scaled = scaler_kmeans.fit_transform(X_kmeans)
+print(f"✅ Nombre de features KMeans : {len(FEATURES_KMEANS)}")
+print(f"📋 Liste des features KMeans : {FEATURES_KMEANS}")
 
-kmeans = KMeans(n_clusters=3, random_state=42)
-cluster_labels = kmeans.fit_predict(X_kmeans_scaled)
+pca = PCA(n_components=0.95)
+X_kmeans_pca = pca.fit_transform(X_kmeans_scaled)
 
-df["cluster_type"] = cluster_labels
+
+# --- Tester différents k --- #
+best_k = None
+best_score = -1
+best_labels = None
+for k in range(2, 7):
+    kmeans = KMeans(n_clusters=k, random_state=42)
+    labels = kmeans.fit_predict(X_kmeans_pca)
+    score = silhouette_score(X_kmeans_pca, labels)
+    print(f"🔢 k={k} → Silhouette Score: {score:.4f}")
+    if score > best_score:
+        best_score = score
+        best_k = k
+        best_labels = labels
+
+print(f"✅ Meilleur k = {best_k} avec silhouette = {best_score:.4f}")
+
+# Appliquer le meilleur clustering retenu
+kmeans = KMeans(n_clusters=best_k, random_state=42)
+kmeans.fit(X_kmeans_pca)
+df["cluster_type"] = best_labels
 
 # ♻️ Re-standardise avec la nouvelle colonne
 X_scaled = scaler.fit_transform(X)
 
 # 📊 Logging pour vérification
-unique, counts = np.unique(cluster_labels, return_counts=True)
+unique, counts = np.unique(best_labels, return_counts=True)
 for label, count in zip(unique, counts):
-    print(f"🔍 Cluster {label} → {count} matchs ({(count / len(cluster_labels)):.1%})")
+    print(f"🔍 Cluster {label} → {count} matchs ({(count / len(best_labels)):.1%})")
 
-sil_score = silhouette_score(X_kmeans_scaled, cluster_labels)
 results["kmeans"] = {
     "model": kmeans,
-    "silhouette": sil_score
+    "silhouette": best_score
 }
-print(f"✅ Silhouette Score (k=3 enrichi) : {sil_score:.4f}")
+print(f"✅ Silhouette Score (k={best_k} enrichi) : {best_score:.4f}")
 
 # --- FIN KMEANS --- #
 
@@ -305,6 +312,7 @@ os.system("git config --global user.name 'LilianPamphile'")
 
 # Token
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+
 if not GITHUB_TOKEN:
     raise ValueError("❌ Le token GitHub n'est pas défini.")
 
@@ -336,11 +344,12 @@ with open(f"{model_path}/scaler_total_buts.pkl", "wb") as f:
     pickle.dump(scaler, f)
 
 with open(f"{model_path}/features_list.pkl", "wb") as f:
-    pickle.dump(features, f)
+    pickle.dump(FEATURES_TOTAL_BUTS, f)
+
 
 # --- KMEANS ---#
 with open(f"{model_path}/features_kmeans_list.pkl", "wb") as f:
-    pickle.dump(features_kmeans, f)
+    pickle.dump(FEATURES_KMEANS, f)
 
 with open(f"{model_path}/scaler_kmeans.pkl", "wb") as f:
     pickle.dump(scaler_kmeans, f)
@@ -348,6 +357,8 @@ with open(f"{model_path}/scaler_kmeans.pkl", "wb") as f:
 with open(f"{model_path}/kmeans_cluster.pkl", "wb") as f:
     pickle.dump(kmeans, f)
 
+with open(f"{model_path}/pca_kmeans.pkl", "wb") as f:
+    pickle.dump(pca, f)
 
 
 # Commit + push
