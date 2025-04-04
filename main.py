@@ -103,7 +103,7 @@ def telecharger_model_depuis_github():
     REPO = "LilianPamphile/paris-sportifs"
     BRANCH = "main"
     TOKEN = os.getenv("GITHUB_TOKEN")
-
+    
     # Liste des fichiers à télécharger (avec chemin dans le repo GitHub)
     fichiers = {
         "model_files/model_total_buts_catboost.pkl": "model_files/model_total_buts_catboost.pkl",
@@ -113,8 +113,11 @@ def telecharger_model_depuis_github():
         "model_files/model_total_buts_rf_simul.pkl": "model_files/model_total_buts_rf_simul.pkl",
         "model_files/model_total_buts_quantile_p25.pkl": "model_files/model_total_buts_quantile_p25.pkl",
         "model_files/model_total_buts_quantile_p75.pkl": "model_files/model_total_buts_quantile_p75.pkl",
-        "model_files/kmeans_cluster.pkl": "model_files/kmeans_cluster.pkl"
-
+        "model_files/features_list.pkl": "model_files/features_list.pkl",
+        "model_files/features_kmeans_list.pkl": "model_files/features_kmeans_list.pkl",
+        "model_files/scaler_kmeans.pkl": "model_files/scaler_kmeans.pkl",
+        "model_files/kmeans_cluster.pkl": "model_files/kmeans_cluster.pkl",
+        "model_files/pca_kmeans.pkl": "model_files/pca_kmeans.pkl"
     }
 
     for chemin_dist, chemin_local in fichiers.items():
@@ -137,24 +140,17 @@ def telecharger_model_depuis_github():
 
 def compute_gmos(pred_ml, p25, p75, score_heuristique, cluster_type):
     """Calcule un score GMOS (entre 0 et 100) à partir des éléments clés."""
-    cluster_bonus = {
-        0: 3,   # 💥 Match Ouvert
-        1: -5,  # 🔒 Match Fermé
-        2: 0    # ⚖️ Équilibré
-    }
 
     variance_range = max(p75 - p25, 0.1)  # éviter division par 0
     range_score = 1 - (variance_range / 5)  # plus c’est resserré, mieux c’est
 
     base_score = 0.6 * (min(pred_ml / 5, 1) * 100) + 0.3 * score_heuristique + 0.1 * (range_score * 100)
-    bonus = cluster_bonus.get(cluster_type, 0)
-    return round(min(max(base_score + bonus, 0), 100), 2)
+    return round(min(max(base_score, 0), 100), 2)
 
 
 CLUSTERS_MAP = {
-    0: "💥 Match Ouvert",
-    1: "🔒 Match Fermé",
-    2: "⚖️ Équilibré"
+    0: "🧨 Match atypique (ouvert ou fermé)",
+    1: "⚖️ Match standard attendu"
 }
 
 ###################################################################################################
@@ -509,6 +505,15 @@ try:
     # Charger la liste des noms de colonnes d'origine
     with open("model_files/features_list.pkl", "rb") as f:
         features = pickle.load(f)
+    with open("model_files/features_kmeans_list.pkl", "rb") as f:
+        features_kmeans = pickle.load(f)
+    with open("model_files/scaler_kmeans.pkl", "rb") as f:
+        scaler_kmeans = pickle.load(f)
+    with open("model_files/pca_kmeans.pkl", "rb") as f:
+        pca_kmeans = pickle.load(f)
+
+    print("✅ Features attendues par KMeans :", features_kmeans)
+
 
 
 
@@ -596,6 +601,35 @@ try:
             over25 = np.mean([row["total_buts"] > 2.5 for _, row in matchs.iterrows()])
             return buts_marques, buts_encaisses, over25
 
+        # Récupère les 5 derniers matchs de chaque équipe
+        def enrichir_forme_complet(equipe, date_ref):
+            matchs = df_hist[((df_hist["equipe_domicile"] == equipe) | (df_hist["equipe_exterieur"] == equipe)) & (df_hist["date_match"] < date_ref)].sort_values("date_match", ascending=False).head(5)
+
+            if matchs.empty:
+                return 0, 0, 0, 0, 0, 0  # marq, encaissés, over25, std_marq, std_enc, clean_sheets
+
+            weights = np.linspace(1.0, 2.0, len(matchs))
+            buts_marques, buts_encaissés, over25, clean_sheets = [], [], [], []
+
+            for _, row in matchs.iterrows():
+                est_dom = (row["equipe_domicile"] == equipe)
+                bm = row["buts_m_dom"] if est_dom else row["buts_m_ext"]
+                be = row["buts_m_ext"] if est_dom else row["buts_m_dom"]
+
+                buts_marques.append(bm)
+                buts_encaissés.append(be)
+                over25.append(int(row["total_buts"] > 2.5))
+                clean_sheets.append(int(be == 0))
+
+            return (
+                np.average(buts_marques, weights=weights),
+                np.average(buts_encaissés, weights=weights),
+                np.average(over25, weights=weights),
+                np.std(buts_marques),
+                np.std(buts_encaissés),
+                np.sum(clean_sheets)
+            )
+
         matchs = []
         seen_game_ids = set()
 
@@ -609,15 +643,17 @@ try:
                 poss_ext, corners_ext, fautes_ext, cj_ext, cr_ext, xg_ext, tirs_ext, tirs_cadres_ext
             ) = row
 
-            if game_id in seen_game_ids:
-                continue
+            if game_id in seen_game_ids: continue
             seen_game_ids.add(game_id)
 
-            # Forme récente
             fdm, fde, fdo25 = calculer_forme(dom, date_match)
             fem, fee, feo25 = calculer_forme(ext, date_match)
 
-            # Features croisées
+            # Forme complète
+            fdm, fde, fdo25, std_marq_dom, std_enc_dom, clean_dom = enrichir_forme_complet(dom, date_match)
+            fem, fee, feo25, std_marq_ext, std_enc_ext, clean_ext = enrichir_forme_complet(ext, date_match)
+
+            # Calculs intermédiaires
             diff_xg = to_float(xg_dom - xg_ext)
             sum_xg = to_float(xg_dom + xg_ext)
             sum_btts = to_float(btts_dom + btts_ext)
@@ -625,21 +661,17 @@ try:
             total_tirs = to_float(tirs_dom + tirs_ext)
             total_tirs_cadres = to_float(tirs_cadres_dom + tirs_cadres_ext)
 
-            solidite_dom = 100 - to_float(clean_sheets_dom)
-            solidite_ext = 100 - to_float(clean_sheets_ext)
-
-            # Nouvelles features à calculer
             clean_sheets_dom = 100 - to_float(btts_dom)
             clean_sheets_ext = 100 - to_float(btts_ext)
             solidite_dom = 1 / (to_float(enc_dom) + 0.1)
             solidite_ext = 1 / (to_float(enc_ext) + 0.1)
+            solidite_def_dom = to_float(clean_dom) / (to_float(fde) + 1)
+            solidite_def_ext = to_float(clean_ext) / (to_float(fee) + 1)
 
-            # Moyennes pondérées
             forme_pond_dom = 0.6 * fdm + 0.4 * fdo25
             forme_pond_ext = 0.6 * fem + 0.4 * feo25
 
-            # Ordre EXACT utilisé à l’entraînement (34 features)
-            feature_vector  = [
+            feature_vector = [
                 to_float(buts_dom), to_float(buts_ext), to_float(enc_dom), to_float(enc_ext),
                 to_float(over25_dom), to_float(over25_ext), to_float(btts_dom), to_float(btts_ext),
                 to_float(xg_dom), to_float(xg_ext), diff_xg, sum_xg,
@@ -653,6 +685,40 @@ try:
                 to_float(fautes_dom), to_float(fautes_ext)
             ]
 
+            # Construction du dictionnaire temporaire avec les valeurs
+            features_dict = {
+                "forme_dom_enc": to_float(fde),
+                "forme_ext_enc": to_float(fee),
+                "std_enc_dom": to_float(std_enc_dom),
+                "std_enc_ext": to_float(std_enc_ext),
+                "solidite_dom": to_float(solidite_dom),
+                "solidite_ext": to_float(solidite_ext),
+                "clean_sheets_dom": to_float(clean_sheets_dom),
+                "clean_sheets_ext": to_float(clean_sheets_ext),
+                "diff_xg": to_float(diff_xg),
+                "sum_xg": to_float(sum_xg),
+                "total_tirs": to_float(total_tirs),
+                "total_tirs_cadres": to_float(total_tirs_cadres),
+                "diff_over25": to_float(diff_over25),
+                "sum_btts": to_float(sum_btts),
+                "forme_dom_marq": to_float(fdm),
+                "forme_ext_marq": to_float(fem),
+                "std_marq_dom": to_float(std_marq_dom),
+                "std_marq_ext": to_float(std_marq_ext),
+                "solidite_def_dom": to_float(clean_dom / (fde + 1)),
+                "solidite_def_ext": to_float(clean_ext / (fee + 1)),
+                "clean_dom": to_float(clean_dom),
+                "clean_ext": to_float(clean_ext),
+                "moyenne_xg_dom": to_float(xg_dom),
+                "moyenne_xg_ext": to_float(xg_ext),
+                "buts_encaissés_dom": to_float(enc_dom),
+                "buts_encaissés_ext": to_float(enc_ext)
+            }
+
+            # Crée le vecteur de features KMeans dans l’ordre attendu
+            features_kmeans_vector = [features_dict[f] for f in features_kmeans]
+
+
             matchs.append({
                 "match": f"{dom} vs {ext}",
                 "features": feature_vector,
@@ -664,48 +730,54 @@ try:
                 "solidite_ext": float(solidite_ext),
                 "clean_sheets_dom": float(clean_sheets_dom),
                 "clean_sheets_ext": float(clean_sheets_ext),
+                "features_kmeans": features_kmeans_vector
             })
 
         cursor.close()
         return matchs
 
-
-    def convertir_pred_en_score_heuristique(pred_total):
-        if pred_total <= 2:
-            return 60
-        elif pred_total <= 3:
-            return 70
-        elif pred_total <= 4:
-            return 80 
-        elif pred_total <= 5:
-            return 90 
-        else:
-            return 100
-
     matchs_jour = get_matchs_jour_for_prediction()
+
+
     # === Prédictions ===
     # === Ajout cluster_type (avant scaler)
     X_live = pd.DataFrame([m["features"] for m in matchs_jour], columns=features)  # 34 colonnes
-    # Avant d’ajouter cluster_type
-    cluster_labels = model_kmeans.predict(X_live[features])  # ✅ seulement les 34 colonnes originales
-    
-    # Ensuite tu l’ajoutes à X_live
+
+    # Crée un DataFrame avec les features KMeans uniquement
+    X_kmeans_df = pd.DataFrame([m["features_kmeans"] for m in matchs_jour], columns=features_kmeans)
+    print("✅ Features attendues par KMeans :", features_kmeans)
+    print("✅ Shape X_kmeans_df :", X_kmeans_df.shape)
+
+    X_kmeans_live_scaled = scaler_kmeans.transform(X_kmeans_df)
+    X_kmeans_live_pca = pca_kmeans.transform(X_kmeans_live_scaled)
+    cluster_labels = model_kmeans.predict(X_kmeans_live_pca)  # ✅ OK maintenant
+
+
+    # Juste après avoir ajouté cluster_type :
     X_live["cluster_type"] = cluster_labels
 
-    X_live.columns = X_live.columns.astype(str)
-    X_live_scaled = scaler_ml.transform(X_live)
+    # ❗ Ne pas scaler avec cluster_type
+    X_live_clean = X_live.drop(columns=["cluster_type"])
+
+    # ✅ Transformation
+    X_live_scaled = scaler_ml.transform(X_live_clean)
+
 
     for i, match in enumerate(matchs_jour):
         match["cluster_type"] = int(cluster_labels[i])
     
-    preds_cat = model_cat.predict(X_live)
-    preds_lgb = model_lgb.predict(X_live)
-    preds_xgb = model_xgb.predict(X_live)
-    pred_buts = 0.5 * preds_cat + 0.25 * preds_lgb + 0.25 * preds_xgb
-    pred_p25 = model_p25.predict(X_live)
-    pred_p75 = model_p75.predict(X_live)
+    print("✅ X_live_clean shape :", X_live_clean.shape)
+    print("✅ Features attendues par le modèle :", len(features))  # Doit être 34
 
-    sim_preds = [model_rf_simul.predict(X_live + np.random.normal(0, 0.1, X_live.shape)) for _ in range(100)]
+    
+    preds_cat = model_cat.predict(X_live_scaled)
+    preds_lgb = model_lgb.predict(X_live_scaled)
+    preds_xgb = model_xgb.predict(X_live_scaled)
+    pred_p25 = model_p25.predict(X_live_scaled)
+    pred_p75 = model_p75.predict(X_live_scaled)
+    
+    sim_preds = [model_rf_simul.predict(X_live_scaled + np.random.normal(0, 0.1, X_live_scaled.shape)) for _ in range(100)]
+
     sim_preds = np.array(sim_preds)
     sim_mean = np.mean(sim_preds, axis=0)
     sim_std = np.std(sim_preds, axis=0)
@@ -713,21 +785,23 @@ try:
     matchs_ouverts = []
     matchs_fermes = []
     matchs_neutres = []
+
+    pred_buts = 0.70 * preds_cat + 0.20 * preds_lgb + 0.10 * preds_xgb
     
     for i, match in enumerate(matchs_jour):
-        features = match["features"]
+        features_vec = match["features"]
         pred_total = pred_buts[i]
         p25 = pred_p25[i]
         p75 = pred_p75[i]
     
         # Variables heuristiques
-        buts_dom, buts_ext = float(features[0]), float(features[1])
-        over25_dom, over25_ext = float(features[4]), float(features[5])
-        btts_dom, btts_ext = float(features[6]), float(features[7])
-        xg_dom, xg_ext = float(features[8]), float(features[9])
-        tirs_cadres_total = float(features[21])
-        fdm, fdo25 = float(features[12]), float(features[14])
-        fem, feo25 = float(features[15]), float(features[17])
+        buts_dom, buts_ext = float(features_vec[0]), float(features_vec[1])
+        over25_dom, over25_ext = float(features_vec[4]), float(features_vec[5])
+        btts_dom, btts_ext = float(features_vec[6]), float(features_vec[7])
+        xg_dom, xg_ext = float(features_vec[8]), float(features_vec[9])
+        tirs_cadres_total = float(features_vec[21])
+        fdm, fdo25 = float(features_vec[12]), float(features_vec[14])
+        fem, feo25 = float(features_vec[15]), float(features_vec[17])
         forme_pond_dom = 0.6 * fdm + 0.4 * fdo25
         forme_pond_ext = 0.6 * fem + 0.4 * feo25
         solidite_dom = float(100 - match.get("clean_sheets_dom", 0))
@@ -747,6 +821,18 @@ try:
             0.10 * solidite_dom - 0.10 * solidite_ext +
             0.03 * corners + 0.03 * fautes + 0.02 * cartons + 0.05 * poss
         )
+
+        def convertir_pred_en_score_heuristique(pred_total):
+          if pred_total <= 2:
+              return 60
+          elif pred_total <= 3:
+              return 70
+          elif pred_total <= 4:
+              return 80 
+          elif pred_total <= 5:
+              return 90 
+          else:
+              return 100
     
         gmos_score = compute_gmos(pred_total, p25, p75, score_heuristique, match["cluster_type"])
         match["gmos_score"] = gmos_score
