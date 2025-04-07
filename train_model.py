@@ -226,6 +226,8 @@ unique, counts = np.unique(best_labels, return_counts=True)
 for label, count in zip(unique, counts):
     print(f"🔍 Cluster {label} → {count} matchs ({(count / len(best_labels)):.1%})")
 
+results = {}
+
 results["kmeans"] = {
     "model": kmeans,
     "silhouette": best_score
