@@ -312,7 +312,6 @@ os.system("git config --global user.name 'LilianPamphile'")
 
 # Token
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-
 if not GITHUB_TOKEN:
     raise ValueError("❌ Le token GitHub n'est pas défini.")
 
