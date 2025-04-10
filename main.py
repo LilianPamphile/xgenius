@@ -149,8 +149,9 @@ def compute_gmos(pred_ml, p25, p75, score_heuristique, cluster_type):
 
 
 CLUSTERS_MAP = {
-    0: "🧨 Match atypique (ouvert ou fermé)",
-    1: "⚖️ Match standard attendu"
+    0: "🔥 Match très ouvert (profil offensif)",
+    1: "⚖️ Match équilibré (standard)",
+    2: "🧊 Match potentiellement fermé"
 }
 
 ###################################################################################################
@@ -874,6 +875,10 @@ try:
         mail_lines.append("Aucun match neutre aujourd’hui.\n")
     
     mail_lines.append("🔥 GMOS = le meilleur résumé de tous tes modèles 💡")
+    mail_lines.append("🧬 Clusters historiques détectés :")
+    mail_lines.append("• 🔥 Cluster 0 → Matchs très ouverts (2.83 buts en moyenne)")
+    mail_lines.append("• ⚖️ Cluster 1 → Matchs standard (2.81 buts en moyenne)")
+    mail_lines.append("• 🧊 Cluster 2 → Matchs plus fermés (2.55 buts en moyenne)")
     mail_lines.append("🧠 Cluster = profil historique | GMOS = prédictions + forme actuelle")
     mail_lines.append("Suivi : https://docs.google.com/forms/d/e/1FAIpQLSdRKd8ui1gy8lNfhMYYsLesglR9JJeAI7VgqrASbr0Ocdl7Tg/viewform?usp=header")
     
