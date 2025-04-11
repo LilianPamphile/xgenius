@@ -87,7 +87,7 @@ def send_email(subject, body, to_email):
     msg = MIMEText(body)
     msg["Subject"] = subject
     msg["From"] = from_email
-    msg["To"] = to_email
+    msg["To"] = ", ".join(to_email)
 
     try:
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
