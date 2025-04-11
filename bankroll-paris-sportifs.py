@@ -10,6 +10,7 @@ st.title("🎯 Application de Paris Sportifs - Gestion de Bankroll")
 
 # Choix utilisateur simplifié
 st.header("📝 Informations sur le Pari")
+match = st.text_input("📅 Match (ex: Nadal vs Djokovic, PSG vs OM, etc.)")
 sport = st.selectbox("🏟️ Choisis un sport", ["Football", "Basket", "Tennis"])
 
 # Liste des types de paris
@@ -17,12 +18,23 @@ liste_types_paris = ["Vainqueur", "Over/Under", "Handicap", "Score exact", "Buts
 type_pari = st.selectbox("🎯 Type de pari", liste_types_paris)
 
 evenement = st.text_input("🧑‍💼 Pari en question (ex: Berrettini, Real Madrid, etc.)")
-cote = st.number_input("💸 Cote proposée", min_value=1.01, step=0.01, format="%.2f")
+cote = st.number_input("💸 Cote proposée (sur ton pari)", min_value=1.01, step=0.01, format="%.2f")
+cote_adverse = st.number_input("💸 Cote adverse (autre issue principale)", min_value=1.01, step=0.01, format="%.2f")
 
 st.markdown("---")
-st.header("📈 Probabilité et Bankroll")
-prob_estimee = st.slider("Probabilité estimée du pari (%)", min_value=1, max_value=100, value=50) / 100
-bankroll = st.number_input("💰 Bankroll actuelle (€)", min_value=1.0, step=1.0, format="%.2f")
+st.header("📈 Analyse automatique et Bankroll")
+
+# Calcul automatique de la probabilité implicite et de la marge
+proba_implicite = 1 / cote
+proba_adverse = 1 / cote_adverse
+marge_bookmaker = (proba_implicite + proba_adverse - 1) * 100
+
+# Ajustement réel de la probabilité estimée
+# Hypothèse : la marge est répartie également entre les issues, on ajuste les probabilités pour que leur somme = 1
+prob_estimee = proba_implicite / (proba_implicite + proba_adverse)
+
+# Bankroll constante de départ
+bankroll = 100.0
 
 # Fonctions de calcul
 def calcul_value_bet(prob_estimee, cote):
@@ -41,10 +53,15 @@ mise_demi_kelly = mise_kelly / 2
 # Résultats
 st.markdown("---")
 st.header("📊 Résultats du pari")
+st.markdown(f"**Match :** {match}")
 st.markdown(f"**Sport :** {sport}")
 st.markdown(f"**Type de pari :** {type_pari}")
 st.markdown(f"**Pari :** {evenement}")
-st.markdown(f"**Cote :** {cote:.2f}")
+st.markdown(f"**Cote :** {cote:.2f} | **Cote adverse :** {cote_adverse:.2f}")
+st.markdown(f"📉 **Probabilité implicite :** {proba_implicite*100:.2f}%")
+st.markdown(f"📉 **Probabilité estimée (corrigée) :** {prob_estimee*100:.2f}%")
+st.markdown(f"📊 **Marge bookmaker :** {marge_bookmaker:.2f}%")
+st.markdown(f"💼 **Bankroll de départ :** {bankroll:.2f} €")
 
 if value_bet > 0:
     st.success(f"✅ Value Bet détectée : +{value_bet*100:.2f}%")
@@ -92,4 +109,4 @@ st.pyplot(fig2)
 
 # Footer
 st.markdown("---")
-st.markdown("Développé avec ❤️ pour les parieurs intelligents | [GitHub](https://github.com/) | [Contact](mailto:contact@example.com)")
+st.markdown("Développé avec ❤️ pour les parieurs intelligents | [GitHub](https://https://github.com/LilianPamphile) | [Contact](lilian.pamphile@gmail.com)")
