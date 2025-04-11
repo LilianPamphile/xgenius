@@ -6,7 +6,16 @@ import numpy as np
 
 # Configuration de la page
 st.set_page_config(page_title="Gestion de Bankroll - Paris Sportifs", layout="centered")
-st.title("🎯 Application de Paris Sportifs - Gestion de Bankroll")
+st.title("🎯 Gestion de Bankroll")
+
+# Initialisation de session state pour historique
+if "historique" not in st.session_state:
+    st.session_state.historique = []
+
+# Bouton de réinitialisation de l'historique
+if st.button("🗑️ Réinitialiser l'historique"):
+    st.session_state.historique = []
+    st.success("Historique réinitialisé !")
 
 # Choix utilisateur simplifié
 st.header("📝 Informations sur le Pari")
@@ -19,7 +28,7 @@ type_pari = st.selectbox("🎯 Type de pari", liste_types_paris)
 
 evenement = st.text_input("🧑‍💼 Pari en question (ex: Berrettini, Real Madrid, etc.)")
 cote = st.number_input("💸 Cote proposée (sur ton pari)", min_value=1.01, step=0.01, format="%.2f")
-cote_adverse = st.number_input("💸 Cote adverse (autre issue principale)", min_value=1.01, step=0.01, format="%.2f")
+cote_adverse = st.number_input("💸 Cote inverse (autre issue principale)", min_value=1.01, step=0.01, format="%.2f")
 
 st.markdown("---")
 st.header("📈 Analyse automatique et Bankroll")
@@ -30,7 +39,6 @@ proba_adverse = 1 / cote_adverse
 marge_bookmaker = (proba_implicite + proba_adverse - 1) * 100
 
 # Ajustement réel de la probabilité estimée
-# Hypothèse : la marge est répartie également entre les issues, on ajuste les probabilités pour que leur somme = 1
 prob_estimee = proba_implicite / (proba_implicite + proba_adverse)
 
 # Bankroll constante de départ
@@ -49,6 +57,23 @@ def calcul_mise_kelly(bankroll, prob_estimee, cote):
 value_bet = calcul_value_bet(prob_estimee, cote)
 mise_kelly = calcul_mise_kelly(bankroll, prob_estimee, cote)
 mise_demi_kelly = mise_kelly / 2
+
+# Validation du pari
+if st.button("✅ Valider ce pari"):
+    st.session_state.historique.append({
+        "Match": match,
+        "Sport": sport,
+        "Type de pari": type_pari,
+        "Pari": evenement,
+        "Cote": cote,
+        "Cote adverse": cote_adverse,
+        "Proba estimée": round(prob_estimee * 100, 2),
+        "Marge": round(marge_bookmaker, 2),
+        "Value": round(value_bet * 100, 2),
+        "Mise Kelly": round(mise_kelly, 2),
+        "Mise demi-Kelly": round(mise_demi_kelly, 2)
+    })
+    st.success("Pari enregistré dans l'historique !")
 
 # Résultats
 st.markdown("---")
@@ -71,26 +96,17 @@ else:
 st.markdown(f"💡 **Mise recommandée (Kelly)** : {mise_kelly:.2f} €")
 st.markdown(f"💡 **Mise demi-Kelly** : {mise_demi_kelly:.2f} €")
 
-# Graphique d'évolution fictif
-st.markdown("---")
-st.header("📉 Évolution fictive de la bankroll")
-data = {
-    "Match": [f"Pari {i}" for i in range(1, 11)],
-    "Bankroll": [bankroll + (i * 10 - 5 * (i % 2)) for i in range(10)]
-}
-df_bankroll = pd.DataFrame(data)
-fig, ax = plt.subplots()
-ax.plot(df_bankroll["Match"], df_bankroll["Bankroll"], marker='o')
-ax.set_xlabel("Match")
-ax.set_ylabel("Bankroll (€)")
-ax.set_title("Historique de la Bankroll")
-plt.xticks(rotation=45)
-st.pyplot(fig)
+# Affichage de l'historique
+if st.session_state.historique:
+    st.markdown("---")
+    st.header("📋 Historique des paris enregistrés")
+    df_hist = pd.DataFrame(st.session_state.historique)
+    st.dataframe(df_hist, use_container_width=True)
 
-# Simulateur long terme
+# Simulateur long terme (100 paris fixés)
 st.markdown("---")
-st.header("📈 Simulateur Long Terme")
-n_paris = st.slider("Nombre de paris à simuler", min_value=10, max_value=500, value=100, step=10)
+st.header("📈 Simulateur Long Terme (100 paris)")
+n_paris = 100
 bankroll_initiale = bankroll
 bankrolls = [bankroll_initiale]
 for i in range(n_paris):
@@ -102,7 +118,7 @@ for i in range(n_paris):
 
 fig2, ax2 = plt.subplots()
 ax2.plot(bankrolls)
-ax2.set_title("Simulation de l'évolution de la bankroll")
+ax2.set_title("Simulation de l'évolution de la bankroll sur 100 paris")
 ax2.set_xlabel("Pari")
 ax2.set_ylabel("Bankroll (€)")
 st.pyplot(fig2)
