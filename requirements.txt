@@ -6,3 +6,5 @@ xgboost
 lightgbm
 catboost
 requests
+streamlit
+matplotlib
