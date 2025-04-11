@@ -112,29 +112,26 @@ if st.session_state.historique:
 
     st.dataframe(df_affiche, use_container_width=True)
 
-# Simulation long terme
-st.markdown("---")
-st.subheader("📈 Simulation bankroll sur 100 paris")
-if "Proba" in df.columns and len(df) > 0:
+    # Simulation long terme
+    st.markdown("---")
+    st.subheader("📈 Simulation bankroll sur 100 paris")
+
     proba = df.iloc[-1]["Proba"] / 100
     cote_sim = df.iloc[-1]["Cote"]
-else:
-    proba = 0.5
-    cote_sim = 2.0
 
-bankrolls = [100.0]
-for _ in range(100):
-    mise = calcul_mise_kelly(bankrolls[-1], proba, cote_sim)
-    gain = mise * (cote_sim - 1)
-    win = np.random.rand() < proba
-    bankrolls.append(bankrolls[-1] + gain if win else bankrolls[-1] - mise)
+    bankrolls = [100.0]
+    for _ in range(100):
+        mise = calcul_mise_kelly(bankrolls[-1], proba, cote_sim)
+        gain = mise * (cote_sim - 1)
+        win = np.random.rand() < proba
+        bankrolls.append(bankrolls[-1] + gain if win else bankrolls[-1] - mise)
 
-fig, ax = plt.subplots()
-ax.plot(bankrolls)
-ax.set_title("Évolution de la bankroll (simulation)")
-ax.set_xlabel("Pari")
-ax.set_ylabel("Bankroll (€)")
-st.pyplot(fig)
+    fig, ax = plt.subplots()
+    ax.plot(bankrolls)
+    ax.set_title("Évolution de la bankroll (simulation)")
+    ax.set_xlabel("Pari")
+    ax.set_ylabel("Bankroll (€)")
+    st.pyplot(fig)
 
 # Footer
 st.markdown("---")
