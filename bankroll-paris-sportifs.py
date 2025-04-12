@@ -113,6 +113,7 @@ with st.form("formulaire_pari"):
         """, (match, sport, type_pari, pari, cote, round(mise_finale, 2), strategie))
         conn.commit()
         st.success("Pari enregistré et bankroll mise à jour ✅")
+        st.experimental_rerun()
 
 # --- Traitement des paris non joués ---
 st.markdown("---")
@@ -130,11 +131,13 @@ for pid, m, p, c, mise in non_joues:
             cursor.execute("UPDATE paris SET resultat = 'Gagné', gain = %s WHERE id = %s", (gain, pid))
             conn.commit()
             st.success("Pari mis à jour comme Gagné")
+            st.experimental_rerun()
     with colp:
         if st.button("❌ Perdu", key=f"p{pid}"):
             cursor.execute("UPDATE paris SET resultat = 'Perdu', gain = 0 WHERE id = %s", (pid,))
             conn.commit()
             st.error("Pari mis à jour comme Perdu")
+            st.experimental_rerun()
 
 # --- Top Gagnés ---
 st.markdown("---")
