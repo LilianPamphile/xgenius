@@ -1,4 +1,4 @@
-# ✅ Logique Kelly réaliste : proba = 1 / (cote + 0.75) pour pic de mise optimale cohérent
+# ✅ Logique Kelly corrigée : suppression du forçage à 0.01 €, calcul optimal réel
 
 import streamlit as st
 import pandas as pd
@@ -14,14 +14,16 @@ if "historique" not in st.session_state:
 if "paris_combine" not in st.session_state:
     st.session_state.paris_combine = []
 
-# Fonction Kelly globale
+# Fonction Kelly optimale
+
 def kelly(bankroll, p, c):
-    if c <= 1 or p <= 0 or p >= 1:
+    if c <= 1 or not 0 < p < 1:
         return 0.0
     edge = (c * p - 1)
-    return max(0.01, bankroll * edge / (c - 1)) if edge > 0 else 0.01
+    return bankroll * edge / (c - 1) if edge > 0 else 0.0
 
-# Nouvelle estimation réaliste de la proba en fonction de la cote
+# Estimation réaliste de la proba en fonction de la cote
+
 def proba_estimee_par_cote(c):
     return max(0.01, min(0.99, 1 / (c + 0.75)))
 
