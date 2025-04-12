@@ -1,3 +1,6 @@
+# ✅ Logique Kelly avec proba boostée en fonction de la cote (meilleure cohérence de mise)
+
+import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -6,10 +9,13 @@ import uuid
 st.set_page_config(page_title="Bankroll - Paris Sportifs", layout="centered")
 st.title("🎯 Gestion de Bankroll - Paris Sportifs")
 
+# Initialisation
 if "historique" not in st.session_state:
     st.session_state.historique = []
 if "paris_combine" not in st.session_state:
     st.session_state.paris_combine = []
+if "bankroll" not in st.session_state:
+    st.session_state.bankroll = 100.0
 
 # Fonction Kelly optimale
 def kelly(bankroll, p, c):
@@ -28,9 +34,14 @@ with st.sidebar:
     st.markdown("## ⚙️ Paramètres")
     if st.button("🔄 Réinitialiser l'historique"):
         st.session_state.historique = []
-        st.success("Historique vidé.")
+        st.session_state.bankroll = 100.0
+        st.success("Historique et bankroll réinitialisés.")
     if st.button("🧹 Réinitialiser combiné"):
         st.session_state.paris_combine = []
+
+    # Affichage de la bankroll actuelle
+    st.markdown("---")
+    st.markdown(f"### 💰 Bankroll actuelle : {st.session_state.bankroll:.2f} €")
 
     # Mini-graphique Kelly vs Cote
     st.markdown("---")
@@ -65,7 +76,7 @@ if type_global == "Simple":
                 cote = st.number_input("Cote", 1.01, step=0.01, format="%.2f")
 
             proba = proba_estimee(cote)
-            bankroll = 50
+            bankroll = st.session_state.bankroll
             mise_kelly = kelly(bankroll, proba, cote)
             mise_demi = mise_kelly / 2
 
@@ -79,12 +90,34 @@ if type_global == "Simple":
 
             submitted = st.form_submit_button("✅ Enregistrer")
             if submitted:
+                st.session_state.bankroll -= mise_finale
                 st.session_state.historique.append({
                     "ID": str(uuid.uuid4()),
                     "Match": match, "Sport": sport, "Type": type_pari, "Pari": evenement,
                     "Cote": cote, "Cote adv": 0, "Proba": round(proba * 100, 2),
                     "Marge": "~boost 8%", "Mise": round(mise_finale, 2),
                     "Stratégie": strategie, "Résultat": "Non joué",
-                    "Global": type_global
+                    "Gain": 0.0, "Global": type_global
                 })
                 st.success("Pari enregistré avec succès ✅")
+
+# --- Résultat des paris et mise à jour de la bankroll ---
+if st.session_state.historique:
+    st.markdown("### 📝 Mettre à jour les résultats")
+    for pari in st.session_state.historique:
+        if pari["Résultat"] == "Non joué":
+            col1, col2, col3 = st.columns([2, 2, 2])
+            with col1:
+                st.markdown(f"**{pari['Match']}** - {pari['Pari']} @ {pari['Cote']}")
+            with col2:
+                result = st.radio("Résultat", ["Non joué", "Gagné", "Perdu"], index=0, key=pari["ID"])
+            with col3:
+                if result != "Non joué":
+                    pari["Résultat"] = result
+                    if result == "Gagné":
+                        gain = pari["Mise"] * pari["Cote"]
+                        st.session_state.bankroll += gain
+                        pari["Gain"] = round(gain, 2)
+                    elif result == "Perdu":
+                        pari["Gain"] = 0.0
+                    st.success(f"Résultat mis à jour : {result} | Bankroll : {st.session_state.bankroll:.2f} €")
