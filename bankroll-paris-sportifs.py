@@ -1,4 +1,4 @@
-# ✅ Logique Kelly améliorée avec proba parabolique réaliste corrigée (pic optimal vers cote 2.2)
+# ✅ Logique Kelly améliorée avec proba réaliste basée sur marge bookmaker
 
 import streamlit as st
 import pandas as pd
@@ -15,17 +15,21 @@ if "paris_combine" not in st.session_state:
     st.session_state.paris_combine = []
 
 # Fonction Kelly optimale
-
 def kelly(bankroll, p, c):
     if c <= 1 or not 0 < p < 1:
         return 0.0
     edge = (c * p - 1)
     return bankroll * edge / (c - 1) if edge > 0 else 0.0
 
-# Proba estimée via cloche ajustée
-
-def proba_estimee_par_cote(c):
-    return max(0.01, min(0.99, -0.14 * (c - 2.2)**2 + 0.6))
+# Proba estimée corrigée à partir de la marge
+def proba_corrigee(cote, cote_adverse):
+    try:
+        pi = 1 / cote
+        pa = 1 / cote_adverse if cote_adverse > 0 else 0
+        marge = (pi + pa - 1) if pa > 0 else 0.05  # marge par défaut si pas de cote adverse
+        return max(0.01, min(0.99, pi - (marge / 2)))
+    except:
+        return 0.5
 
 # Réinitialisation
 with st.sidebar:
@@ -52,8 +56,9 @@ if type_global == "Simple":
             with col2:
                 evenement = st.text_input("Pari")
                 cote = st.number_input("Cote", 1.01, step=0.01, format="%.2f")
+                cote_adv = st.number_input("Cote adverse (optionnel)", 1.01, step=0.01, format="%.2f")
 
-            proba_estimee = proba_estimee_par_cote(cote)
+            proba_estimee = proba_corrigee(cote, cote_adv)
             bankroll = 100.0
             mise_kelly = kelly(bankroll, proba_estimee, cote)
             mise_demi = mise_kelly / 2
@@ -71,82 +76,28 @@ if type_global == "Simple":
                 st.session_state.historique.append({
                     "ID": str(uuid.uuid4()),
                     "Match": match, "Sport": sport, "Type": type_pari, "Pari": evenement,
-                    "Cote": cote, "Cote adv": 0, "Proba": round(proba_estimee * 100, 2),
-                    "Marge": 0, "Mise": round(mise_finale, 2),
+                    "Cote": cote, "Cote adv": cote_adv, "Proba": round(proba_estimee * 100, 2),
+                    "Marge": round((1/cote + 1/cote_adv - 1)*100, 2) if cote_adv > 0 else "-",
+                    "Mise": round(mise_finale, 2),
                     "Stratégie": strategie, "Résultat": "Non joué",
                     "Global": type_global
                 })
                 st.success("Pari enregistré avec succès ✅")
 
-# --- Formulaire combiné avec 3 sélections max ---
-elif type_global == "Combiné":
-    st.markdown("### ➕ Ajouter un événement au combiné (max 3)")
-    max_combi = 3
-    nb_actuels = len(st.session_state.paris_combine)
-
-    if nb_actuels < max_combi:
-        with st.form("form_combi"):
-            col1, col2 = st.columns(2)
-            with col1:
-                match = st.text_input("Match combiné")
-                sport = st.selectbox("Sport", ["Football", "Basket", "Tennis"], key="sport_combi")
-                type_pari = st.selectbox("Type", ["Vainqueur", "Over/Under", "Handicap", "Score exact", "Autre"], key="type_combi")
-            with col2:
-                evenement = st.text_input("Pari combiné")
-                cote = st.number_input("Cote événement", 1.01, step=0.01, format="%.2f")
-
-            add_combi = st.form_submit_button("➕ Ajouter à ce combiné")
-            if add_combi:
-                st.session_state.paris_combine.append({
-                    "Match": match, "Sport": sport, "Type": type_pari, "Pari": evenement, "Cote": cote
-                })
-                st.success("Événement ajouté au combiné")
-    else:
-        st.warning("❗ Limite de 3 sélections atteinte")
-
-    # Résumé combiné
-    if st.session_state.paris_combine:
-        st.markdown("#### 🧩 Détail du combiné en cours")
-        df_combi = pd.DataFrame(st.session_state.paris_combine)
-        st.dataframe(df_combi)
-
-        cotes = [e["Cote"] for e in st.session_state.paris_combine]
-        cote_totale = np.prod(cotes)
-        proba_comb = proba_estimee_par_cote(cote_totale)
-        mise_k = kelly(100, proba_comb, cote_totale)
-
-        col_a, col_b = st.columns(2)
-        col_a.markdown(f"🔢 **Cote combinée : {cote_totale:.2f}**")
-        col_b.markdown(f"📊 **Proba estimée automatique : {proba_comb*100:.2f}%**")
-
-        st.success(f"💰 Mise Kelly recommandée : {mise_k:.2f} €")
-
-        if st.button("✅ Valider le combiné"):
-            st.session_state.historique.append({
-                "ID": str(uuid.uuid4()),
-                "Match": " + ".join([e["Match"] for e in st.session_state.paris_combine]),
-                "Sport": "Combiné", "Type": "Combiné", "Pari": "+".join([e["Pari"] for e in st.session_state.paris_combine]),
-                "Cote": round(cote_totale, 2), "Cote adv": 0, "Proba": round(proba_comb * 100, 2),
-                "Marge": 0, "Mise": round(mise_k, 2), "Stratégie": "Kelly", "Résultat": "Non joué",
-                "Global": "Combiné"
-            })
-            st.session_state.paris_combine = []
-            st.success("✅ Pari combiné enregistré")
-
-# --- Courbe Kelly automatique réaliste ---
+# --- Courbe Kelly vs Cote dynamique ---
 st.markdown("---")
-st.subheader("📈 Courbe Kelly vs Cote (réaliste)")
+st.subheader("📈 Courbe Kelly vs Cote (avec correction de la proba)")
 cotes_range = np.linspace(1.01, 5.0, 100)
-probas = [proba_estimee_par_cote(c) for c in cotes_range]
+probas = [proba_corrigee(c, 2.0) for c in cotes_range]  # on prend une cote adverse constante pour illustrer
 kelly_vals = [kelly(100, p, c) for p, c in zip(probas, cotes_range)]
 
 fig, ax = plt.subplots()
 ax.plot(cotes_range, kelly_vals, color='blue', linewidth=2)
 ax.set_xlabel("Cote")
 ax.set_ylabel("Mise Kelly recommandée (€)")
-ax.set_title("📊 Impact de la cote sur la mise Kelly (pic optimal réaliste)")
+ax.set_title("📊 Impact de la cote sur la mise Kelly (proba corrigée avec marge)")
 ax.grid(True)
 st.pyplot(fig)
 
 st.markdown("---")
-st.caption("📌 Proba ≈ -0.14(cote-2.2)² + 0.6 pour simuler un vrai comportement optimal de mise ✨")
+st.caption("📌 Proba estimée = 1/cote - (marge/2), avec marge calculée selon cote adverse ✨")
