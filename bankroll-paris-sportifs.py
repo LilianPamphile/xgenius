@@ -1,4 +1,4 @@
-# ✅ Logique Kelly avec proba boostée en fonction de la cote (meilleure cohérence de mise)
+# ✅ Logique Kelly avec proba boostée en fonction de la cote (mise dynamique + mise déduite à l'enregistrement)
 
 import streamlit as st
 import pandas as pd
@@ -65,41 +65,40 @@ type_global = st.radio("Choisir le type de pari", ["Simple", "Combiné"], horizo
 # --- Formulaire pari simple ---
 if type_global == "Simple":
     with st.expander("➕ Ajouter un pari simple", expanded=True):
-        with st.form("form_simple"):
-            col1, col2 = st.columns(2)
-            with col1:
-                match = st.text_input("Match")
-                sport = st.selectbox("Sport", ["Football", "Basket", "Tennis"])
-                type_pari = st.selectbox("Type", ["Vainqueur", "Over/Under", "Handicap", "Score exact", "Autre"])
-            with col2:
-                evenement = st.text_input("Pari")
-                cote = st.number_input("Cote", 1.01, step=0.01, format="%.2f")
+        match = st.text_input("Match")
+        col1, col2 = st.columns(2)
+        with col1:
+            sport = st.selectbox("Sport", ["Football", "Basket", "Tennis"])
+            type_pari = st.selectbox("Type", ["Vainqueur", "Over/Under", "Handicap", "Score exact", "Autre"])
+        with col2:
+            evenement = st.text_input("Pari")
+            cote = st.number_input("Cote", 1.01, step=0.01, format="%.2f")
 
-            proba = proba_estimee(cote)
-            bankroll = st.session_state.bankroll
-            mise_kelly = kelly(bankroll, proba, cote)
-            mise_demi = mise_kelly / 2
+        # Mise dynamique
+        proba = proba_estimee(cote)
+        bankroll = st.session_state.bankroll
+        mise_kelly = kelly(bankroll, proba, cote)
+        mise_demi = mise_kelly / 2
 
-            col_k1, col_k2 = st.columns(2)
-            with col_k1:
-                strategie = st.radio("Stratégie de mise", ["Kelly", "Demi-Kelly"], horizontal=True)
-            with col_k2:
-                st.success(f"💸 Mise recommandée : {mise_kelly:.2f} € (Kelly) | {mise_demi:.2f} € (Demi-Kelly)")
+        col_k1, col_k2 = st.columns(2)
+        with col_k1:
+            strategie = st.radio("Stratégie de mise", ["Kelly", "Demi-Kelly"], horizontal=True)
+        mise_finale = mise_kelly if strategie == "Kelly" else mise_demi
+        with col_k2:
+            st.success(f"💸 Mise recommandée : {mise_finale:.2f} €")
 
-            mise_finale = mise_kelly if strategie == "Kelly" else mise_demi
-
-            submitted = st.form_submit_button("✅ Enregistrer")
-            if submitted:
-                st.session_state.bankroll -= mise_finale
-                st.session_state.historique.append({
-                    "ID": str(uuid.uuid4()),
-                    "Match": match, "Sport": sport, "Type": type_pari, "Pari": evenement,
-                    "Cote": cote, "Cote adv": 0, "Proba": round(proba * 100, 2),
-                    "Marge": "~boost 8%", "Mise": round(mise_finale, 2),
-                    "Stratégie": strategie, "Résultat": "Non joué",
-                    "Gain": 0.0, "Global": type_global
-                })
-                st.success("Pari enregistré avec succès ✅")
+        submitted = st.button("✅ Enregistrer le pari")
+        if submitted:
+            st.session_state.bankroll -= mise_finale
+            st.session_state.historique.append({
+                "ID": str(uuid.uuid4()),
+                "Match": match, "Sport": sport, "Type": type_pari, "Pari": evenement,
+                "Cote": cote, "Cote adv": 0, "Proba": round(proba * 100, 2),
+                "Marge": "~boost 8%", "Mise": round(mise_finale, 2),
+                "Stratégie": strategie, "Résultat": "Non joué",
+                "Gain": 0.0, "Global": type_global
+            })
+            st.success("Pari enregistré avec succès ✅")
 
 # --- Résultat des paris et mise à jour de la bankroll ---
 if st.session_state.historique:
