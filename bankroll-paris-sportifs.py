@@ -11,6 +11,9 @@ DATABASE_URL = "postgresql://postgres:jDDqfaqpspVDBBwsqxuaiSDNXjTxjMmP@shortline
 conn = psycopg2.connect(DATABASE_URL)
 cursor = conn.cursor()
 
+# Forcer le bon schéma
+cursor.execute("SET search_path TO public")
+
 # --- Bankroll helper ---
 def get_bankroll():
     cursor.execute("SELECT solde FROM bankroll ORDER BY id DESC LIMIT 1")
