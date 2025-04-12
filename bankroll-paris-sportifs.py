@@ -1,4 +1,4 @@
-# ✅ Ajout : mise Kelly recalculée dynamiquement et mise en valeur visuelle
+# ✅ Ajout : suppression value bet + focus Kelly + 📈 Courbe dynamique Kelly vs Cote
 
 import streamlit as st
 import pandas as pd
@@ -43,23 +43,17 @@ if type_global == "Simple":
             with col2:
                 evenement = st.text_input("Pari")
                 cote = st.number_input("Cote", 1.01, step=0.01, format="%.2f")
-                cote_adv = st.number_input("Cote adverse", 1.01, step=0.01, format="%.2f")
-
-            proba = (1 / cote) / ((1 / cote) + (1 / cote_adv))
-            marge = ((1 / cote) + (1 / cote_adv) - 1) * 100
+                proba_estimee = st.slider("Probabilité estimée du pari (%)", min_value=1, max_value=99, value=60) / 100
 
             bankroll = 100.0
-            mise_kelly = kelly(bankroll, proba, cote)
+            mise_kelly = kelly(bankroll, proba_estimee, cote)
             mise_demi = mise_kelly / 2
 
             col_k1, col_k2 = st.columns(2)
             with col_k1:
                 strategie = st.radio("Stratégie de mise", ["Kelly", "Demi-Kelly"], horizontal=True)
             with col_k2:
-                if mise_kelly > 0:
-                    st.success(f"💸 Mise recommandée : {mise_kelly:.2f} € (Kelly) | {mise_demi:.2f} € (Demi-Kelly)")
-                else:
-                    st.warning("⚠️ Pas de value bet détectée : mise = 0")
+                st.success(f"💸 Mise recommandée : {mise_kelly:.2f} € (Kelly) | {mise_demi:.2f} € (Demi-Kelly)")
 
             mise_finale = mise_kelly if strategie == "Kelly" else mise_demi
 
@@ -68,8 +62,8 @@ if type_global == "Simple":
                 st.session_state.historique.append({
                     "ID": str(uuid.uuid4()),
                     "Match": match, "Sport": sport, "Type": type_pari, "Pari": evenement,
-                    "Cote": cote, "Cote adv": cote_adv, "Proba": round(proba * 100, 2),
-                    "Marge": round(marge, 2), "Mise": round(mise_finale, 2),
+                    "Cote": cote, "Cote adv": 0, "Proba": round(proba_estimee * 100, 2),
+                    "Marge": 0, "Mise": round(mise_finale, 2),
                     "Stratégie": strategie, "Résultat": "Non joué",
                     "Global": type_global
                 })
@@ -116,10 +110,7 @@ elif type_global == "Combiné":
         col_a.markdown(f"🔢 **Cote combinée : {cote_totale:.2f}**")
         col_b.markdown(f"📊 **Proba estimée : {proba_comb*100:.2f}%**")
 
-        if mise_k > 0:
-            st.success(f"💰 Mise Kelly recommandée : {mise_k:.2f} €")
-        else:
-            st.warning("⚠️ Pas de value bet détectée sur ce combiné")
+        st.success(f"💰 Mise Kelly recommandée : {mise_k:.2f} €")
 
         if st.button("✅ Valider le combiné"):
             st.session_state.historique.append({
@@ -132,3 +123,21 @@ elif type_global == "Combiné":
             })
             st.session_state.paris_combine = []
             st.success("✅ Pari combiné enregistré")
+
+# --- Courbe dynamique Kelly vs Cote ---
+st.markdown("---")
+st.subheader("📈 Courbe Kelly vs Cote")
+proba_courbe = st.slider("Probabilité estimée (%)", min_value=30, max_value=90, value=60) / 100
+cotes_range = np.linspace(1.01, 5.0, 100)
+kelly_vals = [kelly(100, proba_courbe, c) for c in cotes_range]
+
+fig, ax = plt.subplots()
+ax.plot(cotes_range, kelly_vals, color='blue', linewidth=2)
+ax.set_xlabel("Cote")
+ax.set_ylabel("Mise recommandée (en €)")
+ax.set_title(f"Évolution de la mise Kelly pour {int(proba_courbe*100)}% de proba")
+ax.grid(True)
+st.pyplot(fig)
+
+st.markdown("---")
+st.caption("App sans value bet : 100% logique Kelly ✨")
