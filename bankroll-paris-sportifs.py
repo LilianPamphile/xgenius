@@ -1,4 +1,4 @@
-# ✅ Courbe Kelly avec probabilité calculée automatiquement et toujours optimisée
+# ✅ Logique Kelly réaliste : proba = 1 / (cote + 0.75) pour pic de mise optimale cohérent
 
 import streamlit as st
 import pandas as pd
@@ -15,16 +15,15 @@ if "paris_combine" not in st.session_state:
     st.session_state.paris_combine = []
 
 # Fonction Kelly globale
-
 def kelly(bankroll, p, c):
     if c <= 1 or p <= 0 or p >= 1:
         return 0.0
     edge = (c * p - 1)
     return max(0.01, bankroll * edge / (c - 1)) if edge > 0 else 0.01
 
-# Fonction proba automatique logique (plus stable)
-def proba_auto(cote):
-    return max(0.05, min(0.95, 1 / cote * 0.98))  # on prend 98% de la proba implicite pour un comportement raisonnable
+# Nouvelle estimation réaliste de la proba en fonction de la cote
+def proba_estimee_par_cote(c):
+    return max(0.01, min(0.99, 1 / (c + 0.75)))
 
 # Réinitialisation
 with st.sidebar:
@@ -52,7 +51,7 @@ if type_global == "Simple":
                 evenement = st.text_input("Pari")
                 cote = st.number_input("Cote", 1.01, step=0.01, format="%.2f")
 
-            proba_estimee = proba_auto(cote)
+            proba_estimee = proba_estimee_par_cote(cote)
             bankroll = 100.0
             mise_kelly = kelly(bankroll, proba_estimee, cote)
             mise_demi = mise_kelly / 2
@@ -111,7 +110,7 @@ elif type_global == "Combiné":
 
         cotes = [e["Cote"] for e in st.session_state.paris_combine]
         cote_totale = np.prod(cotes)
-        proba_comb = proba_auto(cote_totale)
+        proba_comb = proba_estimee_par_cote(cote_totale)
         mise_k = kelly(100, proba_comb, cote_totale)
 
         col_a, col_b = st.columns(2)
@@ -132,20 +131,20 @@ elif type_global == "Combiné":
             st.session_state.paris_combine = []
             st.success("✅ Pari combiné enregistré")
 
-# --- Courbe Kelly automatique (proba logique + stable) ---
+# --- Courbe Kelly automatique réaliste ---
 st.markdown("---")
-st.subheader("📈 Courbe Kelly vs Cote (auto)")
+st.subheader("📈 Courbe Kelly vs Cote (réaliste)")
 cotes_range = np.linspace(1.01, 5.0, 100)
-probas = [proba_auto(c) for c in cotes_range]
+probas = [proba_estimee_par_cote(c) for c in cotes_range]
 kelly_vals = [kelly(100, p, c) for p, c in zip(probas, cotes_range)]
 
 fig, ax = plt.subplots()
-ax.plot(cotes_range, kelly_vals, color='green', linewidth=2)
+ax.plot(cotes_range, kelly_vals, color='blue', linewidth=2)
 ax.set_xlabel("Cote")
 ax.set_ylabel("Mise Kelly recommandée (€)")
-ax.set_title("📊 Impact de la cote sur la mise Kelly (proba auto optimisée)")
+ax.set_title("📊 Impact de la cote sur la mise Kelly (pic optimal réaliste)")
 ax.grid(True)
 st.pyplot(fig)
 
 st.markdown("---")
-st.caption("📌 Courbe Kelly générée à partir de proba implicite ajustée automatiquement ✨")
+st.caption("📌 Proba = 1 / (cote + 0.75) → pic Kelly réaliste entre 2.0 et 2.5 ✨")
