@@ -1,49 +1,64 @@
-# ✅ Logique Kelly avec proba boostée en fonction de la cote (mise dynamique + mise déduite à l'enregistrement)
+# ✅ Logique Kelly avec BDD PostgreSQL (stockage bankroll & paris persistants)
 
 import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import uuid
+import psycopg2
 
-st.set_page_config(page_title="Bankroll - Paris Sportifs", layout="centered")
-st.title("🎯 Gestion de Bankroll - Paris Sportifs")
+# --- Connexion BDD ---
+DATABASE_URL = "postgresql://postgres:jDDqfaqpspVDBBwsqxuaiSDNXjTxjMmP@shortline.proxy.rlwy.net:36536/railway"
+conn = psycopg2.connect(DATABASE_URL)
+cursor = conn.cursor()
 
-# Initialisation
-if "historique" not in st.session_state:
-    st.session_state.historique = []
-if "paris_combine" not in st.session_state:
-    st.session_state.paris_combine = []
-if "bankroll" not in st.session_state:
-    st.session_state.bankroll = 100.0
+# --- Bankroll helper ---
+def get_bankroll():
+    cursor.execute("SELECT solde FROM bankroll ORDER BY id DESC LIMIT 1")
+    res = cursor.fetchone()
+    return res[0] if res else 100.0
 
-# Fonction Kelly optimale
+def init_bankroll():
+    cursor.execute("SELECT COUNT(*) FROM bankroll")
+    if cursor.fetchone()[0] == 0:
+        cursor.execute("INSERT INTO bankroll (solde) VALUES (100.0)")
+        conn.commit()
+
+def update_bankroll(delta):
+    solde = get_bankroll() + delta
+    cursor.execute("UPDATE bankroll SET solde = %s WHERE id = (SELECT id FROM bankroll ORDER BY id DESC LIMIT 1)", (solde,))
+    conn.commit()
+    return solde
+
+init_bankroll()
+
+# --- Fonctions de calcul ---
 def kelly(bankroll, p, c):
     if c <= 1 or not 0 < p < 1:
         return 0.0
     edge = (c * p - 1)
     return bankroll * edge / (c - 1) if edge > 0 else 0.0
 
-# Proba estimée uniquement en fonction de la cote (boostée pour réalisme)
 def proba_estimee(c):
     implicite = 1 / c
     return max(0.01, min(0.99, implicite * 1.08))
 
-# Réinitialisation & Graphique dans la sidebar
+# --- Interface Streamlit ---
+st.set_page_config(page_title="Bankroll - Paris Sportifs", layout="centered")
+st.title("🎯 Gestion de Bankroll - Paris Sportifs")
+
+# --- Sidebar ---
 with st.sidebar:
     st.markdown("## ⚙️ Paramètres")
-    if st.button("🔄 Réinitialiser l'historique"):
-        st.session_state.historique = []
-        st.session_state.bankroll = 100.0
-        st.success("Historique et bankroll réinitialisés.")
-    if st.button("🧹 Réinitialiser combiné"):
-        st.session_state.paris_combine = []
-
-    # Affichage de la bankroll actuelle
+    if st.button("🔄 Réinitialiser la bankroll"):
+        cursor.execute("UPDATE bankroll SET solde = 100.0")
+        conn.commit()
+        st.success("Bankroll réinitialisée à 100 €")
     st.markdown("---")
-    st.markdown(f"### 💰 Bankroll actuelle : {st.session_state.bankroll:.2f} €")
+    bankroll = get_bankroll()
+    st.markdown(f"### 💰 Bankroll actuelle : {bankroll:.2f} €")
 
-    # Mini-graphique Kelly vs Cote
+    # Graphique Kelly vs Cote
     st.markdown("---")
     st.markdown("### 📈 Courbe Kelly vs Cote")
     cotes_range = np.linspace(1.01, 5.0, 60)
@@ -58,65 +73,48 @@ with st.sidebar:
     st.pyplot(fig, clear_figure=True)
     st.caption("📌 Proba = (1 / cote) × 1.08")
 
-# Type de pari (Simple ou Combiné)
-st.markdown("### 🎲 Type de pari")
-type_global = st.radio("Choisir le type de pari", ["Simple", "Combiné"], horizontal=True)
+# --- Formulaire de pari ---
+st.markdown("### ➕ Ajouter un pari")
+match = st.text_input("Match")
+sport = st.selectbox("Sport", ["Football", "Basket", "Tennis"])
+type_pari = st.selectbox("Type", ["Vainqueur", "Over/Under", "Handicap", "Score exact", "Autre"])
+pari = st.text_input("Pari")
+cote = st.number_input("Cote", 1.01, step=0.01, format="%.2f")
+proba = proba_estimee(cote)
+strategie = st.radio("Stratégie", ["Kelly", "Demi-Kelly"], horizontal=True)
 
-# --- Formulaire pari simple ---
-if type_global == "Simple":
-    with st.expander("➕ Ajouter un pari simple", expanded=True):
-        match = st.text_input("Match")
-        col1, col2 = st.columns(2)
-        with col1:
-            sport = st.selectbox("Sport", ["Football", "Basket", "Tennis"])
-            type_pari = st.selectbox("Type", ["Vainqueur", "Over/Under", "Handicap", "Score exact", "Autre"])
-        with col2:
-            evenement = st.text_input("Pari")
-            cote = st.number_input("Cote", 1.01, step=0.01, format="%.2f")
+bankroll = get_bankroll()
+mise_kelly = kelly(bankroll, proba, cote)
+mise_finale = mise_kelly if strategie == "Kelly" else mise_kelly / 2
+st.success(f"💸 Mise recommandée : {mise_finale:.2f} €")
 
-        # Mise dynamique
-        proba = proba_estimee(cote)
-        bankroll = st.session_state.bankroll
-        mise_kelly = kelly(bankroll, proba, cote)
-        mise_demi = mise_kelly / 2
+if st.button("✅ Enregistrer le pari"):
+    update_bankroll(-mise_finale)
+    cursor.execute("""
+        INSERT INTO paris (match, sport, type, pari, cote, mise, strategie)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+    """, (match, sport, type_pari, pari, cote, mise_finale, strategie))
+    conn.commit()
+    st.success("Pari enregistré et bankroll mise à jour ✅")
 
-        col_k1, col_k2 = st.columns(2)
-        with col_k1:
-            strategie = st.radio("Stratégie de mise", ["Kelly", "Demi-Kelly"], horizontal=True)
-        mise_finale = mise_kelly if strategie == "Kelly" else mise_demi
-        with col_k2:
-            st.success(f"💸 Mise recommandée : {mise_finale:.2f} €")
-
-        submitted = st.button("✅ Enregistrer le pari")
-        if submitted:
-            st.session_state.bankroll -= mise_finale
-            st.session_state.historique.append({
-                "ID": str(uuid.uuid4()),
-                "Match": match, "Sport": sport, "Type": type_pari, "Pari": evenement,
-                "Cote": cote, "Cote adv": 0, "Proba": round(proba * 100, 2),
-                "Marge": "~boost 8%", "Mise": round(mise_finale, 2),
-                "Stratégie": strategie, "Résultat": "Non joué",
-                "Gain": 0.0, "Global": type_global
-            })
-            st.success("Pari enregistré avec succès ✅")
-
-# --- Résultat des paris et mise à jour de la bankroll ---
-if st.session_state.historique:
-    st.markdown("### 📝 Mettre à jour les résultats")
-    for pari in st.session_state.historique:
-        if pari["Résultat"] == "Non joué":
-            col1, col2, col3 = st.columns([2, 2, 2])
-            with col1:
-                st.markdown(f"**{pari['Match']}** - {pari['Pari']} @ {pari['Cote']}")
-            with col2:
-                result = st.radio("Résultat", ["Non joué", "Gagné", "Perdu"], index=0, key=pari["ID"])
-            with col3:
-                if result != "Non joué":
-                    pari["Résultat"] = result
-                    if result == "Gagné":
-                        gain = pari["Mise"] * pari["Cote"]
-                        st.session_state.bankroll += gain
-                        pari["Gain"] = round(gain, 2)
-                    elif result == "Perdu":
-                        pari["Gain"] = 0.0
-                    st.success(f"Résultat mis à jour : {result} | Bankroll : {st.session_state.bankroll:.2f} €")
+# --- Résultat des paris ---
+st.markdown("---")
+st.markdown("### 📝 Résultats des paris")
+cursor.execute("SELECT id, match, pari, cote, mise, resultat FROM paris ORDER BY date DESC LIMIT 10")
+rows = cursor.fetchall()
+for row in rows:
+    pid, m, p, c, mise, res = row
+    col1, col2 = st.columns([3, 2])
+    with col1:
+        st.markdown(f"**{m}** - {p} @ {c}")
+    with col2:
+        if res == "Non joué":
+            choix = st.radio("Résultat", ["Non joué", "Gagné", "Perdu"], horizontal=True, key=f"res_{pid}")
+            if choix != "Non joué":
+                gain = round(mise * c, 2) if choix == "Gagné" else 0.0
+                update_bankroll(gain)
+                cursor.execute("""
+                    UPDATE paris SET resultat = %s, gain = %s WHERE id = %s
+                """, (choix, gain, pid))
+                conn.commit()
+                st.success(f"Pari {choix} | Bankroll à jour")
