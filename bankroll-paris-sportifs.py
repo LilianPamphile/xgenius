@@ -1,10 +1,9 @@
-# ✅ Logique Kelly avec affichage moderne & bouton mini reset bankroll + affichage dynamique des paris
+# ✅ Logique Kelly avec affichage moderne & traitement complet des paris
 
 import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import uuid
 import psycopg2
 
 # --- Connexion BDD ---
@@ -52,12 +51,6 @@ st.markdown("""
         padding: 0.25rem 0.75rem;
         font-size: 0.85rem;
     }
-    .mini-button button {
-        background-color: #f5f5f5;
-        color: #333;
-        padding: 0.25rem 0.5rem;
-        font-size: 0.75rem;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -66,16 +59,12 @@ st.title("🎯 Gestion de Bankroll - Paris Sportifs")
 # --- Sidebar ---
 with st.sidebar:
     st.markdown("## ⚙️ Paramètres")
+    if st.button("🔁 Réinitialiser la bankroll"):
+        cursor.execute("UPDATE bankroll SET solde = 50.0")
+        conn.commit()
+        st.success("Bankroll réinitialisée à 50 €")
 
-    col_reset, col_bk = st.columns([1, 2])
-    with col_reset:
-        if st.button("🔁", help="Réinitialiser la bankroll", key="mini-reset"):
-            cursor.execute("UPDATE bankroll SET solde = 50.0")
-            conn.commit()
-            st.success("Bankroll remise à 50 €")
-    with col_bk:
-        bankroll = get_bankroll()
-        st.markdown(f"### 💰 {bankroll:.2f} €")
+    st.markdown(f"### 💰 Bankroll actuelle : {get_bankroll():.2f} €")
 
     if st.button("🗑️ Réinitialiser l'historique des paris"):
         cursor.execute("DELETE FROM paris")
@@ -125,26 +114,39 @@ with st.form("formulaire_pari"):
         conn.commit()
         st.success("Pari enregistré et bankroll mise à jour ✅")
 
-# --- Résultat des paris ---
+# --- Traitement des paris non joués ---
 st.markdown("---")
-st.markdown("### 📝 Résultats des paris")
-cursor.execute("SELECT id, match, pari, cote, mise, resultat FROM paris ORDER BY date DESC")
-rows = cursor.fetchall()
-for row in rows:
-    pid, m, p, c, mise, res = row
-    col1, col2 = st.columns([3, 2])
-    with col1:
-        st.markdown(f"**{m}** - {p} @ {c} | Mise : {mise:.2f} €")
-    with col2:
-        if res == "Non joué":
-            choix = st.radio("Résultat", ["Non joué", "Gagné", "Perdu"], horizontal=True, key=f"res_{pid}")
-            if choix != "Non joué":
-                gain = round(mise * c, 2) if choix == "Gagné" else 0.0
-                update_bankroll(gain)
-                cursor.execute("""
-                    UPDATE paris SET resultat = %s, gain = %s WHERE id = %s
-                """, (choix, gain, pid))
-                conn.commit()
-                st.success(f"Pari {choix} | Bankroll à jour")
-        else:
-            st.markdown(f"✅ Résultat : {res}")
+st.markdown("### 🔧 Traiter les paris non joués")
+cursor.execute("SELECT id, match, pari, cote, mise FROM paris WHERE resultat = 'Non joué' ORDER BY date DESC")
+non_joues = cursor.fetchall()
+
+for pid, m, p, c, mise in non_joues:
+    st.markdown(f"➡️ **{m}** - {p} @ {c} | Mise : {mise:.2f} €")
+    colg, colp = st.columns(2)
+    with colg:
+        if st.button("✅ Gagné", key=f"g{pid}"):
+            gain = round(mise * c, 2)
+            update_bankroll(gain)
+            cursor.execute("UPDATE paris SET resultat = 'Gagné', gain = %s WHERE id = %s", (gain, pid))
+            conn.commit()
+            st.success("Pari mis à jour comme Gagné")
+    with colp:
+        if st.button("❌ Perdu", key=f"p{pid}"):
+            cursor.execute("UPDATE paris SET resultat = 'Perdu', gain = 0 WHERE id = %s", (pid,))
+            conn.commit()
+            st.error("Pari mis à jour comme Perdu")
+
+# --- Top Gagnés ---
+st.markdown("---")
+st.markdown("### 🏆 Top 10 gains")
+cursor.execute("SELECT match, pari, gain FROM paris WHERE resultat = 'Gagné' ORDER BY gain DESC LIMIT 10")
+gagnes = cursor.fetchall()
+for m, p, g in gagnes:
+    st.markdown(f"✅ **{m}** - {p} : **+{g:.2f} €**")
+
+# --- Top Pertes ---
+st.markdown("### ❌ Top 10 pertes")
+cursor.execute("SELECT match, pari, mise FROM paris WHERE resultat = 'Perdu' ORDER BY mise DESC LIMIT 10")
+perdus = cursor.fetchall()
+for m, p, m_ in perdus:
+    st.markdown(f"❌ **{m}** - {p} : **-{m_:.2f} €**")
