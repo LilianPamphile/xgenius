@@ -1,138 +1,137 @@
 import streamlit as st
-import math
-import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 
-# Configuration sobre et raffinée
 st.set_page_config(page_title="Bankroll - Paris Sportifs", layout="centered")
 st.markdown("""
 <style>
     .main { background-color: #f8f9fa; }
-    .block-container { padding-top: 2rem; padding-bottom: 2rem; }
-    .stButton>button { border-radius: 8px; }
+    .block-container { padding-top: 1.5rem; padding-bottom: 1rem; }
+    .stButton>button { border-radius: 8px; padding: 0.4rem 1.2rem; }
 </style>
 """, unsafe_allow_html=True)
 
 st.title("🎯 Gestion de Bankroll - Paris Sportifs")
 
-# Initialisation session state
+# Init historique
 if "historique" not in st.session_state:
     st.session_state.historique = []
 
-# Reset historique
 with st.sidebar:
     st.markdown("## ⚙️ Paramètres")
     if st.button("🔄 Réinitialiser l'historique"):
         st.session_state.historique = []
         st.success("Historique vidé.")
 
-# Formulaire compact
-with st.expander("➕ Ajouter un nouveau pari", expanded=True):
+with st.expander("➕ Ajouter un pari", expanded=True):
     with st.form("form_pari"):
         col1, col2 = st.columns(2)
         with col1:
             match = st.text_input("Match")
             sport = st.selectbox("Sport", ["Football", "Basket", "Tennis"])
-            type_pari = st.selectbox("Type de pari", ["Vainqueur", "Over/Under", "Handicap", "Score exact", "Buts marqués", "Nombre de sets", "Autre"])
+            type_pari = st.selectbox("Type", ["Vainqueur", "Over/Under", "Handicap", "Score exact", "Autre"])
         with col2:
-            evenement = st.text_input("Pari en question")
-            cote = st.number_input("Cote proposée", min_value=1.01, step=0.01, format="%.2f")
-            cote_adverse = st.number_input("Cote adverse", min_value=1.01, step=0.01, format="%.2f")
+            evenement = st.text_input("Pari")
+            cote = st.number_input("Cote", 1.01, step=0.01, format="%.2f")
+            cote_adv = st.number_input("Cote adverse", 1.01, step=0.01, format="%.2f")
 
-        resultat = st.selectbox("Résultat du pari", ["Non joué", "Gagné", "Perdu"])
-        submitted = st.form_submit_button("✅ Enregistrer")
+        resultat = st.selectbox("Résultat", ["Non joué", "Gagné", "Perdu"])
+        submit = st.form_submit_button("✅ Enregistrer")
 
-        if submitted:
-            proba_implicite = 1 / cote
-            proba_adverse = 1 / cote_adverse
-            marge_bookmaker = (proba_implicite + proba_adverse - 1) * 100
-            prob_estimee = proba_implicite / (proba_implicite + proba_adverse)
-            bankroll = 100.0
-
-            def calcul_value_bet(prob_estimee, cote):
-                return (prob_estimee * cote) - 1
-
-            def calcul_mise_kelly(bankroll, prob_estimee, cote):
-                edge = (cote * prob_estimee) - 1
-                mise_kelly = bankroll * edge / (cote - 1) if cote > 1 else 0
-                return max(0, mise_kelly)
-
-            value_bet = calcul_value_bet(prob_estimee, cote)
-            mise_kelly = calcul_mise_kelly(bankroll, prob_estimee, cote)
-            mise_demi_kelly = mise_kelly / 2
-
+        if submit:
+            prob = (1 / cote) / ((1 / cote) + (1 / cote_adv))
+            marge = ((1 / cote) + (1 / cote_adv) - 1) * 100
+            def kelly(bk, p, c): return max(0, bk * ((c * p - 1) / (c - 1)))
+            mise = kelly(100, prob, cote)
             st.session_state.historique.append({
-                "Match": match,
-                "Sport": sport,
-                "Type": type_pari,
-                "Pari": evenement,
-                "Cote": cote,
-                "Cote adverse": cote_adverse,
-                "Proba": round(prob_estimee * 100, 2),
-                "Marge": round(marge_bookmaker, 2),
-                "Value": round(value_bet * 100, 2),
-                "Kelly": round(mise_kelly, 2),
-                "Demi-Kelly": round(mise_demi_kelly, 2),
-                "Résultat": resultat
+                "Match": match, "Sport": sport, "Type": type_pari, "Pari": evenement,
+                "Cote": cote, "Cote adv": cote_adv, "Proba": round(prob * 100, 2),
+                "Marge": round(marge, 2), "Kelly": round(mise, 2), "Résultat": resultat
             })
-            st.success("Pari enregistré avec succès ✅")
+            st.success("Pari enregistré ✅")
 
-# Affichage historique & filtres
 if st.session_state.historique:
     st.markdown("---")
-    st.subheader("📋 Historique des paris")
+    st.subheader("📊 Historique des paris")
     df = pd.DataFrame(st.session_state.historique)
 
-    with st.expander("🎛️ Filtres", expanded=True):
-        colf1, colf2 = st.columns(2)
-        with colf1:
-            sports = df["Sport"].unique().tolist()
-            filtre_sport = st.multiselect("Sport", sports, default=sports)
-        with colf2:
-            statut = st.multiselect("Résultat", df["Résultat"].unique().tolist(), default=df["Résultat"].unique().tolist())
+    with st.expander("🎛️ Filtres"):
+        col1, col2 = st.columns(2)
+        with col1:
+            f_sport = st.multiselect("Sport", df["Sport"].unique(), default=df["Sport"].unique())
+        with col2:
+            f_res = st.multiselect("Résultat", df["Résultat"].unique(), default=df["Résultat"].unique())
 
-    df_filtre = df[(df["Sport"].isin(filtre_sport)) & (df["Résultat"].isin(statut))]
-    nb_affiche = st.slider("Nombre de paris affichés", 1, len(df_filtre), min(10, len(df_filtre)))
+    df_f = df[df["Sport"].isin(f_sport) & df["Résultat"].isin(f_res)]
 
-    df_affiche = df_filtre.tail(nb_affiche)
+    df_g = df_f[df_f["Résultat"] == "Gagné"]
+    df_p = df_f[df_f["Résultat"] == "Perdu"]
+    bk0 = 100
+    gain = (df_g["Kelly"] * (df_g["Cote"] - 1)).sum()
+    loss = df_p["Kelly"].sum()
+    bk_final = bk0 + gain - loss
+    roi = (bk_final - bk0) / bk0 * 100 if bk0 else 0
 
-    df_gagnes = df_affiche[df_affiche["Résultat"] == "Gagné"]
-    df_perdus = df_affiche[df_affiche["Résultat"] == "Perdu"]
-
-    bankroll_init = 100.0
-    mise_totale = df_affiche["Kelly"].sum()
-    gain_total = (df_gagnes["Kelly"] * (df_gagnes["Cote"] - 1)).sum()
-    bankroll_finale = bankroll_init + gain_total - df_perdus["Kelly"].sum()
-    roi = ((bankroll_finale - bankroll_init) / bankroll_init) * 100 if bankroll_init > 0 else 0
-
-    colr1, colr2 = st.columns(2)
+    colr1, colr2, colr3 = st.columns([1, 1, 2])
     colr1.metric("💰 ROI", f"{roi:.2f}%")
-    colr2.metric("🎯 % gagnés", f"{(len(df_gagnes) / len(df_affiche) * 100):.1f}%")
+    colr2.metric("✅ % Gagnés", f"{(len(df_g)/len(df_f)*100 if len(df_f)>0 else 0):.1f}%")
+    colr3.progress(min(bk_final/200, 1.0), text=f"Bankroll: {bk_final:.2f} €")
 
-    st.dataframe(df_affiche, use_container_width=True)
+    def badge(row):
+        if row == "Gagné": return "🟢 Gagné"
+        elif row == "Perdu": return "🔴 Perdu"
+        else: return "⏳ Non joué"
+    df_f["Résultat"] = df_f["Résultat"].apply(badge)
 
-    # Simulation long terme
+    st.dataframe(df_f.style.format({"Kelly": "{:.2f}"}), use_container_width=True)
+
+    # 📈 Graphe réel d'évolution
     st.markdown("---")
-    st.subheader("📈 Simulation bankroll sur 100 paris")
+    st.subheader("📉 Évolution réelle de la bankroll")
+    bankrolls = [bk0]
+    for _, row in df_f.iterrows():
+        if "Gagné" in row["Résultat"]:
+            gain = row["Kelly"] * (row["Cote"] - 1)
+            bankrolls.append(bankrolls[-1] + gain)
+        elif "Perdu" in row["Résultat"]:
+            bankrolls.append(bankrolls[-1] - row["Kelly"])
+        else:
+            bankrolls.append(bankrolls[-1])
 
-    proba = df.iloc[-1]["Proba"] / 100
-    cote_sim = df.iloc[-1]["Cote"]
+    fig1, ax1 = plt.subplots()
+    ax1.plot(bankrolls)
+    ax1.set_title("Bankroll réelle")
+    ax1.set_xlabel("Pari")
+    ax1.set_ylabel("€")
+    st.pyplot(fig1)
 
-    bankrolls = [100.0]
+    # 📊 Comparaison Kelly vs Flat
+    st.markdown("---")
+    st.subheader("📊 Kelly vs Flat (simulation)")
+    p = df.iloc[-1]["Proba"] / 100
+    c = df.iloc[-1]["Cote"]
+    kelly_bk = [100.0]
+    flat_bk = [100.0]
+    flat_bet = 2.0
+    ruin_count = 0
     for _ in range(100):
-        mise = calcul_mise_kelly(bankrolls[-1], proba, cote_sim)
-        gain = mise * (cote_sim - 1)
-        win = np.random.rand() < proba
-        bankrolls.append(bankrolls[-1] + gain if win else bankrolls[-1] - mise)
+        mise_k = kelly(kelly_bk[-1], p, c)
+        g = np.random.rand() < p
+        kelly_bk.append(kelly_bk[-1] + mise_k*(c-1) if g else kelly_bk[-1]-mise_k)
+        flat_bk.append(flat_bk[-1] + flat_bet*(c-1) if g else flat_bk[-1]-flat_bet)
+        if kelly_bk[-1] <= 0: ruin_count += 1
 
-    fig, ax = plt.subplots()
-    ax.plot(bankrolls)
-    ax.set_title("Évolution de la bankroll (simulation)")
-    ax.set_xlabel("Pari")
-    ax.set_ylabel("Bankroll (€)")
-    st.pyplot(fig)
+    fig2, ax2 = plt.subplots()
+    ax2.plot(kelly_bk, label="Kelly")
+    ax2.plot(flat_bk, label="Flat", linestyle="--")
+    ax2.set_title("Simulation 100 paris")
+    ax2.legend()
+    st.pyplot(fig2)
 
+    # Risque de ruine estimé
+    st.markdown("---")
+    st.metric("☠️ Risque de ruine (Kelly)", f"{ruin_count}% sur 100 runs")
 # Footer
 st.markdown("---")
 st.markdown("Développé avec ❤️ pour les parieurs intelligents | [GitHub](https://https://github.com/LilianPamphile) | [Contact](lilian.pamphile@gmail.com)")
