@@ -63,7 +63,7 @@ with st.sidebar:
         cursor.execute("UPDATE bankroll SET solde = 50.0")
         conn.commit()
         st.success("Bankroll réinitialisée à 50 €")
-        st.experimental_rerun()
+        st.rerun()
 
     st.markdown(f"### 💰 Bankroll actuelle : {get_bankroll():.2f} €")
 
@@ -71,7 +71,7 @@ with st.sidebar:
         cursor.execute("DELETE FROM paris")
         conn.commit()
         st.success("Historique vidé")
-        st.experimental_rerun()
+        st.rerun()
 
     st.markdown("---")
     st.markdown("### 📈 Courbe Kelly vs Cote")
@@ -115,7 +115,7 @@ with st.form("formulaire_pari"):
         """, (match, sport, type_pari, pari, cote, round(mise_finale, 2), strategie))
         conn.commit()
         st.success("Pari enregistré et bankroll mise à jour ✅")
-        st.experimental_rerun()
+        st.rerun()
 
 # --- Traitement des paris non joués ---
 st.markdown("---")
@@ -134,13 +134,13 @@ if non_joues:
                 cursor.execute("UPDATE paris SET resultat = 'Gagné', gain = %s WHERE id = %s", (gain, pid))
                 conn.commit()
                 st.success("Pari mis à jour comme Gagné")
-                st.experimental_rerun()
+                st.rerun()
         with colp:
             if st.button("❌ Perdu", key=f"p{pid}"):
                 cursor.execute("UPDATE paris SET resultat = 'Perdu', gain = 0 WHERE id = %s", (pid,))
                 conn.commit()
                 st.error("Pari mis à jour comme Perdu")
-                st.experimental_rerun()
+                st.rerun()
 else:
     st.info("Aucun pari à traiter.")
 
