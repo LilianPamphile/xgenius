@@ -1,4 +1,4 @@
-# ✅ Logique Kelly corrigée : suppression du forçage à 0.01 €, calcul optimal réel
+# ✅ Logique Kelly améliorée avec proba parabolique réaliste (pic optimal vers cote 2.2)
 
 import streamlit as st
 import pandas as pd
@@ -22,10 +22,10 @@ def kelly(bankroll, p, c):
     edge = (c * p - 1)
     return bankroll * edge / (c - 1) if edge > 0 else 0.0
 
-# Estimation réaliste de la proba en fonction de la cote
+# Proba estimée via courbe en cloche (pic à 2.2)
 
 def proba_estimee_par_cote(c):
-    return max(0.01, min(0.99, 1 / (c + 0.75)))
+    return max(0.01, min(0.99, -0.25 * (c - 2.2)**2 + 0.55))
 
 # Réinitialisation
 with st.sidebar:
@@ -149,4 +149,4 @@ ax.grid(True)
 st.pyplot(fig)
 
 st.markdown("---")
-st.caption("📌 Proba = 1 / (cote + 0.75) → pic Kelly réaliste entre 2.0 et 2.5 ✨")
+st.caption("📌 Proba ≈ -0.25(cote-2.2)² + 0.55 pour simuler un vrai comportement optimal de mise ✨")
