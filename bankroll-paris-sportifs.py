@@ -25,7 +25,7 @@ def kelly(bankroll, p, c):
 def proba_estimee(c):
     return max(0.01, min(0.99, (1 / c) - 0.025))
 
-# Réinitialisation
+# Réinitialisation & Graphique dans la sidebar
 with st.sidebar:
     st.markdown("## ⚙️ Paramètres")
     if st.button("🔄 Réinitialiser l'historique"):
@@ -33,6 +33,21 @@ with st.sidebar:
         st.success("Historique vidé.")
     if st.button("🧹 Réinitialiser combiné"):
         st.session_state.paris_combine = []
+
+    # Mini-graphique Kelly vs Cote
+    st.markdown("---")
+    st.markdown("### 📈 Courbe Kelly vs Cote")
+    cotes_range = np.linspace(1.01, 5.0, 60)
+    probas = [proba_estimee(c) for c in cotes_range]
+    kelly_vals = [kelly(100, p, c) for p, c in zip(probas, cotes_range)]
+    fig, ax = plt.subplots(figsize=(3.5, 2.5))
+    ax.plot(cotes_range, kelly_vals, color='blue', linewidth=2)
+    ax.set_xlabel("Cote")
+    ax.set_ylabel("Mise (€)")
+    ax.set_title("Kelly vs Cote")
+    ax.grid(True)
+    st.pyplot(fig, clear_figure=True)
+    st.caption("📌 Proba = 1/cote - 0.025")
 
 # Type de pari (Simple ou Combiné)
 st.markdown("### 🎲 Type de pari")
@@ -75,21 +90,3 @@ if type_global == "Simple":
                     "Global": type_global
                 })
                 st.success("Pari enregistré avec succès ✅")
-
-# --- Courbe Kelly vs Cote ---
-st.markdown("---")
-st.subheader("📈 Courbe Kelly vs Cote (proba implicite corrigée)")
-cotes_range = np.linspace(1.01, 5.0, 100)
-probas = [proba_estimee(c) for c in cotes_range]
-kelly_vals = [kelly(100, p, c) for p, c in zip(probas, cotes_range)]
-
-fig, ax = plt.subplots()
-ax.plot(cotes_range, kelly_vals, color='blue', linewidth=2)
-ax.set_xlabel("Cote")
-ax.set_ylabel("Mise Kelly recommandée (€)")
-ax.set_title("📊 Impact de la cote sur la mise Kelly (proba implicite corrigée de 2.5%)")
-ax.grid(True)
-st.pyplot(fig)
-
-st.markdown("---")
-st.caption("📌 Proba estimée = 1 / cote - 2.5% pour simuler une marge bookmaker ✨")
