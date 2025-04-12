@@ -1,4 +1,4 @@
-# ✅ Logique Kelly améliorée avec proba réaliste basée sur marge bookmaker
+# ✅ Logique Kelly avec proba estimée basée uniquement sur la cote (proba implicite corrigée)
 
 import streamlit as st
 import pandas as pd
@@ -21,15 +21,9 @@ def kelly(bankroll, p, c):
     edge = (c * p - 1)
     return bankroll * edge / (c - 1) if edge > 0 else 0.0
 
-# Proba estimée corrigée à partir de la marge
-def proba_corrigee(cote, cote_adverse):
-    try:
-        pi = 1 / cote
-        pa = 1 / cote_adverse if cote_adverse > 0 else 0
-        marge = (pi + pa - 1) if pa > 0 else 0.05  # marge par défaut si pas de cote adverse
-        return max(0.01, min(0.99, pi - (marge / 2)))
-    except:
-        return 0.5
+# Proba estimée uniquement en fonction de la cote (corrigée de la marge type 5%)
+def proba_estimee(c):
+    return max(0.01, min(0.99, (1 / c) - 0.025))
 
 # Réinitialisation
 with st.sidebar:
@@ -56,11 +50,10 @@ if type_global == "Simple":
             with col2:
                 evenement = st.text_input("Pari")
                 cote = st.number_input("Cote", 1.01, step=0.01, format="%.2f")
-                cote_adv = st.number_input("Cote adverse (optionnel)", 1.01, step=0.01, format="%.2f")
 
-            proba_estimee = proba_corrigee(cote, cote_adv)
+            proba = proba_estimee(cote)
             bankroll = 100.0
-            mise_kelly = kelly(bankroll, proba_estimee, cote)
+            mise_kelly = kelly(bankroll, proba, cote)
             mise_demi = mise_kelly / 2
 
             col_k1, col_k2 = st.columns(2)
@@ -76,28 +69,27 @@ if type_global == "Simple":
                 st.session_state.historique.append({
                     "ID": str(uuid.uuid4()),
                     "Match": match, "Sport": sport, "Type": type_pari, "Pari": evenement,
-                    "Cote": cote, "Cote adv": cote_adv, "Proba": round(proba_estimee * 100, 2),
-                    "Marge": round((1/cote + 1/cote_adv - 1)*100, 2) if cote_adv > 0 else "-",
-                    "Mise": round(mise_finale, 2),
+                    "Cote": cote, "Cote adv": 0, "Proba": round(proba * 100, 2),
+                    "Marge": "~2.5%", "Mise": round(mise_finale, 2),
                     "Stratégie": strategie, "Résultat": "Non joué",
                     "Global": type_global
                 })
                 st.success("Pari enregistré avec succès ✅")
 
-# --- Courbe Kelly vs Cote dynamique ---
+# --- Courbe Kelly vs Cote ---
 st.markdown("---")
-st.subheader("📈 Courbe Kelly vs Cote (avec correction de la proba)")
+st.subheader("📈 Courbe Kelly vs Cote (proba implicite corrigée)")
 cotes_range = np.linspace(1.01, 5.0, 100)
-probas = [proba_corrigee(c, 2.0) for c in cotes_range]  # on prend une cote adverse constante pour illustrer
+probas = [proba_estimee(c) for c in cotes_range]
 kelly_vals = [kelly(100, p, c) for p, c in zip(probas, cotes_range)]
 
 fig, ax = plt.subplots()
 ax.plot(cotes_range, kelly_vals, color='blue', linewidth=2)
 ax.set_xlabel("Cote")
 ax.set_ylabel("Mise Kelly recommandée (€)")
-ax.set_title("📊 Impact de la cote sur la mise Kelly (proba corrigée avec marge)")
+ax.set_title("📊 Impact de la cote sur la mise Kelly (proba implicite corrigée de 2.5%)")
 ax.grid(True)
 st.pyplot(fig)
 
 st.markdown("---")
-st.caption("📌 Proba estimée = 1/cote - (marge/2), avec marge calculée selon cote adverse ✨")
+st.caption("📌 Proba estimée = 1 / cote - 2.5% pour simuler une marge bookmaker ✨")
