@@ -1,7 +1,4 @@
-# ✅ Logique combiné refaite proprement avec :
-# - Formulaire complet par événement (comme un pari simple)
-# - Limite de 3 sélections
-# - Calcul Kelly basé sur la cote combinée
+# ✅ Ajout : mise Kelly recalculée dynamiquement et mise en valeur visuelle
 
 import streamlit as st
 import pandas as pd
@@ -59,7 +56,10 @@ if type_global == "Simple":
             with col_k1:
                 strategie = st.radio("Stratégie de mise", ["Kelly", "Demi-Kelly"], horizontal=True)
             with col_k2:
-                st.markdown(f"**💸 Mise recommandée :** {mise_kelly:.2f} € (Kelly) / {mise_demi:.2f} € (Demi-Kelly)")
+                if mise_kelly > 0:
+                    st.success(f"💸 Mise recommandée : {mise_kelly:.2f} € (Kelly) | {mise_demi:.2f} € (Demi-Kelly)")
+                else:
+                    st.warning("⚠️ Pas de value bet détectée : mise = 0")
 
             mise_finale = mise_kelly if strategie == "Kelly" else mise_demi
 
@@ -115,7 +115,11 @@ elif type_global == "Combiné":
         col_a, col_b = st.columns(2)
         col_a.markdown(f"🔢 **Cote combinée : {cote_totale:.2f}**")
         col_b.markdown(f"📊 **Proba estimée : {proba_comb*100:.2f}%**")
-        st.markdown(f"💰 **Mise Kelly recommandée : {mise_k:.2f} €**")
+
+        if mise_k > 0:
+            st.success(f"💰 Mise Kelly recommandée : {mise_k:.2f} €")
+        else:
+            st.warning("⚠️ Pas de value bet détectée sur ce combiné")
 
         if st.button("✅ Valider le combiné"):
             st.session_state.historique.append({
