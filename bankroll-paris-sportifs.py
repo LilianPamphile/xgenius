@@ -1,4 +1,4 @@
-# ✅ Courbe Kelly sans saisie manuelle de proba — calculée automatiquement depuis la cote
+# ✅ Courbe Kelly avec probabilité calculée automatiquement et toujours optimisée
 
 import streamlit as st
 import pandas as pd
@@ -15,8 +15,16 @@ if "paris_combine" not in st.session_state:
     st.session_state.paris_combine = []
 
 # Fonction Kelly globale
+
 def kelly(bankroll, p, c):
-    return max(0, bankroll * ((c * p - 1) / (c - 1))) if c > 1 else 0
+    if c <= 1 or p <= 0 or p >= 1:
+        return 0.0
+    edge = (c * p - 1)
+    return max(0.01, bankroll * edge / (c - 1)) if edge > 0 else 0.01
+
+# Fonction proba automatique logique (plus stable)
+def proba_auto(cote):
+    return max(0.05, min(0.95, 1 / cote * 0.98))  # on prend 98% de la proba implicite pour un comportement raisonnable
 
 # Réinitialisation
 with st.sidebar:
@@ -44,9 +52,7 @@ if type_global == "Simple":
                 evenement = st.text_input("Pari")
                 cote = st.number_input("Cote", 1.01, step=0.01, format="%.2f")
 
-            # Proba implicite corrigée automatiquement
-            proba_estimee = max(0.01, min(1.0, (1 / cote) - 0.03))
-
+            proba_estimee = proba_auto(cote)
             bankroll = 100.0
             mise_kelly = kelly(bankroll, proba_estimee, cote)
             mise_demi = mise_kelly / 2
@@ -105,7 +111,7 @@ elif type_global == "Combiné":
 
         cotes = [e["Cote"] for e in st.session_state.paris_combine]
         cote_totale = np.prod(cotes)
-        proba_comb = max(0.01, min(1.0, (1 / cote_totale) - 0.03))
+        proba_comb = proba_auto(cote_totale)
         mise_k = kelly(100, proba_comb, cote_totale)
 
         col_a, col_b = st.columns(2)
@@ -126,20 +132,20 @@ elif type_global == "Combiné":
             st.session_state.paris_combine = []
             st.success("✅ Pari combiné enregistré")
 
-# --- Courbe Kelly automatique (proba implicite - marge) ---
+# --- Courbe Kelly automatique (proba logique + stable) ---
 st.markdown("---")
 st.subheader("📈 Courbe Kelly vs Cote (auto)")
 cotes_range = np.linspace(1.01, 5.0, 100)
-probas = np.clip((1 / cotes_range) - 0.03, 0.01, 1.0)
+probas = [proba_auto(c) for c in cotes_range]
 kelly_vals = [kelly(100, p, c) for p, c in zip(probas, cotes_range)]
 
 fig, ax = plt.subplots()
 ax.plot(cotes_range, kelly_vals, color='green', linewidth=2)
 ax.set_xlabel("Cote")
 ax.set_ylabel("Mise Kelly recommandée (€)")
-ax.set_title("📊 Impact de la cote sur la mise Kelly (proba auto-calculée)")
+ax.set_title("📊 Impact de la cote sur la mise Kelly (proba auto optimisée)")
 ax.grid(True)
 st.pyplot(fig)
 
 st.markdown("---")
-st.caption("📌 Courbe Kelly générée à partir de probas implicites automatiques (1/cote - marge) ✨")
+st.caption("📌 Courbe Kelly générée à partir de proba implicite ajustée automatiquement ✨")
