@@ -1,4 +1,4 @@
-# ✅ Logique Kelly avec affichage moderne & bouton mini reset bankroll
+# ✅ Logique Kelly avec affichage moderne & bouton mini reset bankroll + affichage dynamique des paris
 
 import streamlit as st
 import pandas as pd
@@ -16,12 +16,12 @@ cursor = conn.cursor()
 def get_bankroll():
     cursor.execute("SELECT solde FROM bankroll ORDER BY id DESC LIMIT 1")
     res = cursor.fetchone()
-    return res[0] if res else 100.0
+    return res[0] if res else 50.0
 
 def init_bankroll():
     cursor.execute("SELECT COUNT(*) FROM bankroll")
     if cursor.fetchone()[0] == 0:
-        cursor.execute("INSERT INTO bankroll (solde) VALUES (100.0)")
+        cursor.execute("INSERT INTO bankroll (solde) VALUES (50.0)")
         conn.commit()
 
 def update_bankroll(delta):
@@ -70,14 +70,18 @@ with st.sidebar:
     col_reset, col_bk = st.columns([1, 2])
     with col_reset:
         if st.button("🔁", help="Réinitialiser la bankroll", key="mini-reset"):
-            cursor.execute("UPDATE bankroll SET solde = 100.0")
+            cursor.execute("UPDATE bankroll SET solde = 50.0")
             conn.commit()
-            st.success("Bankroll remise à 100 €")
+            st.success("Bankroll remise à 50 €")
     with col_bk:
         bankroll = get_bankroll()
         st.markdown(f"### 💰 {bankroll:.2f} €")
 
-    # Graphique Kelly vs Cote
+    if st.button("🗑️ Réinitialiser l'historique des paris"):
+        cursor.execute("DELETE FROM paris")
+        conn.commit()
+        st.success("Historique vidé")
+
     st.markdown("---")
     st.markdown("### 📈 Courbe Kelly vs Cote")
     cotes_range = np.linspace(1.01, 5.0, 60)
@@ -117,20 +121,20 @@ with st.form("formulaire_pari"):
         cursor.execute("""
             INSERT INTO paris (match, sport, type, pari, cote, mise, strategie)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
-        """, (match, sport, type_pari, pari, cote, mise_finale, strategie))
+        """, (match, sport, type_pari, pari, cote, round(mise_finale, 2), strategie))
         conn.commit()
         st.success("Pari enregistré et bankroll mise à jour ✅")
 
 # --- Résultat des paris ---
 st.markdown("---")
 st.markdown("### 📝 Résultats des paris")
-cursor.execute("SELECT id, match, pari, cote, mise, resultat FROM paris ORDER BY date DESC LIMIT 10")
+cursor.execute("SELECT id, match, pari, cote, mise, resultat FROM paris ORDER BY date DESC")
 rows = cursor.fetchall()
 for row in rows:
     pid, m, p, c, mise, res = row
     col1, col2 = st.columns([3, 2])
     with col1:
-        st.markdown(f"**{m}** - {p} @ {c}")
+        st.markdown(f"**{m}** - {p} @ {c} | Mise : {mise:.2f} €")
     with col2:
         if res == "Non joué":
             choix = st.radio("Résultat", ["Non joué", "Gagné", "Perdu"], horizontal=True, key=f"res_{pid}")
@@ -142,3 +146,5 @@ for row in rows:
                 """, (choix, gain, pid))
                 conn.commit()
                 st.success(f"Pari {choix} | Bankroll à jour")
+        else:
+            st.markdown(f"✅ Résultat : {res}")
