@@ -63,6 +63,7 @@ with st.sidebar:
         cursor.execute("UPDATE bankroll SET solde = 50.0")
         conn.commit()
         st.success("Bankroll réinitialisée à 50 €")
+        st.experimental_rerun()
 
     st.markdown(f"### 💰 Bankroll actuelle : {get_bankroll():.2f} €")
 
@@ -70,6 +71,7 @@ with st.sidebar:
         cursor.execute("DELETE FROM paris")
         conn.commit()
         st.success("Historique vidé")
+        st.experimental_rerun()
 
     st.markdown("---")
     st.markdown("### 📈 Courbe Kelly vs Cote")
@@ -108,8 +110,8 @@ with st.form("formulaire_pari"):
     if submitted:
         update_bankroll(-mise_finale)
         cursor.execute("""
-            INSERT INTO paris (match, sport, type, pari, cote, mise, strategie)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO paris (match, sport, type, pari, cote, mise, strategie, resultat, gain)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, 'Non joué', 0)
         """, (match, sport, type_pari, pari, cote, round(mise_finale, 2), strategie))
         conn.commit()
         st.success("Pari enregistré et bankroll mise à jour ✅")
@@ -121,23 +123,26 @@ st.markdown("### 🔧 Traiter les paris non joués")
 cursor.execute("SELECT id, match, pari, cote, mise FROM paris WHERE resultat = 'Non joué' ORDER BY date DESC")
 non_joues = cursor.fetchall()
 
-for pid, m, p, c, mise in non_joues:
-    st.markdown(f"➡️ **{m}** - {p} @ {c} | Mise : {mise:.2f} €")
-    colg, colp = st.columns(2)
-    with colg:
-        if st.button("✅ Gagné", key=f"g{pid}"):
-            gain = round(mise * c, 2)
-            update_bankroll(gain)
-            cursor.execute("UPDATE paris SET resultat = 'Gagné', gain = %s WHERE id = %s", (gain, pid))
-            conn.commit()
-            st.success("Pari mis à jour comme Gagné")
-            st.experimental_rerun()
-    with colp:
-        if st.button("❌ Perdu", key=f"p{pid}"):
-            cursor.execute("UPDATE paris SET resultat = 'Perdu', gain = 0 WHERE id = %s", (pid,))
-            conn.commit()
-            st.error("Pari mis à jour comme Perdu")
-            st.experimental_rerun()
+if non_joues:
+    for pid, m, p, c, mise in non_joues:
+        st.markdown(f"➡️ **{m}** - {p} @ {c} | Mise : {mise:.2f} €")
+        colg, colp = st.columns(2)
+        with colg:
+            if st.button("✅ Gagné", key=f"g{pid}"):
+                gain = round(mise * c, 2)
+                update_bankroll(gain)
+                cursor.execute("UPDATE paris SET resultat = 'Gagné', gain = %s WHERE id = %s", (gain, pid))
+                conn.commit()
+                st.success("Pari mis à jour comme Gagné")
+                st.experimental_rerun()
+        with colp:
+            if st.button("❌ Perdu", key=f"p{pid}"):
+                cursor.execute("UPDATE paris SET resultat = 'Perdu', gain = 0 WHERE id = %s", (pid,))
+                conn.commit()
+                st.error("Pari mis à jour comme Perdu")
+                st.experimental_rerun()
+else:
+    st.info("Aucun pari à traiter.")
 
 # --- Top Gagnés ---
 st.markdown("---")
