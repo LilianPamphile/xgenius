@@ -1,6 +1,3 @@
-# ✅ Logique Kelly avec proba estimée basée uniquement sur la cote (proba implicite corrigée)
-
-import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -21,9 +18,10 @@ def kelly(bankroll, p, c):
     edge = (c * p - 1)
     return bankroll * edge / (c - 1) if edge > 0 else 0.0
 
-# Proba estimée uniquement en fonction de la cote (corrigée de la marge type 5%)
+# Proba estimée uniquement en fonction de la cote (boostée pour réalisme)
 def proba_estimee(c):
-    return max(0.01, min(0.99, (1 / c) - 0.025))
+    implicite = 1 / c
+    return max(0.01, min(0.99, implicite * 1.08))
 
 # Réinitialisation & Graphique dans la sidebar
 with st.sidebar:
@@ -47,7 +45,7 @@ with st.sidebar:
     ax.set_title("Kelly vs Cote")
     ax.grid(True)
     st.pyplot(fig, clear_figure=True)
-    st.caption("📌 Proba = 1/cote - 0.025")
+    st.caption("📌 Proba = (1 / cote) × 1.08")
 
 # Type de pari (Simple ou Combiné)
 st.markdown("### 🎲 Type de pari")
@@ -67,7 +65,7 @@ if type_global == "Simple":
                 cote = st.number_input("Cote", 1.01, step=0.01, format="%.2f")
 
             proba = proba_estimee(cote)
-            bankroll = 100.0
+            bankroll = 50
             mise_kelly = kelly(bankroll, proba, cote)
             mise_demi = mise_kelly / 2
 
@@ -85,7 +83,7 @@ if type_global == "Simple":
                     "ID": str(uuid.uuid4()),
                     "Match": match, "Sport": sport, "Type": type_pari, "Pari": evenement,
                     "Cote": cote, "Cote adv": 0, "Proba": round(proba * 100, 2),
-                    "Marge": "~2.5%", "Mise": round(mise_finale, 2),
+                    "Marge": "~boost 8%", "Mise": round(mise_finale, 2),
                     "Stratégie": strategie, "Résultat": "Non joué",
                     "Global": type_global
                 })
