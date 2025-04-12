@@ -89,33 +89,78 @@ with st.sidebar:
 
 # --- Formulaire de pari ---
 st.markdown("### ➕ Ajouter un pari")
-with st.form("formulaire_pari"):
-    match = st.text_input("Match")
-    col1, col2 = st.columns(2)
-    with col1:
-        sport = st.selectbox("Sport", ["Football", "Basket", "Tennis"])
-        type_pari = st.selectbox("Type", ["Vainqueur", "Over/Under", "Handicap", "Score exact", "Autre"])
-    with col2:
-        pari = st.text_input("Pari")
-        cote = st.number_input("Cote", 1.01, step=0.01, format="%.2f")
+type_pari_general = st.radio("Type de pari :", ["Pari simple", "Pari combiné"], horizontal=True)
+if type_pari_general == "Pari simple":
+    with st.form("formulaire_pari"):
+        match = st.text_input("Match")
+        col1, col2 = st.columns(2)
+        with col1:
+            sport = st.selectbox("Sport", ["Football", "Basket", "Tennis"])
+            type_pari = st.selectbox("Type", ["Vainqueur", "Over/Under", "Handicap", "Score exact", "Autre"])
+        with col2:
+            pari = st.text_input("Pari")
+            cote = st.number_input("Cote", 1.01, step=0.01, format="%.2f")
 
-    proba = proba_estimee(cote)
-    bankroll = get_bankroll()
-    mise_kelly = kelly(bankroll, proba, cote)
-    strategie = st.radio("Stratégie", ["Kelly", "Demi-Kelly"], horizontal=True)
-    mise_finale = mise_kelly if strategie == "Kelly" else mise_kelly / 2
-    st.success(f"💸 Mise recommandée : {mise_finale:.2f} €")
+        proba = proba_estimee(cote)
+        bankroll = get_bankroll()
+        mise_kelly = kelly(bankroll, proba, cote)
+        strategie = st.radio("Stratégie", ["Kelly", "Demi-Kelly"], horizontal=True)
+        mise_finale = mise_kelly if strategie == "Kelly" else mise_kelly / 2
+        st.success(f"💸 Mise recommandée : {mise_finale:.2f} €")
 
-    submitted = st.form_submit_button("✅ Enregistrer le pari")
-    if submitted:
-        update_bankroll(-mise_finale)
-        cursor.execute("""
-            INSERT INTO paris (match, sport, type, pari, cote, mise, strategie, resultat, gain)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, 'Non joué', 0)
-        """, (match, sport, type_pari, pari, cote, round(mise_finale, 2), strategie))
-        conn.commit()
-        st.success("Pari enregistré et bankroll mise à jour ✅")
-        st.rerun()
+        submitted = st.form_submit_button("✅ Enregistrer le pari")
+        if submitted:
+            update_bankroll(-mise_finale)
+            cursor.execute("""
+                INSERT INTO paris (match, sport, type, pari, cote, mise, strategie, resultat, gain)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, 'Non joué', 0)
+            """, (match, sport, type_pari, pari, cote, round(mise_finale, 2), strategie))
+            conn.commit()
+            st.success("Pari enregistré et bankroll mise à jour ✅")
+            st.rerun()
+            
+elif type_pari_general == "Pari combiné":
+    with st.form("formulaire_combine"):
+        selections = []
+        for i in range(1, 4):
+            with st.expander(f"Sélection {i}"):
+                match_c = st.text_input(f"Match {i}", key=f"match_c_{i}")
+                pari_c = st.text_input(f"Pari {i}", key=f"pari_c_{i}")
+                cote_c = st.number_input(f"Cote {i}", 1.01, step=0.01, format="%.2f", key=f"cote_c_{i}")
+                if match_c and pari_c and cote_c:
+                    selections.append({"match": match_c, "pari": pari_c, "cote": cote_c})
+
+        if selections:
+            cotes = [s["cote"] for s in selections]
+            cote_totale = np.prod(cotes)
+            proba_c = proba_estimee(cote_totale)
+            bankroll = get_bankroll()
+            mise_k = kelly(bankroll, proba_c, cote_totale)
+            strategie_c = st.radio("Stratégie", ["Kelly", "Demi-Kelly"], horizontal=True, key="strat_c")
+            mise_finale_c = mise_k if strategie_c == "Kelly" else mise_k / 2
+
+            st.success(f"🎯 Cote combinée : {cote_totale:.2f} | Mise recommandée : {mise_finale_c:.2f} €")
+
+        submitted_c = st.form_submit_button("✅ Enregistrer le combiné")
+        if submitted_c and selections:
+            update_bankroll(-mise_finale_c)
+            description_combine = " + ".join([f"{s['match']} - {s['pari']}" for s in selections])
+            cursor.execute("""
+                INSERT INTO paris (match, sport, type, pari, cote, mise, strategie, resultat, gain)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, 'Non joué', 0)
+            """, (
+                "Combiné", 
+                "Multi", 
+                "Combiné", 
+                description_combine, 
+                round(cote_totale, 2), 
+                round(mise_finale_c, 2), 
+                strategie_c
+            ))
+            conn.commit()
+            st.success("Combiné enregistré ✅")
+            st.rerun()
+
 
 # --- Traitement des paris non joués ---
 st.markdown("---")
