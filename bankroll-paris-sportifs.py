@@ -1,4 +1,7 @@
-# ✅ Ajout d'une logique de paris combinés avec interface multi-événements
+# ✅ Logique combiné refaite proprement avec :
+# - Formulaire complet par événement (comme un pari simple)
+# - Limite de 3 sélections
+# - Calcul Kelly basé sur la cote combinée
 
 import streamlit as st
 import pandas as pd
@@ -13,6 +16,10 @@ if "historique" not in st.session_state:
     st.session_state.historique = []
 if "paris_combine" not in st.session_state:
     st.session_state.paris_combine = []
+
+# Fonction Kelly globale
+def kelly(bankroll, p, c):
+    return max(0, bankroll * ((c * p - 1) / (c - 1))) if c > 1 else 0
 
 # Réinitialisation
 with st.sidebar:
@@ -44,9 +51,6 @@ if type_global == "Simple":
             proba = (1 / cote) / ((1 / cote) + (1 / cote_adv))
             marge = ((1 / cote) + (1 / cote_adv) - 1) * 100
 
-            def kelly(bankroll, p, c):
-                return max(0, bankroll * ((c * p - 1) / (c - 1))) if c > 1 else 0
-
             bankroll = 100.0
             mise_kelly = kelly(bankroll, proba, cote)
             mise_demi = mise_kelly / 2
@@ -71,43 +75,47 @@ if type_global == "Simple":
                 })
                 st.success("Pari enregistré avec succès ✅")
 
-# --- Formulaire combiné ---
+# --- Formulaire combiné avec 3 sélections max ---
 elif type_global == "Combiné":
-    st.markdown("### ➕ Ajouter un événement au combiné")
-    with st.form("form_combi"):
-        col1, col2 = st.columns(2)
-        with col1:
-            match = st.text_input("Match combiné")
-            evenement = st.text_input("Événement combiné")
-        with col2:
-            cote = st.number_input("Cote événement", 1.01, step=0.01, format="%.2f")
+    st.markdown("### ➕ Ajouter un événement au combiné (max 3)")
+    max_combi = 3
+    nb_actuels = len(st.session_state.paris_combine)
 
-        ajouter = st.form_submit_button("➕ Ajouter à ce combiné")
-        if ajouter:
-            st.session_state.paris_combine.append({
-                "Match": match, "Pari": evenement, "Cote": cote
-            })
-            st.success("Événement ajouté au combiné")
+    if nb_actuels < max_combi:
+        with st.form("form_combi"):
+            col1, col2 = st.columns(2)
+            with col1:
+                match = st.text_input("Match combiné")
+                sport = st.selectbox("Sport", ["Football", "Basket", "Tennis"], key="sport_combi")
+                type_pari = st.selectbox("Type", ["Vainqueur", "Over/Under", "Handicap", "Score exact", "Autre"], key="type_combi")
+            with col2:
+                evenement = st.text_input("Pari combiné")
+                cote = st.number_input("Cote événement", 1.01, step=0.01, format="%.2f")
 
-    # Affichage combiné actuel
+            add_combi = st.form_submit_button("➕ Ajouter à ce combiné")
+            if add_combi:
+                st.session_state.paris_combine.append({
+                    "Match": match, "Sport": sport, "Type": type_pari, "Pari": evenement, "Cote": cote
+                })
+                st.success("Événement ajouté au combiné")
+    else:
+        st.warning("❗ Limite de 3 sélections atteinte")
+
+    # Résumé combiné
     if st.session_state.paris_combine:
         st.markdown("#### 🧩 Détail du combiné en cours")
         df_combi = pd.DataFrame(st.session_state.paris_combine)
         st.dataframe(df_combi)
 
-        # Calculs combinés
-        cote_totale = np.prod([e["Cote"] for e in st.session_state.paris_combine])
-        st.markdown(f"**🎯 Cote combinée totale : {cote_totale:.2f}**")
+        cotes = [e["Cote"] for e in st.session_state.paris_combine]
+        cote_totale = np.prod(cotes)
+        proba_comb = 1 / cote_totale if cote_totale > 0 else 0
+        mise_k = kelly(100, proba_comb, cote_totale)
 
-        proba_comb = 1 / cote_totale
-        bankroll = 100.0
-        mise_k = kelly(bankroll, proba_comb, cote_totale)
-
-        colk1, colk2 = st.columns(2)
-        with colk1:
-            st.markdown(f"💡 **Proba combinée : {proba_comb*100:.2f}%**")
-        with colk2:
-            st.markdown(f"💰 **Mise Kelly recommandée : {mise_k:.2f} €**")
+        col_a, col_b = st.columns(2)
+        col_a.markdown(f"🔢 **Cote combinée : {cote_totale:.2f}**")
+        col_b.markdown(f"📊 **Proba estimée : {proba_comb*100:.2f}%**")
+        st.markdown(f"💰 **Mise Kelly recommandée : {mise_k:.2f} €**")
 
         if st.button("✅ Valider le combiné"):
             st.session_state.historique.append({
@@ -119,26 +127,4 @@ elif type_global == "Combiné":
                 "Global": "Combiné"
             })
             st.session_state.paris_combine = []
-            st.success("Pari combiné enregistré ✅")
-
-# --- Affichage courbe Kelly ---
-st.markdown("---")
-st.subheader("📈 Courbe Kelly vs Cote (proba estimée constante)")
-proba_test = st.slider("Probabilité estimée (%) pour la courbe", min_value=30, max_value=90, value=60)
-proba_test /= 100
-cotes_range = np.linspace(1.01, 5.0, 100)
-
-def kelly(bankroll, p, c):
-    return max(0, bankroll * ((c * p - 1) / (c - 1))) if c > 1 else 0
-
-kelly_vals = [kelly(100, proba_test, c) for c in cotes_range]
-fig, ax = plt.subplots()
-ax.plot(cotes_range, kelly_vals, label=f"Mise Kelly (proba {int(proba_test*100)}%)")
-ax.set_xlabel("Cote")
-ax.set_ylabel("Mise en € (pour 100€ de BK)")
-ax.set_title("Évolution de la mise Kelly en fonction de la cote")
-ax.grid(True)
-st.pyplot(fig)
-
-st.markdown("---")
-st.caption("✅ Gestion avancée des combinés et visualisation Kelly active")
+            st.success("✅ Pari combiné enregistré")
