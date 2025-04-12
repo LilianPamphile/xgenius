@@ -1,17 +1,21 @@
-# --- Version améliorée avec recommandation de mise et mise à jour des résultats ---
+# ✅ Version corrigée avec :
+# - Calcul dynamique de la mise Kelly
+# - Mise à jour des résultats fiable
+# - Remplacement de experimental_rerun() par rerun()
 
 import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import uuid
 
 st.set_page_config(page_title="Bankroll - Paris Sportifs", layout="centered")
-
 st.title("🎯 Gestion de Bankroll - Paris Sportifs")
 
 if "historique" not in st.session_state:
     st.session_state.historique = []
 
+# Réinitialisation
 with st.sidebar:
     st.markdown("## ⚙️ Paramètres")
     if st.button("🔄 Réinitialiser l'historique"):
@@ -52,6 +56,7 @@ with st.expander("➕ Ajouter un pari", expanded=True):
         submitted = st.form_submit_button("✅ Enregistrer")
         if submitted:
             st.session_state.historique.append({
+                "ID": str(uuid.uuid4()),
                 "Match": match, "Sport": sport, "Type": type_pari, "Pari": evenement,
                 "Cote": cote, "Cote adv": cote_adv, "Proba": round(proba * 100, 2),
                 "Marge": round(marge, 2), "Mise": round(mise_finale, 2),
@@ -67,22 +72,24 @@ if st.session_state.historique:
     df_non_joues = df_hist[df_hist["Résultat"] == "Non joué"]
 
     if not df_non_joues.empty:
-        for idx, row in df_non_joues.iterrows():
-            col1, col2, col3 = st.columns([3, 2, 2])
+        for _, row in df_non_joues.iterrows():
+            col1, col2, col3 = st.columns([3, 1, 1])
             with col1:
                 st.markdown(f"**{row['Match']} | {row['Pari']}**")
             with col2:
-                if st.button("✅ Gagné", key=f"win_{idx}"):
-                    st.session_state.historique[idx]["Résultat"] = "Gagné"
-                    st.experimental_rerun()
+                if st.button("✅ Gagné", key=f"win_{row['ID']}"):
+                    for p in st.session_state.historique:
+                        if p["ID"] == row["ID"]:
+                            p["Résultat"] = "Gagné"
+                    st.rerun()
             with col3:
-                if st.button("❌ Perdu", key=f"lose_{idx}"):
-                    st.session_state.historique[idx]["Résultat"] = "Perdu"
-                    st.experimental_rerun()
+                if st.button("❌ Perdu", key=f"lose_{row['ID']}"):
+                    for p in st.session_state.historique:
+                        if p["ID"] == row["ID"]:
+                            p["Résultat"] = "Perdu"
+                    st.rerun()
     else:
         st.info("Aucun pari en attente de résultat.")
 
-# --- Fin de bloc de mise à jour ---
-
 st.markdown("---")
-st.caption("App mise à jour ✅ avec stratégie de mise + gestion des résultats")
+st.caption("✅ Interface corrigée : mise dynamique + gestion fiable des résultats.")
