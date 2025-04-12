@@ -27,7 +27,7 @@ def init_bankroll():
         conn.commit()
 
 def update_bankroll(delta):
-    solde = get_bankroll() + delta
+    solde = float(get_bankroll() + delta)
     cursor.execute("UPDATE bankroll SET solde = %s WHERE id = (SELECT id FROM bankroll ORDER BY id DESC LIMIT 1)", (solde,))
     conn.commit()
     return solde
@@ -157,7 +157,7 @@ elif type_pari_general == "Pari combiné":
             elif mise_finale_c == 0:
                 st.error("❌ Mise finale invalide. Vérifie tes cotes.")
             else:
-                update_bankroll(-mise_finale_c)
+                update_bankroll(-float(mise_finale_c))
                 description_combine = " + ".join([f"{s['match']} - {s['pari']}" for s in selections])
                 cursor.execute("""
                     INSERT INTO paris (match, sport, type, pari, cote, mise, strategie, resultat, gain)
