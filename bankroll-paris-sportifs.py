@@ -172,8 +172,9 @@ non_joues = cursor.fetchall()
 if non_joues:
     for pid, m, p, c, mise in non_joues:
         st.markdown(f"➡️ **{m}** - {p} @ {c} | Mise : {mise:.2f} €")
-        colg, colp = st.columns(2)
-        with colg:
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
             if st.button("✅ Gagné", key=f"g{pid}"):
                 gain = round(mise * c, 2)
                 update_bankroll(gain)
@@ -181,11 +182,20 @@ if non_joues:
                 conn.commit()
                 st.success("Pari mis à jour comme Gagné")
                 st.rerun()
-        with colp:
+
+        with col2:
             if st.button("❌ Perdu", key=f"p{pid}"):
                 cursor.execute("UPDATE paris SET resultat = 'Perdu', gain = 0 WHERE id = %s", (pid,))
                 conn.commit()
                 st.error("Pari mis à jour comme Perdu")
+                st.rerun()
+
+        with col3:
+            if st.button("🗑️ Annuler", key=f"a{pid}"):
+                update_bankroll(mise)  # On rembourse la mise
+                cursor.execute("DELETE FROM paris WHERE id = %s", (pid,))
+                conn.commit()
+                st.warning("Pari annulé et mise remboursée")
                 st.rerun()
 else:
     st.info("Aucun pari à traiter.")
