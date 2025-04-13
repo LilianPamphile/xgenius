@@ -227,57 +227,47 @@ with tab2:
     st.markdown("## 📊 Dashboard avancé – Aide à la décision")
     st.caption("Analyse complète pour comprendre et améliorer ta stratégie de paris 🔍")
 
-    # 🎯 LIGNE 1 : Analyse par SPORT
+    # LIGNE 1 : Analyse par SPORT
     col1, col2 = st.columns([1.2, 1])
     with col1:
         st.markdown("**ROI par sport**")
         # (KPI 1 ici)
-
     with col2:
         st.markdown("**Taux de réussite par sport**")
         # (KPI 10 ici)
 
-    # 🧠 LIGNE 2 : Analyse par TYPE DE PARI
+    # LIGNE 2 : Analyse par TYPE
     col3, col4 = st.columns([1.2, 1])
     with col3:
         st.markdown("**ROI par type de pari**")
         # (KPI 2 ici)
-
     with col4:
         st.markdown("**Taux de réussite par type de pari**")
         # (KPI 5 ici)
 
-    # 📉 LIGNE 3 : Analyse de RISQUE
-    col5, col6 = st.columns(2)
+    # LIGNE 3 : Risque (Cotes & Combinés)
+    col5, col6 = st.columns([1.2, 1])  # FIX ici !
     with col5:
         st.markdown("**% de réussite par tranche de cote**")
         # (KPI 3 ici)
-
     with col6:
         st.markdown("**Simples vs combinés**")
         # (KPI 4 ici)
 
-    # 💡 LIGNE 4 : Risque & Value
-    col7, col8 = st.columns(2)
+    # LIGNE 4 : Comportement / Value
+    col7, col8 = st.columns([1.2, 1])  # FIX ici aussi !
     with col7:
         st.markdown("**Cote moyenne gagnés / perdus**")
         # (KPI 6 ici)
-
     with col8:
         st.markdown("**Taux de réussite par niveau de mise**")
         # (KPI 9 ici)
 
-    # 💰 LIGNE 5 : Volume d'argent
+    # LIGNE 5 : Argent engagé
     col9, col10 = st.columns([1.2, 1])
     with col9:
         st.markdown("**Gain net par sport**")
         # (KPI 7 ici)
-
     with col10:
         st.markdown("**Répartition des mises par type**")
         # (KPI 8 ici)
-
-
-
-
-
