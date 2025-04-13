@@ -202,15 +202,15 @@ else:
 
 # --- Top Gagnés ---
 st.markdown("---")
-st.markdown("### 🏆 Top 10 gains")
-cursor.execute("SELECT match, pari, gain FROM paris WHERE resultat = 'Gagné' ORDER BY gain DESC LIMIT 10")
+st.markdown("### 🏆 Top 3 gains")
+cursor.execute("SELECT match, pari, gain FROM paris WHERE resultat = 'Gagné' ORDER BY gain DESC LIMIT 3")
 gagnes = cursor.fetchall()
 for m, p, g in gagnes:
     st.markdown(f"✅ **{m}** - {p} : **+{g:.2f} €**")
 
 # --- Top Pertes ---
-st.markdown("### ❌ Top 10 pertes")
-cursor.execute("SELECT match, pari, mise FROM paris WHERE resultat = 'Perdu' ORDER BY mise DESC LIMIT 10")
+st.markdown("### ❌ Top 3 pertes")
+cursor.execute("SELECT match, pari, mise FROM paris WHERE resultat = 'Perdu' ORDER BY mise DESC LIMIT 3")
 perdus = cursor.fetchall()
 for m, p, m_ in perdus:
     st.markdown(f"❌ **{m}** - {p} : **-{m_:.2f} €**")
