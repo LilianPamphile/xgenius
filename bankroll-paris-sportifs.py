@@ -271,3 +271,4 @@ with tab2:
     with col10:
         st.markdown("**Répartition des mises par type**")
         # (KPI 8 ici)
+
