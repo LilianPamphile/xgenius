@@ -223,63 +223,36 @@ with tab1:
     for m, p, m_ in perdus:
         st.markdown(f"❌ **{m}** - {p} : **-{m_:.2f} €**")
 
-#  Onglet 2 : Dashboard avancé style Power BI
 with tab2:
     st.markdown("## 📊 Dashboard avancé – Aide à la décision")
     st.caption("Analyse complète pour comprendre et améliorer ta stratégie de paris 🔍")
 
-    # 🎯 LIGNE 1 : Analyse par SPORT
+    # LIGNE 1 : Par sport
     col1, col2 = st.columns([1.2, 1])
-
     with col1:
-        st.subheader("1️⃣ ROI par sport")
-        # (KPI 1 ici : ROI par sport → DataFrame large)
-
+        st.markdown("### ROI par sport")
+        # (insérer KPI 1 ici)
     with col2:
-        st.subheader("🔟 Taux de réussite par sport")
-        # (KPI 10 ici : % réussite par sport → plus compact)
+        st.markdown("### Taux de réussite par sport")
+        # (insérer KPI 10 ici)
 
-    # 🧠 LIGNE 2 : Analyse par TYPE DE PARI
+    # LIGNE 2 : Par type de pari
     col3, col4 = st.columns([1.2, 1])
-
     with col3:
-        st.subheader("2️⃣ ROI par type de pari")
+        st.markdown("### ROI par type de pari")
         # (KPI 2 ici)
-
     with col4:
-        st.subheader("5️⃣ Taux de réussite par type de pari")
+        st.markdown("### Taux de réussite par type de pari")
         # (KPI 5 ici)
 
-    # 📉 LIGNE 3 : Analyse de RISQUE (cote et combinés)
+    # LIGNE 3 : Risque (cote & combinés)
     col5, col6 = st.columns(2)
-
     with col5:
-        st.subheader("3️⃣ % réussite par tranche de cote")
-        # (KPI 3 ici : bar chart)
-
+        st.markdown("### % réussite par tranche de cote")
+        # (KPI 3 ici)
     with col6:
-        st.subheader("4️⃣ Simples vs combinés")
-        # (KPI 4 ici : bar chart/tableau synthé)
+        st.markdown("### Simples vs combinés")
+        # (KPI 4 ici)
 
-    # 💡 LIGNE 4 : Profil de PRISE DE RISQUE / VALUE
-    col7, col8 = st.columns(2)
 
-    with col7:
-        st.subheader("6️⃣ Cote moyenne gagnés / perdus")
-        # (KPI 6 ici : indicateurs ou petit graphique)
-
-    with col8:
-        st.subheader("9️⃣ Taux de réussite par niveau de mise")
-        # (KPI 9 ici : par tranche de mise)
-
-    # 💰 LIGNE 5 : Argent & volume engagé
-    col9, col10 = st.columns([1.2, 1])
-
-    with col9:
-        st.subheader("7️⃣ Gain net par sport")
-        # (KPI 7 ici : bar chart vertical)
-
-    with col10:
-        st.subheader("8️⃣ Répartition des mises par type")
-        # (KPI 8 ici : pie chart ou bar chart horizontal)
 
