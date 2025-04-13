@@ -226,78 +226,60 @@ with tab1:
 #  Onglet 2 : Dashboard avancé style Power BI
 with tab2:
     st.markdown("## 📊 Dashboard avancé – Aide à la décision")
-    st.caption("Découvre les insights clés pour ajuster ta stratégie de paris 🔍")
+    st.caption("Analyse complète pour comprendre et améliorer ta stratégie de paris 🔍")
 
-    # Sélection du KPI
-    kpi_choisi = st.selectbox("🧠 Choisis un indicateur stratégique :", [
-        "1. ROI par sport",
-        "2. ROI par type de pari",
-        "3. % réussite par tranche de cote",
-        "4. Simples vs combinés",
-        "5. Taux de réussite par type de paris",
-        "6. Cote moyenne des paris gagnés/perdus",
-        "7. Gain net par sport",
-        "8. Répartition des mises par type",
-        "9. Taux de réussite par niveau de mise",
-        "10. Taux de réussite par sport"
-    ])
+    # 🎯 LIGNE 1 : Analyse par SPORT
+    col1, col2 = st.columns([1.2, 1])
 
-    st.markdown("---")
+    with col1:
+        st.subheader("1️⃣ ROI par sport")
+        # (KPI 1 ici : ROI par sport → DataFrame large)
 
-    # ---------------- KPI 1 : ROI par sport ----------------
-    if kpi_choisi == "1. ROI par sport":
-        st.subheader("🏟️ ROI par sport")
-        cursor.execute("""
-            SELECT sport, COUNT(*) as nb, SUM(mise) as mises, SUM(gain) as gains
-            FROM paris
-            GROUP BY sport
-        """)
-        rows = cursor.fetchall()
-        df = pd.DataFrame(rows, columns=["Sport", "Nb Paris", "Mises (€)", "Gains (€)"])
-        df["ROI (%)"] = ((df["Gains (€)"] - df["Mises (€)"]) / df["Mises (€)"]) * 100
-        st.dataframe(df.sort_values("ROI (%)", ascending=False).round(2), use_container_width=True)
+    with col2:
+        st.subheader("🔟 Taux de réussite par sport")
+        # (KPI 10 ici : % réussite par sport → plus compact)
 
-    # ---------------- KPI 2 : ROI par type de pari ----------------
-    elif kpi_choisi == "2. ROI par type de pari":
-        st.subheader("🎯 ROI par type de pari")
-        cursor.execute("""
-            SELECT type, COUNT(*) as nb, SUM(mise) as mises, SUM(gain) as gains
-            FROM paris
-            GROUP BY type
-        """)
-        rows = cursor.fetchall()
-        df = pd.DataFrame(rows, columns=["Type", "Nb Paris", "Mises (€)", "Gains (€)"])
-        df["ROI (%)"] = ((df["Gains (€)"] - df["Mises (€)"]) / df["Mises (€)"]) * 100
-        st.dataframe(df.sort_values("ROI (%)", ascending=False).round(2), use_container_width=True)
+    # 🧠 LIGNE 2 : Analyse par TYPE DE PARI
+    col3, col4 = st.columns([1.2, 1])
 
-    # ---------------- KPI 3 : % réussite par tranche de cote ----------------
-    elif kpi_choisi == "3. % réussite par tranche de cote":
-        st.subheader("📈 Taux de réussite par tranche de cote")
-        cursor.execute("SELECT cote, resultat FROM paris WHERE resultat IN ('Gagné', 'Perdu')")
-        rows = cursor.fetchall()
-        tranches = {
-            "1.01–1.49": {"total": 0, "gagnés": 0},
-            "1.50–1.99": {"total": 0, "gagnés": 0},
-            "2.00–2.49": {"total": 0, "gagnés": 0},
-            "2.50–2.99": {"total": 0, "gagnés": 0},
-            "3.00+": {"total": 0, "gagnés": 0}
-        }
-        for cote, res in rows:
-            if cote < 1.50:
-                key = "1.01–1.49"
-            elif cote < 2.00:
-                key = "1.50–1.99"
-            elif cote < 2.50:
-                key = "2.00–2.49"
-            elif cote < 3.00:
-                key = "2.50–2.99"
-            else:
-                key = "3.00+"
-            tranches[key]["total"] += 1
-            if res == "Gagné":
-                tranches[key]["gagnés"] += 1
-        df = pd.DataFrame([
-            [k, v["total"], v["gagnés"], (v["gagnés"] / v["total"] * 100) if v["total"] else 0]
-            for k, v in tranches.items()
-        ], columns=["Tranche de cote", "Nb Paris", "Gagnés", "Taux de réussite (%)"])
-        st.bar_chart(df.set_index("Tranche de cote")["Taux de réussite (%)"])
+    with col3:
+        st.subheader("2️⃣ ROI par type de pari")
+        # (KPI 2 ici)
+
+    with col4:
+        st.subheader("5️⃣ Taux de réussite par type de pari")
+        # (KPI 5 ici)
+
+    # 📉 LIGNE 3 : Analyse de RISQUE (cote et combinés)
+    col5, col6 = st.columns(2)
+
+    with col5:
+        st.subheader("3️⃣ % réussite par tranche de cote")
+        # (KPI 3 ici : bar chart)
+
+    with col6:
+        st.subheader("4️⃣ Simples vs combinés")
+        # (KPI 4 ici : bar chart/tableau synthé)
+
+    # 💡 LIGNE 4 : Profil de PRISE DE RISQUE / VALUE
+    col7, col8 = st.columns(2)
+
+    with col7:
+        st.subheader("6️⃣ Cote moyenne gagnés / perdus")
+        # (KPI 6 ici : indicateurs ou petit graphique)
+
+    with col8:
+        st.subheader("9️⃣ Taux de réussite par niveau de mise")
+        # (KPI 9 ici : par tranche de mise)
+
+    # 💰 LIGNE 5 : Argent & volume engagé
+    col9, col10 = st.columns([1.2, 1])
+
+    with col9:
+        st.subheader("7️⃣ Gain net par sport")
+        # (KPI 7 ici : bar chart vertical)
+
+    with col10:
+        st.subheader("8️⃣ Répartition des mises par type")
+        # (KPI 8 ici : pie chart ou bar chart horizontal)
+
