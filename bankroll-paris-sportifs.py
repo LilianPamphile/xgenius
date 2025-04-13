@@ -223,12 +223,13 @@ with tab1:
     for m, p, m_ in perdus:
         st.markdown(f"❌ **{m}** - {p} : **-{m_:.2f} €**")
 
-# Onglet 2 : Dashboard KPI
+#  Onglet 2 : Dashboard avancé style Power BI
 with tab2:
     st.markdown("## 📊 Dashboard avancé – Aide à la décision")
-    st.caption("Analyse stratégique pour améliorer tes performances de paris")
-    
-    kpi_choisi = st.selectbox("📌 Sélectionne un KPI à analyser :", [
+    st.caption("Découvre les insights clés pour ajuster ta stratégie de paris 🔍")
+
+    # Sélection du KPI
+    kpi_choisi = st.selectbox("🧠 Choisis un indicateur stratégique :", [
         "1. ROI par sport",
         "2. ROI par type de pari",
         "3. % réussite par tranche de cote",
@@ -240,36 +241,39 @@ with tab2:
         "9. Taux de réussite par niveau de mise",
         "10. Taux de réussite par sport"
     ])
-    
-    # --- KPI 1 : ROI par sport ---
+
+    st.markdown("---")
+
+    # ---------------- KPI 1 : ROI par sport ----------------
     if kpi_choisi == "1. ROI par sport":
+        st.subheader("🏟️ ROI par sport")
         cursor.execute("""
             SELECT sport, COUNT(*) as nb, SUM(mise) as mises, SUM(gain) as gains
             FROM paris
             GROUP BY sport
         """)
         rows = cursor.fetchall()
-        df = pd.DataFrame(rows, columns=["Sport", "Nb Paris", "Mises", "Gains"])
-        df["ROI (%)"] = ((df["Gains"] - df["Mises"]) / df["Mises"]) * 100
-        st.dataframe(df.sort_values("ROI (%)", ascending=False).round(2))
-    
-    # --- KPI 2 : ROI par type de pari ---
+        df = pd.DataFrame(rows, columns=["Sport", "Nb Paris", "Mises (€)", "Gains (€)"])
+        df["ROI (%)"] = ((df["Gains (€)"] - df["Mises (€)"]) / df["Mises (€)"]) * 100
+        st.dataframe(df.sort_values("ROI (%)", ascending=False).round(2), use_container_width=True)
+
+    # ---------------- KPI 2 : ROI par type de pari ----------------
     elif kpi_choisi == "2. ROI par type de pari":
+        st.subheader("🎯 ROI par type de pari")
         cursor.execute("""
             SELECT type, COUNT(*) as nb, SUM(mise) as mises, SUM(gain) as gains
             FROM paris
             GROUP BY type
         """)
         rows = cursor.fetchall()
-        df = pd.DataFrame(rows, columns=["Type", "Nb Paris", "Mises", "Gains"])
-        df["ROI (%)"] = ((df["Gains"] - df["Mises"]) / df["Mises"]) * 100
-        st.dataframe(df.sort_values("ROI (%)", ascending=False).round(2))
-    
-    # --- KPI 3 : % réussite par tranche de cote ---
+        df = pd.DataFrame(rows, columns=["Type", "Nb Paris", "Mises (€)", "Gains (€)"])
+        df["ROI (%)"] = ((df["Gains (€)"] - df["Mises (€)"]) / df["Mises (€)"]) * 100
+        st.dataframe(df.sort_values("ROI (%)", ascending=False).round(2), use_container_width=True)
+
+    # ---------------- KPI 3 : % réussite par tranche de cote ----------------
     elif kpi_choisi == "3. % réussite par tranche de cote":
-        cursor.execute("""
-            SELECT cote, resultat FROM paris WHERE resultat IN ('Gagné', 'Perdu')
-        """)
+        st.subheader("📈 Taux de réussite par tranche de cote")
+        cursor.execute("SELECT cote, resultat FROM paris WHERE resultat IN ('Gagné', 'Perdu')")
         rows = cursor.fetchall()
         tranches = {
             "1.01–1.49": {"total": 0, "gagnés": 0},
@@ -297,5 +301,3 @@ with tab2:
             for k, v in tranches.items()
         ], columns=["Tranche de cote", "Nb Paris", "Gagnés", "Taux de réussite (%)"])
         st.bar_chart(df.set_index("Tranche de cote")["Taux de réussite (%)"])
-    
-    # Tu veux que je code les 3 suivants (#4, #5, #6) dans la foulée ?
