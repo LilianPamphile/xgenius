@@ -214,3 +214,81 @@ cursor.execute("SELECT match, pari, mise FROM paris WHERE resultat = 'Perdu' ORD
 perdus = cursor.fetchall()
 for m, p, m_ in perdus:
     st.markdown(f"❌ **{m}** - {p} : **-{m_:.2f} €**")
+
+
+# --- Dashboard avancé ---
+st.markdown("---")
+st.markdown("## 📊 Dashboard avancé – Aide à la décision")
+st.caption("Analyse stratégique pour améliorer tes performances de paris")
+
+kpi_choisi = st.selectbox("📌 Sélectionne un KPI à analyser :", [
+    "1. ROI par sport",
+    "2. ROI par type de pari",
+    "3. % réussite par tranche de cote",
+    "4. Simples vs combinés",
+    "5. Taux de réussite par type de paris",
+    "6. Cote moyenne des paris gagnés/perdus",
+    "7. Gain net par sport",
+    "8. Répartition des mises par type",
+    "9. Taux de réussite par niveau de mise",
+    "10. Taux de réussite par sport"
+])
+
+# --- KPI 1 : ROI par sport ---
+if kpi_choisi == "1. ROI par sport":
+    cursor.execute("""
+        SELECT sport, COUNT(*) as nb, SUM(mise) as mises, SUM(gain) as gains
+        FROM paris
+        GROUP BY sport
+    """)
+    rows = cursor.fetchall()
+    df = pd.DataFrame(rows, columns=["Sport", "Nb Paris", "Mises", "Gains"])
+    df["ROI (%)"] = ((df["Gains"] - df["Mises"]) / df["Mises"]) * 100
+    st.dataframe(df.sort_values("ROI (%)", ascending=False).round(2))
+
+# --- KPI 2 : ROI par type de pari ---
+elif kpi_choisi == "2. ROI par type de pari":
+    cursor.execute("""
+        SELECT type, COUNT(*) as nb, SUM(mise) as mises, SUM(gain) as gains
+        FROM paris
+        GROUP BY type
+    """)
+    rows = cursor.fetchall()
+    df = pd.DataFrame(rows, columns=["Type", "Nb Paris", "Mises", "Gains"])
+    df["ROI (%)"] = ((df["Gains"] - df["Mises"]) / df["Mises"]) * 100
+    st.dataframe(df.sort_values("ROI (%)", ascending=False).round(2))
+
+# --- KPI 3 : % réussite par tranche de cote ---
+elif kpi_choisi == "3. % réussite par tranche de cote":
+    cursor.execute("""
+        SELECT cote, resultat FROM paris WHERE resultat IN ('Gagné', 'Perdu')
+    """)
+    rows = cursor.fetchall()
+    tranches = {
+        "1.01–1.49": {"total": 0, "gagnés": 0},
+        "1.50–1.99": {"total": 0, "gagnés": 0},
+        "2.00–2.49": {"total": 0, "gagnés": 0},
+        "2.50–2.99": {"total": 0, "gagnés": 0},
+        "3.00+": {"total": 0, "gagnés": 0}
+    }
+    for cote, res in rows:
+        if cote < 1.50:
+            key = "1.01–1.49"
+        elif cote < 2.00:
+            key = "1.50–1.99"
+        elif cote < 2.50:
+            key = "2.00–2.49"
+        elif cote < 3.00:
+            key = "2.50–2.99"
+        else:
+            key = "3.00+"
+        tranches[key]["total"] += 1
+        if res == "Gagné":
+            tranches[key]["gagnés"] += 1
+    df = pd.DataFrame([
+        [k, v["total"], v["gagnés"], (v["gagnés"] / v["total"] * 100) if v["total"] else 0]
+        for k, v in tranches.items()
+    ], columns=["Tranche de cote", "Nb Paris", "Gagnés", "Taux de réussite (%)"])
+    st.bar_chart(df.set_index("Tranche de cote")["Taux de réussite (%)"])
+
+# Tu veux que je code les 3 suivants (#4, #5, #6) dans la foulée ?
