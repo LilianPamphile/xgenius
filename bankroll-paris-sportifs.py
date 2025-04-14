@@ -227,6 +227,9 @@ with tab2:
     st.markdown("## 📊 Dashboard avancé – Aide à la décision")
     st.caption("Analyse complète pour comprendre et améliorer ta stratégie de paris 🔍")
 
+    # LIGNE 1 : Analyse par SPORT
+    col1, col2 = st.columns([1.2, 1])
+    
     with col1:
         st.markdown("**ROI par sport**")
         st.caption("Permet de mesurer la rentabilité de chaque sport. ROI = ((Gains - Mises) / Mises) × 100")
@@ -237,16 +240,12 @@ with tab2:
         """)
         df_roi_sport = pd.DataFrame(cursor.fetchall(), columns=["Sport", "Mises (€)", "Gains (€)"])
         df_roi_sport["ROI (%)"] = ((df_roi_sport["Gains (€)"] - df_roi_sport["Mises (€)"]) / df_roi_sport["Mises (€)"]) * 100
-    
-        fig, ax = plt.subplots()
-        colors = ["green" if val >= 0 else "red" for val in df_roi_sport["ROI (%)"]]
-        bars = ax.barh(df_roi_sport["Sport"], df_roi_sport["ROI (%)"], color=colors)
-        ax.axvline(0, color="black", linewidth=0.8)
-        ax.set_xlabel("ROI (%)")
-        ax.set_title("ROI par sport")
-        ax.bar_label(bars, fmt="%.1f", padding=3)
-        fig.tight_layout()
-        st.pyplot(fig)
+        cols = st.columns(len(df_roi_sport))
+        for i, row in df_roi_sport.iterrows():
+            roi = row["ROI (%)"]
+            color = "green" if roi >= 0 else "red"
+            sign = "+" if roi >= 0 else ""
+            cols[i].metric(row["Sport"], f"{sign}{roi:.1f} %")
     
     with col2:
         st.markdown("**Taux de réussite par sport**")
@@ -260,6 +259,7 @@ with tab2:
         rows = cursor.fetchall()
         df_taux_sport = pd.DataFrame(rows, columns=["Sport", "Nb Paris", "Gagnés"])
         df_taux_sport["Taux de réussite (%)"] = (df_taux_sport["Gagnés"] / df_taux_sport["Nb Paris"]) * 100
+        df_taux_sport = df_taux_sport.sort_values(by="Taux de réussite (%)", ascending=False)
     
         fig2, ax2 = plt.subplots()
         bars = ax2.bar(df_taux_sport["Sport"], df_taux_sport["Taux de réussite (%)"], color="mediumseagreen")
@@ -282,16 +282,11 @@ with tab2:
         """)
         df_roi_type = pd.DataFrame(cursor.fetchall(), columns=["Type", "Mises (€)", "Gains (€)"])
         df_roi_type["ROI (%)"] = ((df_roi_type["Gains (€)"] - df_roi_type["Mises (€)"]) / df_roi_type["Mises (€)"]) * 100
-    
-        fig3, ax3 = plt.subplots()
-        colors = ["green" if val >= 0 else "red" for val in df_roi_type["ROI (%)"]]
-        bars = ax3.barh(df_roi_type["Type"], df_roi_type["ROI (%)"], color=colors)
-        ax3.axvline(0, color="black", linewidth=0.8)
-        ax3.set_xlabel("ROI (%)")
-        ax3.set_title("ROI par type de pari")
-        ax3.bar_label(bars, fmt="%.1f", padding=3)
-        fig3.tight_layout()
-        st.pyplot(fig3)
+        cols = st.columns(len(df_roi_type))
+        for i, row in df_roi_type.iterrows():
+            roi = row["ROI (%)"]
+            sign = "+" if roi >= 0 else ""
+            cols[i].metric(row["Type"], f"{sign}{roi:.1f} %")
     
     with col4:
         st.markdown("**Taux de réussite par type de pari**")
@@ -305,6 +300,7 @@ with tab2:
         rows = cursor.fetchall()
         df_taux_type = pd.DataFrame(rows, columns=["Type", "Nb Paris", "Gagnés"])
         df_taux_type["Taux de réussite (%)"] = (df_taux_type["Gagnés"] / df_taux_type["Nb Paris"]) * 100
+        df_taux_type = df_taux_type.sort_values(by="Taux de réussite (%)", ascending=False)
     
         fig4, ax4 = plt.subplots()
         bars = ax4.bar(df_taux_type["Type"], df_taux_type["Taux de réussite (%)"], color="mediumpurple")
@@ -313,6 +309,7 @@ with tab2:
         ax4.bar_label(bars, fmt="%.1f%%", padding=3)
         fig4.tight_layout()
         st.pyplot(fig4)
+
 
     # LIGNE 3 : Risque (Cotes & Combinés)
     col5, col6 = st.columns([1.2, 1])
@@ -450,13 +447,14 @@ with tab2:
         df_gain_sport = pd.DataFrame(cursor.fetchall(), columns=["Sport", "Mises (€)", "Gains (€)"])
         df_gain_sport["Gain net (€)"] = df_gain_sport["Gains (€)"] - df_gain_sport["Mises (€)"]
     
-        # Affichage en st.metric
+        # Affichage avec couleur conditionnelle
         metrics = df_gain_sport.set_index("Sport")["Gain net (€)"].to_dict()
         cols = st.columns(len(metrics))
         for i, (sport, gain) in enumerate(metrics.items()):
             sign = "+" if gain >= 0 else ""
-            cols[i].metric(sport, f"{sign}{gain:.0f} €")
-    
+            color = "normal" if gain == 0 else "inverse" if gain > 0 else "off"
+            cols[i].metric(label=sport, value=f"{sign}{gain:.0f} €", delta=None, delta_color=color)
+
     with col10:
         st.markdown("**Répartition des mises par type**")
         st.caption("Visualise où tu places ton argent selon les types de paris. Aide à aligner l’investissement avec les performances.")
