@@ -282,12 +282,13 @@ with tab2:
         """)
         df_roi_type = pd.DataFrame(cursor.fetchall(), columns=["Type", "Mises (€)", "Gains (€)"])
         df_roi_type["ROI (%)"] = ((df_roi_type["Gains (€)"] - df_roi_type["Mises (€)"]) / df_roi_type["Mises (€)"]) * 100
-        cols = st.columns(len(df_roi_type))
-        for i, row in df_roi_type.iterrows():
+    
+        for _, row in df_roi_type.iterrows():
             roi = row["ROI (%)"]
             sign = "+" if roi >= 0 else ""
-            cols[i].metric(row["Type"], f"{sign}{roi:.1f} %")
-    
+            color = "inverse" if roi > 0 else "off" if roi < 0 else "normal"
+            st.metric(label=row["Type"], value=f"{sign}{roi:.1f} %", delta=None, delta_color=color)
+
     with col4:
         st.markdown("**Taux de réussite par type de pari**")
         st.caption("Part des paris gagnés selon leur typologie (ex : Over/Under, Vainqueur, etc.).")
