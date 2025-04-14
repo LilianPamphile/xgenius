@@ -227,20 +227,27 @@ with tab2:
     st.markdown("## 📊 Dashboard avancé – Aide à la décision")
     st.caption("Analyse complète pour comprendre et améliorer ta stratégie de paris 🔍")
 
-    # LIGNE 1 : Analyse par SPORT
-    col1, col2 = st.columns([1.2, 1])
     with col1:
         st.markdown("**ROI par sport**")
         st.caption("Permet de mesurer la rentabilité de chaque sport. ROI = ((Gains - Mises) / Mises) × 100")
         cursor.execute("""
-            SELECT sport, COUNT(*) AS nb, SUM(mise) AS mises, SUM(gain) AS gains
+            SELECT sport, SUM(mise) AS mises, SUM(gain) AS gains
             FROM paris
             GROUP BY sport
         """)
-        df_roi_sport = pd.DataFrame(cursor.fetchall(), columns=["Sport", "Nb Paris", "Mises (€)", "Gains (€)"])
+        df_roi_sport = pd.DataFrame(cursor.fetchall(), columns=["Sport", "Mises (€)", "Gains (€)"])
         df_roi_sport["ROI (%)"] = ((df_roi_sport["Gains (€)"] - df_roi_sport["Mises (€)"]) / df_roi_sport["Mises (€)"]) * 100
-        st.dataframe(df_roi_sport.round(2), use_container_width=True)
-
+    
+        fig, ax = plt.subplots()
+        colors = ["green" if val >= 0 else "red" for val in df_roi_sport["ROI (%)"]]
+        bars = ax.barh(df_roi_sport["Sport"], df_roi_sport["ROI (%)"], color=colors)
+        ax.axvline(0, color="black", linewidth=0.8)
+        ax.set_xlabel("ROI (%)")
+        ax.set_title("ROI par sport")
+        ax.bar_label(bars, fmt="%.1f", padding=3)
+        fig.tight_layout()
+        st.pyplot(fig)
+    
     with col2:
         st.markdown("**Taux de réussite par sport**")
         st.caption("Pourcentage de paris gagnés sur l’ensemble des paris effectués par sport.")
@@ -253,22 +260,39 @@ with tab2:
         rows = cursor.fetchall()
         df_taux_sport = pd.DataFrame(rows, columns=["Sport", "Nb Paris", "Gagnés"])
         df_taux_sport["Taux de réussite (%)"] = (df_taux_sport["Gagnés"] / df_taux_sport["Nb Paris"]) * 100
-        st.dataframe(df_taux_sport.round(2), use_container_width=True)
-
+    
+        fig2, ax2 = plt.subplots()
+        bars = ax2.bar(df_taux_sport["Sport"], df_taux_sport["Taux de réussite (%)"], color="mediumseagreen")
+        ax2.set_ylabel("Taux de réussite (%)")
+        ax2.set_title("Taux de réussite par sport")
+        ax2.bar_label(bars, fmt="%.1f%%", padding=3)
+        fig2.tight_layout()
+        st.pyplot(fig2)
+    
     # LIGNE 2 : Analyse par TYPE
     col3, col4 = st.columns([1.2, 1])
+    
     with col3:
         st.markdown("**ROI par type de pari**")
         st.caption("Permet de mesurer la rentabilité par type de pari joué.")
         cursor.execute("""
-            SELECT type, COUNT(*) AS nb, SUM(mise) AS mises, SUM(gain) AS gains
+            SELECT type, SUM(mise) AS mises, SUM(gain) AS gains
             FROM paris
             GROUP BY type
         """)
-        df_roi_type = pd.DataFrame(cursor.fetchall(), columns=["Type", "Nb Paris", "Mises (€)", "Gains (€)"])
+        df_roi_type = pd.DataFrame(cursor.fetchall(), columns=["Type", "Mises (€)", "Gains (€)"])
         df_roi_type["ROI (%)"] = ((df_roi_type["Gains (€)"] - df_roi_type["Mises (€)"]) / df_roi_type["Mises (€)"]) * 100
-        st.dataframe(df_roi_type.round(2), use_container_width=True)
-
+    
+        fig3, ax3 = plt.subplots()
+        colors = ["green" if val >= 0 else "red" for val in df_roi_type["ROI (%)"]]
+        bars = ax3.barh(df_roi_type["Type"], df_roi_type["ROI (%)"], color=colors)
+        ax3.axvline(0, color="black", linewidth=0.8)
+        ax3.set_xlabel("ROI (%)")
+        ax3.set_title("ROI par type de pari")
+        ax3.bar_label(bars, fmt="%.1f", padding=3)
+        fig3.tight_layout()
+        st.pyplot(fig3)
+    
     with col4:
         st.markdown("**Taux de réussite par type de pari**")
         st.caption("Part des paris gagnés selon leur typologie (ex : Over/Under, Vainqueur, etc.).")
@@ -281,10 +305,18 @@ with tab2:
         rows = cursor.fetchall()
         df_taux_type = pd.DataFrame(rows, columns=["Type", "Nb Paris", "Gagnés"])
         df_taux_type["Taux de réussite (%)"] = (df_taux_type["Gagnés"] / df_taux_type["Nb Paris"]) * 100
-        st.dataframe(df_taux_type.round(2), use_container_width=True)
+    
+        fig4, ax4 = plt.subplots()
+        bars = ax4.bar(df_taux_type["Type"], df_taux_type["Taux de réussite (%)"], color="mediumpurple")
+        ax4.set_ylabel("Taux de réussite (%)")
+        ax4.set_title("Taux de réussite par type de pari")
+        ax4.bar_label(bars, fmt="%.1f%%", padding=3)
+        fig4.tight_layout()
+        st.pyplot(fig4)
 
     # LIGNE 3 : Risque (Cotes & Combinés)
     col5, col6 = st.columns([1.2, 1])
+    
     with col5:
         st.markdown("**% de réussite par tranche de cote**")
         st.caption("Évalue ta performance selon les cotes jouées pour repérer ta zone de confort.")
@@ -311,12 +343,20 @@ with tab2:
             tranches[key]["total"] += 1
             if res == "Gagné":
                 tranches[key]["gagnés"] += 1
+    
         df_tranches = pd.DataFrame([
             [k, v["total"], v["gagnés"], (v["gagnés"] / v["total"]) * 100 if v["total"] else 0]
             for k, v in tranches.items()
         ], columns=["Tranche de cote", "Nb Paris", "Gagnés", "Taux de réussite (%)"])
-        st.dataframe(df_tranches.round(2), use_container_width=True)
-
+    
+        fig, ax = plt.subplots()
+        bars = ax.bar(df_tranches["Tranche de cote"], df_tranches["Taux de réussite (%)"], color="cornflowerblue")
+        ax.set_title("Taux de réussite par tranche de cote")
+        ax.set_ylabel("% de réussite")
+        ax.bar_label(bars, fmt="%.1f%%", padding=3)
+        fig.tight_layout()
+        st.pyplot(fig)
+    
     with col6:
         st.markdown("**Simples vs combinés**")
         st.caption("Compare la rentabilité et la précision entre les paris simples et les combinés.")
@@ -334,9 +374,17 @@ with tab2:
         df_simple_combine = pd.DataFrame(rows, columns=["Type", "Nb Paris", "Mises (€)", "Gains (€)", "Gagnés"])
         df_simple_combine["ROI (%)"] = ((df_simple_combine["Gains (€)"] - df_simple_combine["Mises (€)"]) / df_simple_combine["Mises (€)"]) * 100
         df_simple_combine["Taux de réussite (%)"] = (df_simple_combine["Gagnés"] / df_simple_combine["Nb Paris"]) * 100
-        st.dataframe(df_simple_combine.round(2), use_container_width=True)
-
-
+    
+        fig2, ax2 = plt.subplots()
+        colors = ["green" if x >= 0 else "red" for x in df_simple_combine["ROI (%)"]]
+        bars = ax2.barh(df_simple_combine["Type"], df_simple_combine["ROI (%)"], color=colors)
+        ax2.set_title("ROI par type (Simple vs Combiné)")
+        ax2.set_xlabel("ROI (%)")
+        ax2.axvline(0, color="black", linewidth=0.8)
+        ax2.bar_label(bars, fmt="%.1f", padding=3)
+        fig2.tight_layout()
+        st.pyplot(fig2)
+    
     # LIGNE 4 : Comportement / Value
     col7, col8 = st.columns([1.2, 1])
     
@@ -350,7 +398,15 @@ with tab2:
             GROUP BY resultat
         """)
         df_cote_moyenne = pd.DataFrame(cursor.fetchall(), columns=["Résultat", "Cote moyenne"])
-        st.dataframe(df_cote_moyenne.round(2), use_container_width=True)
+        colg, colp = st.columns(2)
+        with colg:
+            val = df_cote_moyenne[df_cote_moyenne["Résultat"] == "Gagné"]["Cote moyenne"].values
+            if len(val):
+                st.metric("Cote moyenne gagnée", f"{val[0]:.2f}")
+        with colp:
+            val = df_cote_moyenne[df_cote_moyenne["Résultat"] == "Perdu"]["Cote moyenne"].values
+            if len(val):
+                st.metric("Cote moyenne perdue", f"{val[0]:.2f}")
     
     with col8:
         st.markdown("**Taux de réussite par niveau de mise**")
@@ -371,7 +427,14 @@ with tab2:
         """)
         df_mises = pd.DataFrame(cursor.fetchall(), columns=["Tranche de mise (€)", "Nb Paris", "Gagnés"])
         df_mises["Taux de réussite (%)"] = (df_mises["Gagnés"] / df_mises["Nb Paris"]) * 100
-        st.dataframe(df_mises.round(2), use_container_width=True)
+    
+        fig4, ax4 = plt.subplots()
+        bars = ax4.bar(df_mises["Tranche de mise (€)"], df_mises["Taux de réussite (%)"], color="mediumslateblue")
+        ax4.set_title("Taux de réussite par tranche de mise")
+        ax4.set_ylabel("% de réussite")
+        ax4.bar_label(bars, fmt="%.1f%%", padding=3)
+        fig4.tight_layout()
+        st.pyplot(fig4)
     
     # LIGNE 5 : Argent engagé
     col9, col10 = st.columns([1.2, 1])
@@ -386,7 +449,13 @@ with tab2:
         """)
         df_gain_sport = pd.DataFrame(cursor.fetchall(), columns=["Sport", "Mises (€)", "Gains (€)"])
         df_gain_sport["Gain net (€)"] = df_gain_sport["Gains (€)"] - df_gain_sport["Mises (€)"]
-        st.dataframe(df_gain_sport.round(2), use_container_width=True)
+    
+        # Affichage en st.metric
+        metrics = df_gain_sport.set_index("Sport")["Gain net (€)"].to_dict()
+        cols = st.columns(len(metrics))
+        for i, (sport, gain) in enumerate(metrics.items()):
+            sign = "+" if gain >= 0 else ""
+            cols[i].metric(sport, f"{sign}{gain:.0f} €")
     
     with col10:
         st.markdown("**Répartition des mises par type**")
@@ -397,15 +466,19 @@ with tab2:
             GROUP BY type
         """)
         df_repartition_mises = pd.DataFrame(cursor.fetchall(), columns=["Type de pari", "Total Mises (€)"])
-        
+    
         fig, ax = plt.subplots()
-        ax.pie(
+        wedges, texts, autotexts = ax.pie(
             df_repartition_mises["Total Mises (€)"],
             labels=df_repartition_mises["Type de pari"],
-            autopct='%1.1f%%'
+            autopct='%1.1f%%',
+            startangle=140,
+            wedgeprops=dict(width=0.4),
+            textprops=dict(color="black")
         )
-        ax.axis("equal")
         ax.set_title("Répartition des mises par type")
+        ax.axis("equal")
         st.pyplot(fig)
+
 
 
