@@ -241,11 +241,15 @@ with tab2:
         df_roi_sport = pd.DataFrame(cursor.fetchall(), columns=["Sport", "Mises (€)", "Gains (€)"])
         df_roi_sport["ROI (%)"] = ((df_roi_sport["Gains (€)"] - df_roi_sport["Mises (€)"]) / df_roi_sport["Mises (€)"]) * 100
         cols = st.columns(len(df_roi_sport))
-        for i, row in df_roi_sport.iterrows():
+        for _, row in df_roi_sport.iterrows():
             roi = row["ROI (%)"]
             color = "green" if roi >= 0 else "red"
             sign = "+" if roi >= 0 else ""
-            cols[i].metric(row["Sport"], f"{sign}{roi:.1f} %")
+            st.markdown(
+                f"<div style='margin-bottom: 0.5rem;'><strong>{row['Sport']}</strong><br>"
+                f"<span style='color:{color}; font-size:1.3rem;'>{sign}{roi:.1f} %</span></div>",
+                unsafe_allow_html=True
+            )
     
     with col2:
         st.markdown("**Taux de réussite par sport**")
@@ -282,12 +286,16 @@ with tab2:
         """)
         df_roi_type = pd.DataFrame(cursor.fetchall(), columns=["Type", "Mises (€)", "Gains (€)"])
         df_roi_type["ROI (%)"] = ((df_roi_type["Gains (€)"] - df_roi_type["Mises (€)"]) / df_roi_type["Mises (€)"]) * 100
-    
         for _, row in df_roi_type.iterrows():
             roi = row["ROI (%)"]
+            color = "green" if roi >= 0 else "red"
             sign = "+" if roi >= 0 else ""
-            color = "inverse" if roi > 0 else "off" if roi < 0 else "normal"
-            st.metric(label=row["Type"], value=f"{sign}{roi:.1f} %", delta=None, delta_color=color)
+            st.markdown(
+                f"<div style='margin-bottom: 0.5rem;'><strong>{row['Type']}</strong><br>"
+                f"<span style='color:{color}; font-size:1.3rem;'>{sign}{roi:.1f} %</span></div>",
+                unsafe_allow_html=True
+            )
+
 
     with col4:
         st.markdown("**Taux de réussite par type de pari**")
@@ -451,10 +459,14 @@ with tab2:
         # Affichage avec couleur conditionnelle
         metrics = df_gain_sport.set_index("Sport")["Gain net (€)"].to_dict()
         cols = st.columns(len(metrics))
-        for i, (sport, gain) in enumerate(metrics.items()):
+        for sport, gain in metrics.items():
             sign = "+" if gain >= 0 else ""
-            color = "normal" if gain == 0 else "inverse" if gain > 0 else "off"
-            cols[i].metric(label=sport, value=f"{sign}{gain:.0f} €", delta=None, delta_color=color)
+            color = "green" if gain >= 0 else "red"
+            st.markdown(
+                f"<div style='margin-bottom: 0.5rem;'><strong>{sport}</strong><br>"
+                f"<span style='color:{color}; font-size:1.3rem;'>{sign}{gain:.0f} €</span></div>",
+                unsafe_allow_html=True
+            )
 
     with col10:
         st.markdown("**Répartition des mises par type**")
