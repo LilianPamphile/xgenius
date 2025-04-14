@@ -514,9 +514,6 @@ try:
 
     print("✅ Features attendues par KMeans :", features_kmeans)
 
-
-
-
     # === Récupération historique des anciens matchs ===
     query_hist = """
         SELECT m.date::date AS date_match, m.equipe_domicile AS dom, m.equipe_exterieur AS ext,
@@ -844,7 +841,7 @@ try:
             f"🧬 Cluster : {CLUSTERS_MAP.get(match['cluster_type'], '❓ Inconnu')}"
         )
     
-        if gmos_score >= 67:
+        if gmos_score >= 65:
             matchs_ouverts.append((gmos_score, match["match"], ligne))
         elif gmos_score <= 50:
             matchs_fermes.append((gmos_score, match["match"], ligne))
@@ -854,7 +851,7 @@ try:
     
     # === Génération du mail GMOS ===
     mail_lines = [f"📅 Prévisions du {today}\n"]
-    mail_lines.append("📈 Top 5 Matchs Ouverts (GMOS ≥ 67)\n")
+    mail_lines.append("📈 Top 5 Matchs Ouverts (GMOS ≥ 65\n")
     
     for idx, (_, name, ligne) in enumerate(sorted(matchs_ouverts, reverse=True)[:5], 1):
         mail_lines.append(f"{idx}️⃣ {name}\n{ligne}\n")
@@ -867,7 +864,7 @@ try:
     if not matchs_fermes:
         mail_lines.append("Aucun match fermé détecté aujourd’hui.\n")
     
-    mail_lines.append("⚪ Matchs Neutres (GMOS entre 51 et 66)\n")
+    mail_lines.append("⚪ Matchs Neutres (GMOS entre 51 et 64)\n")
     for idx, (_, name, ligne) in enumerate(sorted(matchs_neutres, reverse=True), 1):
         mail_lines.append(f"{idx}️⃣ {name}\n{ligne}\n")
     if not matchs_neutres:
