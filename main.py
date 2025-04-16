@@ -144,7 +144,7 @@ def compute_gmos(pred_ml, p25, p75, score_heuristique, cluster_type):
     variance_range = max(p75 - p25, 0.1)  # éviter division par 0
     range_score = 1 - (variance_range / 5)  # plus c’est resserré, mieux c’est
 
-    base_score = 0.6 * (min(pred_ml / 5, 1) * 100) + 0.3 * score_heuristique + 0.1 * (range_score * 100)
+    base_score = 0.5 * (min(pred_ml / 5, 1) * 100) + 0.3 * score_heuristique + 0.2 * (range_score * 100)
     return round(min(max(base_score, 0), 100), 2)
 
 
@@ -871,7 +871,6 @@ try:
         mail_lines.append("Aucun match neutre aujourd’hui.\n")
     
     mail_lines.append("🔥 GMOS = le meilleur résumé de tous tes modèles 💡")
-    mail_lines.append("🧬 Clusters historiques détectés :")
     mail_lines.append("🧠 Cluster = profil historique | GMOS = prédictions + forme actuelle")
     mail_lines.append("Suivi : https://docs.google.com/forms/d/e/1FAIpQLSdRKd8ui1gy8lNfhMYYsLesglR9JJeAI7VgqrASbr0Ocdl7Tg/viewform?usp=header")
     
