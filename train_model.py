@@ -196,45 +196,32 @@ print(f"📋 Liste des features KMeans : {FEATURES_KMEANS}")
 pca = PCA(n_components=0.95)
 X_kmeans_pca = pca.fit_transform(X_kmeans_scaled)
 
+# Appliquer KMeans avec k=2
+k = 2
+kmeans = KMeans(n_clusters=k, random_state=42, n_init='auto')
+labels = kmeans.fit_predict(X_kmeans_pca)
 
-# --- Tester différents k --- #
-best_k = None
-best_score = -1
-best_labels = None
-for k in range(2, 7):
-    kmeans = KMeans(n_clusters=k, random_state=42)
-    labels = kmeans.fit_predict(X_kmeans_pca)
-    score = silhouette_score(X_kmeans_pca, labels)
-    print(f"🔢 k={k} → Silhouette Score: {score:.4f}")
-    if score > best_score:
-        best_score = score
-        best_k = k
-        best_labels = labels
+# Calcul du score de silhouette
+score = silhouette_score(X_kmeans_pca, labels)
+print(f"✅ KMeans à 2 clusters → Silhouette Score : {score:.4f}")
 
-print(f"✅ Meilleur k = {best_k} avec silhouette = {best_score:.4f}")
+# Ajout des labels au DataFrame
+df["cluster_type"] = labels
 
-# Appliquer le meilleur clustering retenu
-kmeans = KMeans(n_clusters=best_k, random_state=42)
-kmeans.fit(X_kmeans_pca)
-df["cluster_type"] = best_labels
-
-# ♻️ Re-standardise avec la nouvelle colonne
+# Re-standardisation
 X_scaled = scaler.fit_transform(X)
 
-# 📊 Logging pour vérification
-unique, counts = np.unique(best_labels, return_counts=True)
+# Résumé des clusters
+unique, counts = np.unique(labels, return_counts=True)
 for label, count in zip(unique, counts):
-    print(f"🔍 Cluster {label} → {count} matchs ({(count / len(best_labels)):.1%})")
+    print(f"🔍 Cluster {label} → {count} éléments ({(count / len(labels)):.1%})")
 
+# Stockage des résultats
 results = {}
-
 results["kmeans"] = {
     "model": kmeans,
-    "silhouette": best_score
+    "silhouette": score
 }
-print(f"✅ Silhouette Score (k={best_k} enrichi) : {best_score:.4f}")
-
-# --- FIN KMEANS --- #
 
 X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
 
