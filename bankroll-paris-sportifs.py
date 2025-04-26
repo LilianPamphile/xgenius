@@ -149,30 +149,29 @@ with tab1:
                 st.error("Merci de remplir tous les champs correctement pour calculer la mise.")
     
     # --- Pari Combiné ---
-    elif type_global == "Pari combiné":
-        with st.form("formulaire_pari_combine"):
-            selections = []
+    st.markdown("### ➕ Ajouter un pari combiné")
     
-            nb_selections = st.number_input("Nombre de sélections", min_value=2, max_value=5, value=2, step=1)
+    with st.form("formulaire_pari_combine"):
+        selections = []
     
-            for i in range(nb_selections):
-                st.markdown(f"---\n### 🎯 Sélection {i+1}")
-    
-                match_c = st.text_input(f"Match {i+1}", key=f"match_c_{i}")
+        for i in range(1, 4):  # Forcer 3 maximum
+            with st.expander(f"🎯 Sélection {i}"):
+                match_c = st.text_input(f"Match {i}", key=f"match_c_{i}")
                 
                 col1, col2 = st.columns(2)
                 with col1:
-                    sport_c = st.selectbox(f"Sport {i+1}", ["Football", "Basket", "Tennis"], key=f"sport_c_{i}")
+                    sport_c = st.selectbox(f"Sport {i}", ["Football", "Basket", "Tennis"], key=f"sport_c_{i}")
                 with col2:
                     type_pari_c = st.selectbox(
-                        f"Type de pari {i+1}",
+                        f"Type de pari {i}",
                         ["Vainqueur", "Over/Under", "Score exact", "Gagne 1er set", "Gagne au moins un set", "Les deux équipes marquent", "Autre"],
                         key=f"type_pari_c_{i}"
                     )
     
-                pari_c = st.text_input(f"Pari {i+1}", key=f"pari_c_{i}")
-                cote_c = st.number_input(f"Cote {i+1}", min_value=1.01, max_value=50.0, step=0.01, format="%.2f", key=f"cote_c_{i}")
+                pari_c = st.text_input(f"Pari {i}", key=f"pari_c_{i}")
+                cote_c = st.number_input(f"Cote {i}", min_value=1.01, max_value=50.0, step=0.01, format="%.2f", key=f"cote_c_{i}")
     
+                # Ajouter à la liste que si tout est rempli
                 if match_c and pari_c and cote_c >= 1.01:
                     selections.append({
                         "match": match_c,
@@ -182,11 +181,13 @@ with tab1:
                         "cote": cote_c
                     })
     
-            strategie = st.radio("Stratégie de mise :", ["Kelly", "Demi-Kelly"], horizontal=True, key="strat_c")
+        strategie = st.radio("Stratégie de mise :", ["Kelly", "Demi-Kelly"], horizontal=True, key="strat_c")
     
-            calculer_c = st.form_submit_button("💸 Calculer la mise recommandée pour le combiné")
+        calculer_c = st.form_submit_button("💸 Calculer la mise recommandée pour le combiné")
     
-        if calculer_c and selections:
+    if calculer_c:
+        if len(selections) >= 2:
+            # Calcul cote combinée
             cotes = [s["cote"] for s in selections]
             cote_combinee = np.prod(cotes)
             proba = proba_estimee(cote_combinee)
@@ -200,7 +201,7 @@ with tab1:
             st.markdown("### 🔍 Récapitulatif du combiné")
             for s in selections:
                 st.markdown(f"- **{s['match']}** ➔ **{s['pari']}** @ **{s['cote']:.2f}** ({s['sport']} - {s['type_pari']})")
-            
+    
             st.markdown(f"**Cote combinée finale : {cote_combinee:.2f}**")
     
             if st.button("✅ Enregistrer le combiné maintenant"):
@@ -217,8 +218,9 @@ with tab1:
                 conn.commit()
                 st.success("Combiné enregistré et bankroll mise à jour ✅")
                 st.rerun()
-        elif calculer_c and not selections:
-            st.error("Merci de remplir au moins 2 sélections complètes pour calculer le combiné.")
+        else:
+            st.error("Merci de remplir au moins 2 sélections pour pouvoir calculer un combiné.")
+
 
 
     
