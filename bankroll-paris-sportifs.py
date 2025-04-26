@@ -1,5 +1,4 @@
 # ✅ Logique Kelly avec affichage moderne & traitement complet des paris
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -71,15 +70,25 @@ with tab1:
     # --- Sidebar ---
     with st.sidebar:
         st.markdown("## ⚙️ Paramètres")
-        st.markdown("### 🔁 Réinitialiser / Modifier la bankroll")     
-        # Input pour entrer la nouvelle bankroll
-        nouveau_solde = st.number_input("💶 Nouvelle bankroll (€)", min_value=1.0, max_value=100000.0, value=get_bankroll(), step=1.0, format="%.2f")
         
-        if st.button("✅ Mettre à jour la bankroll"):
-            cursor.execute("UPDATE bankroll SET solde = %s WHERE id = (SELECT id FROM bankroll ORDER BY id DESC LIMIT 1)", (nouveau_solde,))
-            conn.commit()
-            st.success(f"💰 Bankroll mise à jour à {nouveau_solde:.2f} €")
-            st.rerun()
+        st.markdown(f"### 💰 Bankroll actuelle : {get_bankroll():.2f} €")
+        # Bouton pour ouvrir le champ de modification
+        if "edit_bankroll" not in st.session_state:
+            st.session_state.edit_bankroll = False
+        
+        if st.button("🔁 Réinitialiser / Modifier la bankroll"):
+            st.session_state.edit_bankroll = not st.session_state.edit_bankroll  # Toggle le mode édition
+        
+        # Si on a cliqué sur "Modifier", on affiche un champ input
+        if st.session_state.edit_bankroll:
+            nouveau_solde = st.number_input("💶 Nouvelle bankroll (€)", min_value=1.0, max_value=100000.0, value=get_bankroll(), step=1.0, format="%.2f")
+        
+            if st.button("✅ Valider la nouvelle bankroll"):
+                cursor.execute("UPDATE bankroll SET solde = %s WHERE id = (SELECT id FROM bankroll ORDER BY id DESC LIMIT 1)", (nouveau_solde,))
+                conn.commit()
+                st.success(f"💰 Bankroll mise à jour à {nouveau_solde:.2f} €")
+                st.session_state.edit_bankroll = False
+                st.rerun()
 
     
         if st.button("🗑️ Réinitialiser l'historique des paris"):
