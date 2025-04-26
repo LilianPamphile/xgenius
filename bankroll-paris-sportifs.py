@@ -71,13 +71,16 @@ with tab1:
     # --- Sidebar ---
     with st.sidebar:
         st.markdown("## ⚙️ Paramètres")
-        if st.button("🔁 Réinitialiser la bankroll"):
-            cursor.execute("UPDATE bankroll SET solde = 50.0")
+        st.markdown("### 🔁 Réinitialiser / Modifier la bankroll")     
+        # Input pour entrer la nouvelle bankroll
+        nouveau_solde = st.number_input("💶 Nouvelle bankroll (€)", min_value=1.0, max_value=100000.0, value=get_bankroll(), step=1.0, format="%.2f")
+        
+        if st.button("✅ Mettre à jour la bankroll"):
+            cursor.execute("UPDATE bankroll SET solde = %s WHERE id = (SELECT id FROM bankroll ORDER BY id DESC LIMIT 1)", (nouveau_solde,))
             conn.commit()
-            st.success("Bankroll réinitialisée à 50 €")
+            st.success(f"💰 Bankroll mise à jour à {nouveau_solde:.2f} €")
             st.rerun()
-    
-        st.markdown(f"### 💰 Bankroll actuelle : {get_bankroll():.2f} €")
+
     
         if st.button("🗑️ Réinitialiser l'historique des paris"):
             cursor.execute("DELETE FROM paris")
@@ -182,8 +185,6 @@ with tab1:
     if type_global == "Pari combiné":
         if "combine_ready" not in st.session_state:
             st.session_state.combine_ready = False
-    
-        st.markdown("### ➕ Ajouter un pari combiné")
     
         with st.form("formulaire_combine"):
             selections = []
