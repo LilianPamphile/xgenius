@@ -321,17 +321,16 @@ with tab2:
     if roi_global >= 5 and taux_reussite >= 55:
         st.success("🚀 Excellente performance : ROI et Taux de réussite très bons. Continue ta stratégie actuelle !")
     elif roi_global >= 0 and taux_reussite < 55:
-        st.info("💡 Tes gains sont là mais ton taux de réussite est faible. Peut-être miser sur des cotes plus sûres.")
+        st.info("💡 Tes gains sont là mais ton taux de réussite est faible. Peut-être viser des cotes plus sûres.")
     elif roi_global < 0 and taux_reussite >= 55:
-        st.warning("⚠️ Ton taux de réussite est bon mais tu perds de l'argent. Revois tes cotes, elles sont peut-être trop basses.")
+        st.warning("⚠️ Ton taux de réussite est bon mais tu perds de l'argent. Revois la sélection de tes paris.")
     else:
-        st.error("🛑 Attention : tu perds de l'argent et ton taux de réussite est bas. Il est temps de réévaluer ta stratégie.")
+        st.error("🛑 Attention : ROI négatif et taux de réussite faible. Revoie ta méthode.")
 
-    # --- Analyse Forces / Faiblesses ---
+    # --- Analyse Forces / Faiblesses : Sports ---
     st.markdown("---")
-    st.markdown("### 🏆 Où tu performes (et où tu perds)")
+    st.markdown("### 🏆 Ton meilleur et ton pire sport")
 
-    # Top Sport
     cursor.execute("""
         SELECT sport, SUM(gain - mise) AS gain_net
         FROM paris
@@ -340,10 +339,12 @@ with tab2:
         LIMIT 1
     """)
     best_sport = cursor.fetchone()
+
     if best_sport:
         st.success(f"🥇 Meilleur sport : **{best_sport[0]}** (+{best_sport[1]:.2f} €)")
+    else:
+        st.info("Aucun sport enregistré pour l’instant.")
 
-    # Worst Sport
     cursor.execute("""
         SELECT sport, SUM(gain - mise) AS gain_net
         FROM paris
@@ -352,12 +353,13 @@ with tab2:
         LIMIT 1
     """)
     worst_sport = cursor.fetchone()
+
     if worst_sport:
         st.error(f"🥶 Sport le moins rentable : **{worst_sport[0]}** ({worst_sport[1]:.2f} €)")
 
-    # --- Type de pari gagnant / perdant ---
+    # --- Analyse Forces / Faiblesses : Types ---
     st.markdown("---")
-    st.markdown("### 🎯 Types de paris : Analyse")
+    st.markdown("### 🎯 Type de pari le plus et le moins rentable")
 
     cursor.execute("""
         SELECT type, SUM(gain - mise) AS gain_net
@@ -367,8 +369,11 @@ with tab2:
         LIMIT 1
     """)
     best_type = cursor.fetchone()
+
     if best_type:
-        st.success(f"✅ Type de pari le plus rentable : **{best_type[0]}** (+{best_type[1]:.2f} €)")
+        st.success(f"✅ Meilleur type de pari : **{best_type[0]}** (+{best_type[1]:.2f} €)")
+    else:
+        st.info("Aucun type enregistré pour l’instant.")
 
     cursor.execute("""
         SELECT type, SUM(gain - mise) AS gain_net
@@ -378,12 +383,13 @@ with tab2:
         LIMIT 1
     """)
     worst_type = cursor.fetchone()
-    if worst_type:
-        st.error(f"❌ Type de pari le moins rentable : **{worst_type[0]}** ({worst_type[1]:.2f} €)")
 
-    # --- Performance par tranche de cote ---
+    if worst_type:
+        st.error(f"❌ Type le moins rentable : **{worst_type[0]}** ({worst_type[1]:.2f} €)")
+
+    # --- Analyse par tranches de cotes ---
     st.markdown("---")
-    st.markdown("### 🎯 Tranche de cotes la plus rentable")
+    st.markdown("### 📈 Meilleure tranche de cote")
 
     cursor.execute("SELECT cote, resultat FROM paris WHERE resultat IN ('Gagné', 'Perdu')")
     rows = cursor.fetchall()
@@ -420,24 +426,21 @@ with tab2:
                 best_tranche = tranche
 
     if best_tranche:
-        st.success(f"🏅 Meilleure tranche de cote : **{best_tranche}** avec {best_taux:.1f}% de réussite")
+        st.success(f"🏅 Ta meilleure tranche de cote est **{best_tranche}** avec {best_taux:.1f}% de réussite.")
 
-    # --- Gestion du risque de mise (>10% bankroll) ---
+    # --- Analyse risque de Bankroll ---
     st.markdown("---")
-    st.markdown("### 🛡️ Analyse du risque de mise")
+    st.markdown("### 🛡️ Gestion du risque sur ta bankroll")
 
-    # Récupérer bankroll actuelle depuis ta table bankroll
     bankroll_actuelle = get_bankroll()
 
     cursor.execute("SELECT mise FROM paris")
     mises = cursor.fetchall()
 
-    grosse_mises = [mise[0] for mise in mises if mise[0] > 0.1 * bankroll_actuelle]
-    pourcentage_risque = (len(grosse_mises) / len(mises) * 100) if mises else 0
+    grosses_mises = [mise[0] for mise in mises if mise[0] > 0.1 * bankroll_actuelle]
+    pourcentage_grosses_mises = (len(grosses_mises) / len(mises) * 100) if mises else 0
 
-    if pourcentage_risque > 20:
-        st.error(f"🚨 {pourcentage_risque:.1f}% de tes paris dépassent 10% de ta bankroll actuelle ({bankroll_actuelle:.2f}€). Attention au risque !")
+    if pourcentage_grosses_mises > 20:
+        st.error(f"🚨 {pourcentage_grosses_mises:.1f}% de tes mises dépassent 10% de ta bankroll actuelle ({bankroll_actuelle:.2f} €).")
     else:
-        st.success(f"🛡️ Seulement {pourcentage_risque:.1f}% de grosses mises. Très bonne gestion du risque.")
-
-
+        st.success(f"🛡️ Seulement {pourcentage_grosses_mises:.1f}% de grosses mises. Bonne gestion du risque.")
