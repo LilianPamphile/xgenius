@@ -240,8 +240,8 @@ with tab1:
                     """, (
                         "Combiné", "Multi", "Combiné",
                         pari_text,
-                        round(cote_combinee, 2),
-                        round(mise_finale, 2),
+                        float(round(cote_combinee, 2)),
+                        float(round(mise_finale, 2)),
                         strategie,
                         datetime.datetime.now()
                     ))
