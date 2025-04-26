@@ -144,7 +144,7 @@ def compute_gmos(pred_ml, p25, p75, score_heuristique, cluster_type):
     variance_range = max(p75 - p25, 0.1)  # éviter division par 0
     range_score = 1 - (variance_range / 5)  # plus c’est resserré, mieux c’est
 
-    base_score = 0.5 * (min(pred_ml / 5, 1) * 100) + 0.3 * score_heuristique + 0.2 * (range_score * 100)
+    base_score = 0.4 * (min(pred_ml / 5, 1) * 100) + 0.3 * score_heuristique + 0.3 * (range_score * 100)
     return round(min(max(base_score, 0), 100), 2)
 
 
@@ -783,7 +783,7 @@ try:
     matchs_fermes = []
     matchs_neutres = []
 
-    pred_buts = 0.70 * preds_cat + 0.20 * preds_lgb + 0.10 * preds_xgb
+    pred_buts = 0.60 * preds_cat + 0.20 * preds_lgb + 0.20 * preds_xgb
     
     for i, match in enumerate(matchs_jour):
         features_vec = match["features"]
@@ -851,7 +851,7 @@ try:
     
     # === Génération du mail GMOS ===
     mail_lines = [f"📅 Prévisions du {today}\n"]
-    mail_lines.append("📈 Top 5 Matchs Ouverts (GMOS ≥ 65\n")
+    mail_lines.append("📈 Top 5 Matchs Ouverts (GMOS ≥ 65)\n")
     
     for idx, (_, name, ligne) in enumerate(sorted(matchs_ouverts, reverse=True)[:5], 1):
         mail_lines.append(f"{idx}️⃣ {name}\n{ligne}\n")
