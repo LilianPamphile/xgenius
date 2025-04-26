@@ -150,7 +150,7 @@ with tab1:
     
     # --- Pari Combiné ---
     if type_global == "Pari combiné":
-    st.markdown("### ➕ Ajouter un pari combiné")
+        st.markdown("### ➕ Ajouter un pari combiné")
         
         with st.form("formulaire_pari_combine"):
             selections = []
