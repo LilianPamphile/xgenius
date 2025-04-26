@@ -122,13 +122,22 @@ with tab1:
             strategie = st.radio("Stratégie de mise :", ["Kelly", "Demi-Kelly"], horizontal=True)
     
             calculer = st.form_submit_button("💸 Calculer la mise recommandée")
-    
+        
         if calculer:
             if match and pari and cote >= 1.01:
+                # Stockage en session pour conserver les infos
+                st.session_state.match = match
+                st.session_state.sport = sport
+                st.session_state.type_pari = type_pari
+                st.session_state.pari = pari
+                st.session_state.cote = cote
+                st.session_state.strategie = strategie
+    
                 proba = proba_estimee(cote)
                 bankroll = get_bankroll()
                 mise_kelly = kelly(bankroll, proba, cote)
                 mise_finale = mise_kelly if strategie == "Kelly" else mise_kelly / 2
+                st.session_state.mise_finale = mise_finale  # Sauvegarde
     
                 st.success(f"💸 Mise recommandée : {mise_finale:.2f} €")
     
@@ -136,26 +145,39 @@ with tab1:
                 st.markdown("### 🔍 Récapitulatif de ton pari")
                 st.info(f"**{match}** ➔ **{pari}** @ **{cote:.2f}** ({sport} - {type_pari})")
     
-                if st.button("✅ Enregistrer le pari maintenant"):
-                    update_bankroll(-mise_finale)
-                    cursor.execute("""
-                        INSERT INTO paris (match, sport, type, pari, cote, mise, strategie, resultat, gain, date)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, 'Non joué', 0, %s)
-                    """, (match, sport, type_pari, pari, cote, round(mise_finale, 2), strategie, datetime.datetime.now()))
-                    conn.commit()
-                    st.success("Pari enregistré et bankroll mise à jour ✅")
-                    st.rerun()
+                # --- Deuxième formulaire pour valider
+                with st.form("formulaire_validation_simple"):
+                    enregistrer = st.form_submit_button("✅ Enregistrer le pari maintenant")
+                    if enregistrer:
+                        update_bankroll(-mise_finale)
+                        cursor.execute("""
+                            INSERT INTO paris (match, sport, type, pari, cote, mise, strategie, resultat, gain, date)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, 'Non joué', 0, %s)
+                        """, (
+                            st.session_state.match,
+                            st.session_state.sport,
+                            st.session_state.type_pari,
+                            st.session_state.pari,
+                            st.session_state.cote,
+                            round(st.session_state.mise_finale, 2),
+                            st.session_state.strategie,
+                            datetime.datetime.now()
+                        ))
+                        conn.commit()
+                        st.success("Pari enregistré et bankroll mise à jour ✅")
+                        st.rerun()
             else:
                 st.error("Merci de remplir tous les champs correctement pour calculer la mise.")
+
     
     # --- Pari Combiné ---
     if type_global == "Pari combiné":
         st.markdown("### ➕ Ajouter un pari combiné")
-        
+    
         with st.form("formulaire_pari_combine"):
             selections = []
-        
-            for i in range(1, 4):  # Forcer 3 maximum
+    
+            for i in range(1, 4):  # Max 3 sélections
                 with st.expander(f"🎯 Sélection {i}"):
                     match_c = st.text_input(f"Match {i}", key=f"match_c_{i}")
                     
@@ -168,11 +190,10 @@ with tab1:
                             ["Vainqueur", "Over/Under", "Score exact", "Gagne 1er set", "Gagne au moins un set", "Les deux équipes marquent", "Autre"],
                             key=f"type_pari_c_{i}"
                         )
-        
+    
                     pari_c = st.text_input(f"Pari {i}", key=f"pari_c_{i}")
                     cote_c = st.number_input(f"Cote {i}", min_value=1.01, max_value=50.0, step=0.01, format="%.2f", key=f"cote_c_{i}")
-        
-                    # Ajouter à la liste que si tout est rempli
+    
                     if match_c and pari_c and cote_c >= 1.01:
                         selections.append({
                             "match": match_c,
@@ -181,44 +202,62 @@ with tab1:
                             "pari": pari_c,
                             "cote": cote_c
                         })
-        
+    
             strategie = st.radio("Stratégie de mise :", ["Kelly", "Demi-Kelly"], horizontal=True, key="strat_c")
-        
+    
             calculer_c = st.form_submit_button("💸 Calculer la mise recommandée pour le combiné")
-        
+    
         if calculer_c:
             if len(selections) >= 2:
-                # Calcul cote combinée
+                # Stocker en session
+                st.session_state.selections = selections
+                st.session_state.strategie_combine = strategie
+    
                 cotes = [s["cote"] for s in selections]
                 cote_combinee = np.prod(cotes)
+                st.session_state.cote_combinee = cote_combinee
+    
                 proba = proba_estimee(cote_combinee)
                 bankroll = get_bankroll()
                 mise_kelly = kelly(bankroll, proba, cote_combinee)
                 mise_finale = mise_kelly if strategie == "Kelly" else mise_kelly / 2
-        
+                st.session_state.mise_finale_combine = mise_finale
+    
                 st.success(f"🎯 Cote combinée : {cote_combinee:.2f} | 💸 Mise recommandée : {mise_finale:.2f} €")
-        
+    
                 st.markdown("---")
                 st.markdown("### 🔍 Récapitulatif du combiné")
                 for s in selections:
                     st.markdown(f"- **{s['match']}** ➔ **{s['pari']}** @ **{s['cote']:.2f}** ({s['sport']} - {s['type_pari']})")
-        
+    
                 st.markdown(f"**Cote combinée finale : {cote_combinee:.2f}**")
-        
-                if st.button("✅ Enregistrer le combiné maintenant"):
-                    match = "Combiné"
-                    sport = "Multi"
-                    type_pari = "Combiné"
-                    pari = " + ".join([f"{s['match']} - {s['pari']}" for s in selections])
-        
-                    update_bankroll(-float(mise_finale))
-                    cursor.execute("""
-                        INSERT INTO paris (match, sport, type, pari, cote, mise, strategie, resultat, gain, date)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, 'Non joué', 0, %s)
-                    """, (match, sport, type_pari, pari, round(cote_combinee, 2), round(mise_finale, 2), strategie, datetime.datetime.now()))
-                    conn.commit()
-                    st.success("Combiné enregistré et bankroll mise à jour ✅")
-                    st.rerun()
+    
+                # --- Deuxième petit formulaire pour valider
+                with st.form("formulaire_validation_combine"):
+                    enregistrer_c = st.form_submit_button("✅ Enregistrer le combiné maintenant")
+                    if enregistrer_c:
+                        match = "Combiné"
+                        sport = "Multi"
+                        type_pari = "Combiné"
+                        pari = " + ".join([f"{s['match']} - {s['pari']}" for s in st.session_state.selections])
+    
+                        update_bankroll(-float(st.session_state.mise_finale_combine))
+                        cursor.execute("""
+                            INSERT INTO paris (match, sport, type, pari, cote, mise, strategie, resultat, gain, date)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, 'Non joué', 0, %s)
+                        """, (
+                            match,
+                            sport,
+                            type_pari,
+                            pari,
+                            round(st.session_state.cote_combinee, 2),
+                            round(st.session_state.mise_finale_combine, 2),
+                            st.session_state.strategie_combine,
+                            datetime.datetime.now()
+                        ))
+                        conn.commit()
+                        st.success("Combiné enregistré et bankroll mise à jour ✅")
+                        st.rerun()
             else:
                 st.error("Merci de remplir au moins 2 sélections pour pouvoir calculer un combiné.")
 
