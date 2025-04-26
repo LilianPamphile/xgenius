@@ -98,54 +98,7 @@ with tab1:
         ax.grid(True)
         st.pyplot(fig, clear_figure=True)
         st.caption("📌 Proba = (1 / cote) × 1.08")
-
-    # --- Formulaire de pari simple (Version clean avec bouton de calcul) ---
-    st.markdown("### ➕ Ajouter un pari simple")
-    
-    with st.form("formulaire_pari_simple"):
-        match = st.text_input("Match / Événement", placeholder="Ex : PSG - Marseille")
         
-        col1, col2 = st.columns(2)
-        with col1:
-            sport = st.selectbox("Sport", ["Football", "Basket", "Tennis"])
-        with col2:
-            type_pari = st.selectbox(
-                "Type de pari",
-                ["Vainqueur", "Over/Under", "Score exact", "Gagne 1er set", "Gagne au moins un set", "Les deux équipes marquent", "Autre"]
-            )
-        
-        pari = st.text_input("Ton pari", placeholder="Ex : PSG gagne")
-        cote = st.number_input("Cote", min_value=1.01, max_value=50.0, step=0.01, format="%.2f")
-        strategie = st.radio("Stratégie de mise :", ["Kelly", "Demi-Kelly"], horizontal=True)
-    
-        calculer = st.form_submit_button("💸 Calculer la mise recommandée")
-    
-    if calculer:
-        if match and pari and cote >= 1.01:
-            proba = proba_estimee(cote)
-            bankroll = get_bankroll()
-            mise_kelly = kelly(bankroll, proba, cote)
-            mise_finale = mise_kelly if strategie == "Kelly" else mise_kelly / 2
-    
-            st.success(f"💸 Mise recommandée : {mise_finale:.2f} €")
-    
-            st.markdown("---")
-            st.markdown("### 🔍 Récapitulatif de ton pari")
-            st.info(f"**{match}** ➔ **{pari}** @ **{cote:.2f}** ({sport} - {type_pari})")
-    
-            # --- Nouveau bouton Enregistrement séparé
-            if st.button("✅ Enregistrer le pari maintenant"):
-                update_bankroll(-mise_finale)
-                cursor.execute("""
-                    INSERT INTO paris (match, sport, type, pari, cote, mise, strategie, resultat, gain)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, 'Non joué', 0)
-                """, (match, sport, type_pari, pari, cote, round(mise_finale, 2), strategie))
-                conn.commit()
-                st.success("Pari enregistré et bankroll mise à jour ✅")
-                st.rerun()
-        else:
-            st.error("Merci de remplir tous les champs correctement pour calculer la mise.")
-
     # --- Choix du type de pari général ---
     st.markdown("### ➕ Ajouter un nouveau pari")
     type_global = st.radio("Quel type de pari veux-tu ajouter ?", ["Pari simple", "Pari combiné"], horizontal=True)
