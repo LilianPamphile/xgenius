@@ -354,45 +354,45 @@ with tab1:
     gain_net = total_gains - total_mises
     roi_global = (gain_net / total_mises * 100) if total_mises > 0 else 0
     
-    # Seuil d'alerte
-    seuil_paris = 5
+    # Définir couleurs pour chaque KPI
+    color_paris = "blue"  # Neutre
+    color_gain = "green" if gain_net >= 0 else "red"
+    color_roi = "green" if roi_global >= 0 else "red"
+    color_taux = "green" if taux_reussite >= 50 else "red"
     
-    # Définir couleurs dynamiques
-    color = "green"
+    # Émojis dynamiques
     roi_emoji = "📈" if roi_global >= 0 else "📉"
     taux_emoji = "🔥" if taux_reussite >= 50 else "❄️"
     
-    if nb_paris > seuil_paris:
-        color = "red"  # Si plus de 5 paris ➔ tout en rouge !
-    
-    # Affichage KPI
+    # Affichage KPI aligné
     col1, col2, col3, col4 = st.columns(4)
     
     col1.markdown(
-        f"<div style='text-align:center; font-size:1.5rem; color:{color};'>{nb_paris}</div>"
+        f"<div style='text-align:center; font-size:1.5rem; color:{color_paris};'>{nb_paris}</div>"
         "<div style='text-align:center;'>Paris joués</div>",
         unsafe_allow_html=True
     )
     
     col2.markdown(
-        f"<div style='text-align:center; font-size:1.5rem; color:{color};'>{gain_net:.2f} €</div>"
+        f"<div style='text-align:center; font-size:1.5rem; color:{color_gain};'>{gain_net:.2f} €</div>"
         "<div style='text-align:center;'>Gain net</div>",
         unsafe_allow_html=True
     )
     
     col3.markdown(
-        f"<div style='text-align:center; font-size:1.5rem; color:{color};'>{roi_emoji} {roi_global:.1f}%</div>"
+        f"<div style='text-align:center; font-size:1.5rem; color:{color_roi};'>{roi_emoji} {roi_global:.1f}%</div>"
         "<div style='text-align:center;'>ROI global</div>",
         unsafe_allow_html=True
     )
     
     col4.markdown(
-        f"<div style='text-align:center; font-size:1.5rem; color:{color};'>{taux_emoji} {taux_reussite:.1f}%</div>"
+        f"<div style='text-align:center; font-size:1.5rem; color:{color_taux};'>{taux_emoji} {taux_reussite:.1f}%</div>"
         "<div style='text-align:center;'>Taux réussite</div>",
         unsafe_allow_html=True
     )
     
-    # Alerte visuelle spécifique
+    # Alerte sur le nombre de paris
+    seuil_paris = 5
     if nb_paris > seuil_paris:
         st.error(f"🚨 Attention : {nb_paris} paris effectués aujourd'hui. Risque de surbetting, reste concentré !")
 
