@@ -273,8 +273,6 @@ with tab1:
                     st.success("✅ Combiné enregistré et bankroll mise à jour !")
                     st.session_state.combine_ready = False
                     st.rerun()
-            else:
-                st.error("Merci de remplir au moins 2 sélections pour pouvoir calculer un combiné.")
 
     # --- Traitement des paris non joués ---
     st.markdown("---")
