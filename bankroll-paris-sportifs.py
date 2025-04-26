@@ -254,8 +254,10 @@ with tab1:
                     sport = "Multi"
                     type_pari = "Combiné"
                     pari = " + ".join([f"{s['match']} - {s['pari']}" for s in st.session_state.selections])
-    
+                
                     update_bankroll(-float(st.session_state.mise_finale_combine))
+                
+                    cursor.execute("SET search_path TO public")   # <<< AJOUTER CA ICI !!!
                     cursor.execute("""
                         INSERT INTO paris (match, sport, type, pari, cote, mise, strategie, resultat, gain, date)
                         VALUES (%s, %s, %s, %s, %s, %s, %s, 'Non joué', 0, %s)
@@ -273,6 +275,7 @@ with tab1:
                     st.success("✅ Combiné enregistré et bankroll mise à jour !")
                     st.session_state.combine_ready = False
                     st.rerun()
+
 
     # --- Traitement des paris non joués ---
     st.markdown("---")
