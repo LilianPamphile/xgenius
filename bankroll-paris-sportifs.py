@@ -105,6 +105,9 @@ with tab1:
     
     # --- Pari Simple ---
     if type_global == "Pari simple":
+        if "paris_simple_ready" not in st.session_state:
+            st.session_state.paris_simple_ready = False
+    
         with st.form("formulaire_pari_simple"):
             match = st.text_input("Match / Événement", placeholder="Ex : PSG - Marseille")
             
@@ -125,49 +128,54 @@ with tab1:
         
         if calculer:
             if match and pari and cote >= 1.01:
-                # Stockage en session pour conserver les infos
-                st.session_state.match = match
-                st.session_state.sport = sport
-                st.session_state.type_pari = type_pari
-                st.session_state.pari = pari
-                st.session_state.cote = cote
-                st.session_state.strategie = strategie
-    
                 proba = proba_estimee(cote)
                 bankroll = get_bankroll()
                 mise_kelly = kelly(bankroll, proba, cote)
                 mise_finale = mise_kelly if strategie == "Kelly" else mise_kelly / 2
-                st.session_state.mise_finale = mise_finale  # Sauvegarde
+    
+                # Stocker pour récap et validation
+                st.session_state.match_simple = match
+                st.session_state.sport_simple = sport
+                st.session_state.type_pari_simple = type_pari
+                st.session_state.pari_simple = pari
+                st.session_state.cote_simple = cote
+                st.session_state.strategie_simple = strategie
+                st.session_state.mise_finale_simple = mise_finale
+                st.session_state.paris_simple_ready = True
     
                 st.success(f"💸 Mise recommandée : {mise_finale:.2f} €")
-    
-                st.markdown("---")
-                st.markdown("### 🔍 Récapitulatif de ton pari")
-                st.info(f"**{match}** ➔ **{pari}** @ **{cote:.2f}** ({sport} - {type_pari})")
-    
-                # --- Deuxième formulaire pour valider
-                with st.form("formulaire_validation_simple"):
-                    enregistrer = st.form_submit_button("✅ Enregistrer le pari maintenant")
-                    if enregistrer:
-                        update_bankroll(-mise_finale)
-                        cursor.execute("""
-                            INSERT INTO paris (match, sport, type, pari, cote, mise, strategie, resultat, gain, date)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, 'Non joué', 0, %s)
-                        """, (
-                            st.session_state.match,
-                            st.session_state.sport,
-                            st.session_state.type_pari,
-                            st.session_state.pari,
-                            st.session_state.cote,
-                            round(st.session_state.mise_finale, 2),
-                            st.session_state.strategie,
-                            datetime.datetime.now()
-                        ))
-                        conn.commit()
-                        st.success("Pari enregistré et bankroll mise à jour ✅")
-                        st.rerun()
             else:
                 st.error("Merci de remplir tous les champs correctement pour calculer la mise.")
+    
+        # --- Partie validation après calcul
+        if st.session_state.paris_simple_ready:
+            st.markdown("---")
+            st.markdown("### 🔍 Récapitulatif de ton pari")
+            st.info(f"**{st.session_state.match_simple}** ➔ **{st.session_state.pari_simple}** @ **{st.session_state.cote_simple:.2f}** ({st.session_state.sport_simple} - {st.session_state.type_pari_simple})")
+    
+            with st.form("formulaire_validation_simple"):
+                enregistrer = st.form_submit_button("✅ Enregistrer le pari maintenant")
+                if enregistrer:
+                    update_bankroll(-st.session_state.mise_finale_simple)
+                    cursor.execute("""
+                        INSERT INTO paris (match, sport, type, pari, cote, mise, strategie, resultat, gain, date)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, 'Non joué', 0, %s)
+                    """, (
+                        st.session_state.match_simple,
+                        st.session_state.sport_simple,
+                        st.session_state.type_pari_simple,
+                        st.session_state.pari_simple,
+                        st.session_state.cote_simple,
+                        round(st.session_state.mise_finale_simple, 2),
+                        st.session_state.strategie_simple,
+                        datetime.datetime.now()
+                    ))
+                    conn.commit()
+                    st.success("✅ Pari enregistré et bankroll mise à jour !")
+                    st.session_state.paris_simple_ready = False
+                    st.rerun()
+                else:
+                    st.error("Merci de remplir tous les champs correctement pour calculer la mise.")
 
     
     # --- Pari Combiné ---
