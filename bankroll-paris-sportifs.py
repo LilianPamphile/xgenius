@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import psycopg2
+import datetime
 
 # --- Connexion BDD ---
 DATABASE_URL = "postgresql://postgres:jDDqfaqpspVDBBwsqxuaiSDNXjTxjMmP@shortline.proxy.rlwy.net:36536/railway"
@@ -168,8 +169,7 @@ with tab1:
                 conn.commit()
                 st.success("Combiné enregistré ✅")
                 st.rerun()
-    
-    
+        
     
     # --- Traitement des paris non joués ---
     st.markdown("---")
@@ -208,288 +208,236 @@ with tab1:
     else:
         st.info("Aucun pari à traiter.")
     
-    # --- Top Gagnés ---
+    # --- Résumé du jour ---
     st.markdown("---")
-    st.markdown("### 🏆 Top 3 gains")
-    cursor.execute("SELECT match, pari, gain FROM paris WHERE resultat = 'Gagné' ORDER BY gain DESC LIMIT 3")
-    gagnes = cursor.fetchall()
-    for m, p, g in gagnes:
-        st.markdown(f"✅ **{m}** - {p} : **+{g:.2f} €**")
+    st.markdown("### 📅 Résumé de ta journée de paris")
     
-    # --- Top Pertes ---
-    st.markdown("### ❌ Top 3 pertes")
-    cursor.execute("SELECT match, pari, mise FROM paris WHERE resultat = 'Perdu' ORDER BY mise DESC LIMIT 3")
-    perdus = cursor.fetchall()
-    for m, p, m_ in perdus:
-        st.markdown(f"❌ **{m}** - {p} : **-{m_:.2f} €**")
+    # Date actuelle
+    today = datetime.date.today()
+    
+    # Récupération des stats du jour
+    cursor.execute("""
+        SELECT 
+            COUNT(*) AS nb_paris,
+            SUM(mise) AS total_mises,
+            SUM(gain) AS total_gains,
+            SUM(CASE WHEN resultat = 'Gagné' THEN 1 ELSE 0 END) AS nb_gagnes
+        FROM paris
+        WHERE DATE(date) = %s
+    """, (today,))
+    row = cursor.fetchone()
+    
+    nb_paris = row[0] if row[0] else 0
+    total_mises = row[1] if row[1] else 0
+    total_gains = row[2] if row[2] else 0
+    nb_gagnes = row[3] if row[3] else 0
+    
+    taux_reussite = (nb_gagnes / nb_paris * 100) if nb_paris > 0 else 0
+    gain_net = total_gains - total_mises
+    roi_global = (gain_net / total_mises * 100) if total_mises > 0 else 0
+    
+    # Seuil d'alerte
+    seuil_paris = 5
+    
+    # Définir couleurs dynamiques
+    color = "green"
+    roi_emoji = "📈" if roi_global >= 0 else "📉"
+    taux_emoji = "🔥" if taux_reussite >= 50 else "❄️"
+    
+    if nb_paris > seuil_paris:
+        color = "red"  # Si plus de 5 paris ➔ tout en rouge !
+    
+    # Affichage KPI
+    col1, col2, col3, col4 = st.columns(4)
+    
+    col1.markdown(
+        f"<div style='text-align:center; font-size:1.5rem; color:{color};'>{nb_paris}</div>"
+        "<div style='text-align:center;'>Paris joués</div>",
+        unsafe_allow_html=True
+    )
+    
+    col2.markdown(
+        f"<div style='text-align:center; font-size:1.5rem; color:{color};'>{gain_net:.2f} €</div>"
+        "<div style='text-align:center;'>Gain net</div>",
+        unsafe_allow_html=True
+    )
+    
+    col3.markdown(
+        f"<div style='text-align:center; font-size:1.5rem; color:{color};'>{roi_emoji} {roi_global:.1f}%</div>"
+        "<div style='text-align:center;'>ROI global</div>",
+        unsafe_allow_html=True
+    )
+    
+    col4.markdown(
+        f"<div style='text-align:center; font-size:1.5rem; color:{color};'>{taux_emoji} {taux_reussite:.1f}%</div>"
+        "<div style='text-align:center;'>Taux réussite</div>",
+        unsafe_allow_html=True
+    )
+    
+    # Alerte visuelle spécifique
+    if nb_paris > seuil_paris:
+        st.error(f"🚨 Attention : {nb_paris} paris effectués aujourd'hui. Risque de surbetting, reste concentré !")
+
 
 with tab2:
-    st.markdown("## 📊 Dashboard avancé – Aide à la décision")
-    st.caption("Analyse complète pour comprendre et améliorer ta stratégie de paris 🔍")
+    st.markdown("## 📊 Dashboard Avancé – Suivi intelligent")
+    st.caption("Analyse rapide pour comprendre ta performance et prendre de meilleures décisions 🔍")
 
-    # LIGNE 1 : Analyse par SPORT
-    col1, col2 = st.columns([1.2, 1])
-    
-    with col1:
-        st.markdown("**ROI par sport**")
-        st.caption("Permet de mesurer la rentabilité de chaque sport. ROI = ((Gains - Mises) / Mises) × 100")
-        cursor.execute("""
-            SELECT sport, SUM(mise) AS mises, SUM(gain) AS gains
-            FROM paris
-            GROUP BY sport
-        """)
-        df_roi_sport = pd.DataFrame(cursor.fetchall(), columns=["Sport", "Mises (€)", "Gains (€)"])
-        df_roi_sport["ROI (%)"] = ((df_roi_sport["Gains (€)"] - df_roi_sport["Mises (€)"]) / df_roi_sport["Mises (€)"]) * 100
-        cols = st.columns(len(df_roi_sport))
-        for _, row in df_roi_sport.iterrows():
-            roi = row["ROI (%)"]
-            color = "green" if roi >= 0 else "red"
-            sign = "+" if roi >= 0 else ""
-            st.markdown(
-                f"<div style='margin-bottom: 0.5rem;'><strong>{row['Sport']}</strong><br>"
-                f"<span style='color:{color}; font-size:1.3rem;'>{sign}{roi:.1f} %</span></div>",
-                unsafe_allow_html=True
-            )
-    
-    with col2:
-        st.markdown("**Taux de réussite par sport**")
-        st.caption("Pourcentage de paris gagnés sur l’ensemble des paris effectués par sport.")
-        cursor.execute("""
-            SELECT sport, COUNT(*) AS nb, 
-                   SUM(CASE WHEN resultat = 'Gagné' THEN 1 ELSE 0 END) AS gagnes
-            FROM paris
-            GROUP BY sport
-        """)
-        rows = cursor.fetchall()
-        df_taux_sport = pd.DataFrame(rows, columns=["Sport", "Nb Paris", "Gagnés"])
-        df_taux_sport["Taux de réussite (%)"] = (df_taux_sport["Gagnés"] / df_taux_sport["Nb Paris"]) * 100
-        df_taux_sport = df_taux_sport.sort_values(by="Taux de réussite (%)", ascending=False)
-    
-        fig2, ax2 = plt.subplots()
-        bars = ax2.bar(df_taux_sport["Sport"], df_taux_sport["Taux de réussite (%)"], color="mediumseagreen")
-        ax2.set_ylabel("Taux de réussite (%)")
-        ax2.set_title("Taux de réussite par sport")
-        ax2.bar_label(bars, fmt="%.1f%%", padding=3)
-        fig2.tight_layout()
-        st.pyplot(fig2)
-    
-    # LIGNE 2 : Analyse par TYPE
-    col3, col4 = st.columns([1.2, 1])
-    
-    with col3:
-        st.markdown("**ROI par type de pari**")
-        st.caption("Permet de mesurer la rentabilité par type de pari joué.")
-        cursor.execute("""
-            SELECT type, SUM(mise) AS mises, SUM(gain) AS gains
-            FROM paris
-            GROUP BY type
-        """)
-        df_roi_type = pd.DataFrame(cursor.fetchall(), columns=["Type", "Mises (€)", "Gains (€)"])
-        df_roi_type["ROI (%)"] = ((df_roi_type["Gains (€)"] - df_roi_type["Mises (€)"]) / df_roi_type["Mises (€)"]) * 100
-        for _, row in df_roi_type.iterrows():
-            roi = row["ROI (%)"]
-            color = "green" if roi >= 0 else "red"
-            sign = "+" if roi >= 0 else ""
-            st.markdown(
-                f"<div style='margin-bottom: 0.5rem;'><strong>{row['Type']}</strong><br>"
-                f"<span style='color:{color}; font-size:1.3rem;'>{sign}{roi:.1f} %</span></div>",
-                unsafe_allow_html=True
-            )
+    today = datetime.date.today()
 
+    # --- Récupération des stats globales ---
+    cursor.execute("""
+        SELECT 
+            COUNT(*) AS nb_paris,
+            SUM(mise) AS total_mises,
+            SUM(gain) AS total_gains,
+            SUM(CASE WHEN resultat = 'Gagné' THEN 1 ELSE 0 END) AS nb_gagnes
+        FROM paris
+    """)
+    row = cursor.fetchone()
 
-    with col4:
-        st.markdown("**Taux de réussite par type de pari**")
-        st.caption("Part des paris gagnés selon leur typologie (ex : Over/Under, Vainqueur, etc.).")
-        cursor.execute("""
-            SELECT type, COUNT(*) AS nb,
-                   SUM(CASE WHEN resultat = 'Gagné' THEN 1 ELSE 0 END) AS gagnes
-            FROM paris
-            GROUP BY type
-        """)
-        rows = cursor.fetchall()
-        df_taux_type = pd.DataFrame(rows, columns=["Type", "Nb Paris", "Gagnés"])
-        df_taux_type["Taux de réussite (%)"] = (df_taux_type["Gagnés"] / df_taux_type["Nb Paris"]) * 100
-        df_taux_type = df_taux_type.sort_values(by="Taux de réussite (%)", ascending=False)
-    
-        fig4, ax4 = plt.subplots()
-        bars = ax4.bar(df_taux_type["Type"], df_taux_type["Taux de réussite (%)"], color="mediumpurple")
-        ax4.set_ylabel("Taux de réussite (%)")
-        ax4.set_title("Taux de réussite par type de pari")
-        ax4.bar_label(bars, fmt="%.1f%%", padding=3)
-        fig4.tight_layout()
-        st.pyplot(fig4)
+    nb_paris = row[0] if row[0] else 0
+    total_mises = row[1] if row[1] else 0
+    total_gains = row[2] if row[2] else 0
+    nb_gagnes = row[3] if row[3] else 0
 
+    taux_reussite = (nb_gagnes / nb_paris * 100) if nb_paris > 0 else 0
+    gain_net = total_gains - total_mises
+    roi_global = (gain_net / total_mises * 100) if total_mises > 0 else 0
 
-    # LIGNE 3 : Risque (Cotes & Combinés)
-    col5, col6 = st.columns([1.2, 1])
-    
-    with col5:
-        st.markdown("**% de réussite par tranche de cote**")
-        st.caption("Évalue ta performance selon les cotes jouées pour repérer ta zone de confort.")
-        cursor.execute("SELECT cote, resultat FROM paris WHERE resultat IN ('Gagné', 'Perdu')")
-        rows = cursor.fetchall()
-        tranches = {
-            "1.01–1.49": {"total": 0, "gagnés": 0},
-            "1.50–1.99": {"total": 0, "gagnés": 0},
-            "2.00–2.49": {"total": 0, "gagnés": 0},
-            "2.50–2.99": {"total": 0, "gagnés": 0},
-            "3.00+": {"total": 0, "gagnés": 0}
-        }
-        for cote, res in rows:
-            if cote < 1.50:
-                key = "1.01–1.49"
-            elif cote < 2.00:
-                key = "1.50–1.99"
-            elif cote < 2.50:
-                key = "2.00–2.49"
-            elif cote < 3.00:
-                key = "2.50–2.99"
-            else:
-                key = "3.00+"
-            tranches[key]["total"] += 1
-            if res == "Gagné":
-                tranches[key]["gagnés"] += 1
-    
-        df_tranches = pd.DataFrame([
-            [k, v["total"], v["gagnés"], (v["gagnés"] / v["total"]) * 100 if v["total"] else 0]
-            for k, v in tranches.items()
-        ], columns=["Tranche de cote", "Nb Paris", "Gagnés", "Taux de réussite (%)"])
-    
-        fig, ax = plt.subplots()
-        bars = ax.bar(df_tranches["Tranche de cote"], df_tranches["Taux de réussite (%)"], color="cornflowerblue")
-        ax.set_title("Taux de réussite par tranche de cote")
-        ax.set_ylabel("% de réussite")
-        ax.bar_label(bars, fmt="%.1f%%", padding=3)
-        fig.tight_layout()
-        st.pyplot(fig)
-    
-    with col6:
-        st.markdown("**Simples vs combinés**")
-        st.caption("Compare la rentabilité et la précision entre les paris simples et les combinés.")
-        cursor.execute("""
-            SELECT 
-                CASE WHEN type = 'Combiné' THEN 'Combiné' ELSE 'Simple' END AS categorie,
-                COUNT(*) AS nb,
-                SUM(mise) AS mises,
-                SUM(gain) AS gains,
-                SUM(CASE WHEN resultat = 'Gagné' THEN 1 ELSE 0 END) AS gagnes
-            FROM paris
-            GROUP BY categorie
-        """)
-        rows = cursor.fetchall()
-        df_simple_combine = pd.DataFrame(rows, columns=["Type", "Nb Paris", "Mises (€)", "Gains (€)", "Gagnés"])
-        df_simple_combine["ROI (%)"] = ((df_simple_combine["Gains (€)"] - df_simple_combine["Mises (€)"]) / df_simple_combine["Mises (€)"]) * 100
-        df_simple_combine["Taux de réussite (%)"] = (df_simple_combine["Gagnés"] / df_simple_combine["Nb Paris"]) * 100
-    
-        fig2, ax2 = plt.subplots()
-        colors = ["green" if x >= 0 else "red" for x in df_simple_combine["ROI (%)"]]
-        bars = ax2.barh(df_simple_combine["Type"], df_simple_combine["ROI (%)"], color=colors)
-        ax2.set_title("ROI par type (Simple vs Combiné)")
-        ax2.set_xlabel("ROI (%)")
-        ax2.axvline(0, color="black", linewidth=0.8)
-        ax2.bar_label(bars, fmt="%.1f", padding=3)
-        fig2.tight_layout()
-        st.pyplot(fig2)
-    
-    # LIGNE 4 : Comportement / Value
-    col7, col8 = st.columns([1.2, 1])
-    
-    with col7:
-        st.markdown("**Cote moyenne gagnés / perdus**")
-        st.caption("Analyse si tu gagnes grâce à des value bets (grosses cotes) ou en jouant safe. Évalue ta prise de risque.")
-        cursor.execute("""
-            SELECT resultat, AVG(cote)
-            FROM paris
-            WHERE resultat IN ('Gagné', 'Perdu')
-            GROUP BY resultat
-        """)
-        df_cote_moyenne = pd.DataFrame(cursor.fetchall(), columns=["Résultat", "Cote moyenne"])
-        colg, colp = st.columns(2)
-        with colg:
-            val = df_cote_moyenne[df_cote_moyenne["Résultat"] == "Gagné"]["Cote moyenne"].values
-            if len(val):
-                st.metric("Cote moyenne gagnée", f"{val[0]:.2f}")
-        with colp:
-            val = df_cote_moyenne[df_cote_moyenne["Résultat"] == "Perdu"]["Cote moyenne"].values
-            if len(val):
-                st.metric("Cote moyenne perdue", f"{val[0]:.2f}")
-    
-    with col8:
-        st.markdown("**Taux de réussite par niveau de mise**")
-        st.caption("Montre si tu es plus performant avec petites ou grosses mises. Aide à ajuster ta gestion de bankroll.")
-        cursor.execute("""
-            SELECT
-                CASE
-                    WHEN mise < 5 THEN '0–5'
-                    WHEN mise < 10 THEN '5–10'
-                    WHEN mise < 20 THEN '10–20'
-                    ELSE '20+'
-                END AS tranche,
-                COUNT(*) AS nb,
-                SUM(CASE WHEN resultat = 'Gagné' THEN 1 ELSE 0 END) AS gagnes
-            FROM paris
-            GROUP BY tranche
-            ORDER BY tranche
-        """)
-        df_mises = pd.DataFrame(cursor.fetchall(), columns=["Tranche de mise (€)", "Nb Paris", "Gagnés"])
-        df_mises["Taux de réussite (%)"] = (df_mises["Gagnés"] / df_mises["Nb Paris"]) * 100
-    
-        fig4, ax4 = plt.subplots()
-        bars = ax4.bar(df_mises["Tranche de mise (€)"], df_mises["Taux de réussite (%)"], color="mediumslateblue")
-        ax4.set_title("Taux de réussite par tranche de mise")
-        ax4.set_ylabel("% de réussite")
-        ax4.bar_label(bars, fmt="%.1f%%", padding=3)
-        fig4.tight_layout()
-        st.pyplot(fig4)
-    
-    # LIGNE 5 : Argent engagé
-    col9, col10 = st.columns([1.2, 1])
-    
-    with col9:
-        st.markdown("**Gain net par sport**")
-        st.caption("Affiche le gain ou la perte en € pour chaque sport. Permet d’identifier ce qui rapporte réellement.")
-        cursor.execute("""
-            SELECT sport, SUM(mise) AS mises, SUM(gain) AS gains
-            FROM paris
-            GROUP BY sport
-        """)
-        df_gain_sport = pd.DataFrame(cursor.fetchall(), columns=["Sport", "Mises (€)", "Gains (€)"])
-        df_gain_sport["Gain net (€)"] = df_gain_sport["Gains (€)"] - df_gain_sport["Mises (€)"]
-    
-        # Affichage avec couleur conditionnelle
-        metrics = df_gain_sport.set_index("Sport")["Gain net (€)"].to_dict()
-        cols = st.columns(len(metrics))
-        for sport, gain in metrics.items():
-            sign = "+" if gain >= 0 else ""
-            color = "green" if gain >= 0 else "red"
-            st.markdown(
-                f"<div style='margin-bottom: 0.5rem;'><strong>{sport}</strong><br>"
-                f"<span style='color:{color}; font-size:1.3rem;'>{sign}{gain:.0f} €</span></div>",
-                unsafe_allow_html=True
-            )
+    # --- Affichage des 4 KPI principaux ---
+    st.markdown("### 🎯 Résumé global")
+    col1, col2, col3, col4 = st.columns(4)
 
-    with col10:
-        st.markdown("**Répartition des mises par type**")
-        st.caption("Visualise où tu places ton argent selon les types de paris. Aide à aligner l’investissement avec les performances.")
-        cursor.execute("""
-            SELECT type AS "Type de pari", SUM(mise) AS "Total Mises (€)"
-            FROM paris
-            GROUP BY type
-        """)
-        df_repartition_mises = pd.DataFrame(cursor.fetchall(), columns=["Type de pari", "Total Mises (€)"])
-    
-        fig, ax = plt.subplots()
-        wedges, texts, autotexts = ax.pie(
-            df_repartition_mises["Total Mises (€)"],
-            labels=df_repartition_mises["Type de pari"],
-            autopct='%1.1f%%',
-            startangle=140,
-            wedgeprops=dict(width=0.4),
-            textprops=dict(color="black")
-        )
-        ax.set_title("Répartition des mises par type")
-        ax.axis("equal")
-        st.pyplot(fig)
+    col1.metric("Paris joués", nb_paris)
+    col2.metric("Gain net (€)", f"{gain_net:.2f}")
+    col3.metric("ROI global (%)", f"{roi_global:.1f}%")
+    col4.metric("Taux de réussite", f"{taux_reussite:.1f}%")
 
+    # --- Conseils automatiques ---
+    st.markdown("---")
+    st.markdown("### 🧠 Conseil personnalisé")
+
+    if roi_global >= 5 and taux_reussite >= 55:
+        st.success("🚀 Excellente performance : ROI et Taux de réussite très bons. Continue ta stratégie actuelle !")
+    elif roi_global >= 0 and taux_reussite < 55:
+        st.info("💡 Tes gains sont là mais ton taux de réussite est faible. Peut-être miser sur des cotes plus sûres.")
+    elif roi_global < 0 and taux_reussite >= 55:
+        st.warning("⚠️ Ton taux de réussite est bon mais tu perds de l'argent. Revois tes cotes, elles sont peut-être trop basses.")
+    else:
+        st.error("🛑 Attention : tu perds de l'argent et ton taux de réussite est bas. Il est temps de réévaluer ta stratégie.")
+
+    # --- Analyse Forces / Faiblesses ---
+    st.markdown("---")
+    st.markdown("### 🏆 Où tu performes (et où tu perds)")
+
+    # Top Sport
+    cursor.execute("""
+        SELECT sport, SUM(gain - mise) AS gain_net
+        FROM paris
+        GROUP BY sport
+        ORDER BY gain_net DESC
+        LIMIT 1
+    """)
+    best_sport = cursor.fetchone()
+    if best_sport:
+        st.success(f"🥇 Meilleur sport : **{best_sport[0]}** (+{best_sport[1]:.2f} €)")
+
+    # Worst Sport
+    cursor.execute("""
+        SELECT sport, SUM(gain - mise) AS gain_net
+        FROM paris
+        GROUP BY sport
+        ORDER BY gain_net ASC
+        LIMIT 1
+    """)
+    worst_sport = cursor.fetchone()
+    if worst_sport:
+        st.error(f"🥶 Sport le moins rentable : **{worst_sport[0]}** ({worst_sport[1]:.2f} €)")
+
+    # --- Type de pari gagnant / perdant ---
+    st.markdown("---")
+    st.markdown("### 🎯 Types de paris : Analyse")
+
+    cursor.execute("""
+        SELECT type, SUM(gain - mise) AS gain_net
+        FROM paris
+        GROUP BY type
+        ORDER BY gain_net DESC
+        LIMIT 1
+    """)
+    best_type = cursor.fetchone()
+    if best_type:
+        st.success(f"✅ Type de pari le plus rentable : **{best_type[0]}** (+{best_type[1]:.2f} €)")
+
+    cursor.execute("""
+        SELECT type, SUM(gain - mise) AS gain_net
+        FROM paris
+        GROUP BY type
+        ORDER BY gain_net ASC
+        LIMIT 1
+    """)
+    worst_type = cursor.fetchone()
+    if worst_type:
+        st.error(f"❌ Type de pari le moins rentable : **{worst_type[0]}** ({worst_type[1]:.2f} €)")
+
+    # --- Performance par tranche de cote ---
+    st.markdown("---")
+    st.markdown("### 🎯 Tranche de cotes la plus rentable")
+
+    cursor.execute("SELECT cote, resultat FROM paris WHERE resultat IN ('Gagné', 'Perdu')")
+    rows = cursor.fetchall()
+
+    tranches = {
+        "1.01–1.49": {"total": 0, "gagnés": 0},
+        "1.50–1.99": {"total": 0, "gagnés": 0},
+        "2.00–2.49": {"total": 0, "gagnés": 0},
+        "2.50–2.99": {"total": 0, "gagnés": 0},
+        "3.00+": {"total": 0, "gagnés": 0}
+    }
+    for cote, res in rows:
+        if cote < 1.50:
+            key = "1.01–1.49"
+        elif cote < 2.00:
+            key = "1.50–1.99"
+        elif cote < 2.50:
+            key = "2.00–2.49"
+        elif cote < 3.00:
+            key = "2.50–2.99"
+        else:
+            key = "3.00+"
+        tranches[key]["total"] += 1
+        if res == "Gagné":
+            tranches[key]["gagnés"] += 1
+
+    best_tranche = None
+    best_taux = 0
+    for tranche, data in tranches.items():
+        if data["total"] > 0:
+            taux = (data["gagnés"] / data["total"]) * 100
+            if taux > best_taux:
+                best_taux = taux
+                best_tranche = tranche
+
+    if best_tranche:
+        st.success(f"🏅 Meilleure tranche de cote : **{best_tranche}** avec {best_taux:.1f}% de réussite")
+
+    # --- Gestion du risque de mise (>10% bankroll) ---
+    st.markdown("---")
+    st.markdown("### 🛡️ Analyse du risque de mise")
+
+    # Récupérer bankroll actuelle depuis ta table bankroll
+    bankroll_actuelle = get_bankroll()
+
+    cursor.execute("SELECT mise FROM paris")
+    mises = cursor.fetchall()
+
+    grosse_mises = [mise[0] for mise in mises if mise[0] > 0.1 * bankroll_actuelle]
+    pourcentage_risque = (len(grosse_mises) / len(mises) * 100) if mises else 0
+
+    if pourcentage_risque > 20:
+        st.error(f"🚨 {pourcentage_risque:.1f}% de tes paris dépassent 10% de ta bankroll actuelle ({bankroll_actuelle:.2f}€). Attention au risque !")
+    else:
+        st.success(f"🛡️ Seulement {pourcentage_risque:.1f}% de grosses mises. Très bonne gestion du risque.")
 
 
