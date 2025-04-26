@@ -139,9 +139,9 @@ with tab1:
                 if st.button("✅ Enregistrer le pari maintenant"):
                     update_bankroll(-mise_finale)
                     cursor.execute("""
-                        INSERT INTO paris (match, sport, type, pari, cote, mise, strategie, resultat, gain)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, 'Non joué', 0)
-                    """, (match, sport, type_pari, pari, cote, round(mise_finale, 2), strategie))
+                        INSERT INTO paris (match, sport, type, pari, cote, mise, strategie, resultat, gain, date)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, 'Non joué', 0, %s)
+                    """, (match, sport, type_pari, pari, cote, round(mise_finale, 2), strategie, datetime.datetime.now()))
                     conn.commit()
                     st.success("Pari enregistré et bankroll mise à jour ✅")
                     st.rerun()
@@ -213,9 +213,9 @@ with tab1:
         
                     update_bankroll(-float(mise_finale))
                     cursor.execute("""
-                        INSERT INTO paris (match, sport, type, pari, cote, mise, strategie, resultat, gain)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, 'Non joué', 0)
-                    """, (match, sport, type_pari, pari, round(float(cote_combinee), 2), round(float(mise_finale), 2), strategie))
+                        INSERT INTO paris (match, sport, type, pari, cote, mise, strategie, resultat, gain, date)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, 'Non joué', 0, %s)
+                    """, (match, sport, type_pari, pari, round(cote_combinee, 2), round(mise_finale, 2), strategie, datetime.datetime.now()))
                     conn.commit()
                     st.success("Combiné enregistré et bankroll mise à jour ✅")
                     st.rerun()
