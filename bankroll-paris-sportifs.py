@@ -355,7 +355,7 @@ with tab1:
     roi_global = (gain_net / total_mises * 100) if total_mises > 0 else 0
     
     # Définir couleurs pour chaque KPI
-    color_paris = "blue"  # Neutre
+    color_paris = "white"  # Neutre
     color_gain = "green" if gain_net >= 0 else "red"
     color_roi = "green" if roi_global >= 0 else "red"
     color_taux = "green" if taux_reussite >= 50 else "red"
