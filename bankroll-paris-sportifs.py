@@ -344,7 +344,7 @@ with tab1:
         FROM paris
         WHERE date >= %s AND date < %s
     """, (today, tomorrow))
-
+    row = cursor.fetchone()  # ✅ Cette ligne manquait
     
     nb_paris = row[0] if row[0] else 0
     total_mises = row[1] if row[1] else 0
