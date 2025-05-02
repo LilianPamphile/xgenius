@@ -413,8 +413,6 @@ with tab2:
     st.markdown("## 📊 Dashboard Avancé – Suivi intelligent")
     st.caption("Analyse rapide pour comprendre ta performance et prendre de meilleures décisions 🔍")
 
-    today = datetime.date.today()
-
     # --- Récupération des stats globales ---
     cursor.execute("""
         SELECT 
