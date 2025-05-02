@@ -285,7 +285,6 @@ with tab1:
                         st.error("🚫 Limite atteinte : Tu as déjà enregistré 3 paris aujourd'hui.")
                     else:
                         try:
-                            update_bankroll(-float(st.session_state.mise_finale_combine))
                             cursor.execute("SET search_path TO public")
                             cursor.execute("""
                                 INSERT INTO paris (match, sport, type, pari, cote, mise, strategie, resultat, gain, date)
@@ -296,11 +295,15 @@ with tab1:
                                 st.session_state.cote_combinee,
                                 st.session_state.mise_finale_combine,
                                 st.session_state.strategie_combine,
-                                datetime.now()
+                                datetime.now(pytz.utc)  # 👍 pour cohérence UTC
                             ))
+                            conn.commit()  # ✅ D'abord, on valide l'enregistrement
+                            update_bankroll(-float(st.session_state.mise_finale_combine))  # ✅ Ensuite on met à jour la bankroll
+                            st.success("✅ Combiné enregistré et bankroll mise à jour !")
+                            st.session_state.combine_ready = False
+                            st.rerun()
                         except Exception as e:
-                            st.error(f"Erreur lors de l'enregistrement : {e}")
-
+                            st.error(f"Erreur lors de l'enregistrement du combiné : {e}")
 
 
     # --- Traitement des paris non joués ---
