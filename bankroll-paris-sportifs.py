@@ -4,7 +4,8 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import psycopg2
-import datetime
+import pytz
+from datetime import datetime, timedelta, time
 
 # --- Connexion BDD ---
 DATABASE_URL = "postgresql://postgres:jDDqfaqpspVDBBwsqxuaiSDNXjTxjMmP@shortline.proxy.rlwy.net:36536/railway"
@@ -46,9 +47,21 @@ def proba_estimee(c):
     return max(0.01, min(0.99, implicite * 1.08))
 
 def nombre_paris_du_jour():
-    today = datetime.date.today()
-    cursor.execute("SELECT COUNT(*) FROM paris WHERE DATE(date) = %s", (today,))
+    start_utc, end_utc = get_local_day_range_utc()
+    cursor.execute("SELECT COUNT(*) FROM paris WHERE date >= %s AND date < %s", (start_utc, end_utc))
     return cursor.fetchone()[0]
+
+def get_local_day_range_utc():
+    paris_tz = pytz.timezone("Europe/Paris")
+    now_local = datetime.now(paris_tz)
+
+    start_local = paris_tz.localize(datetime.combine(now_local.date(), time.min))  # 00:00:00
+    end_local = paris_tz.localize(datetime.combine(now_local.date() + timedelta(days=1), time.min))  # lendemain
+
+    start_utc = start_local.astimezone(pytz.utc)
+    end_utc = end_local.astimezone(pytz.utc)
+
+    return start_utc, end_utc
 
 # --- Interface Streamlit ---
 st.set_page_config(page_title="Bankroll - Paris Sportifs", layout="centered")
@@ -332,9 +345,7 @@ with tab1:
     st.markdown("### 📅 Résumé de ta journée de paris")
     
     # Récupération des stats du jour
-    today = datetime.date.today()
-    tomorrow = today + datetime.timedelta(days=1)
-    
+    start_utc, end_utc = get_local_day_range_utc()
     cursor.execute("""
         SELECT 
             COUNT(*) AS nb_paris,
@@ -343,7 +354,7 @@ with tab1:
             SUM(CASE WHEN resultat = 'Gagné' THEN 1 ELSE 0 END) AS nb_gagnes
         FROM paris
         WHERE date >= %s AND date < %s
-    """, (today, tomorrow))
+    """, (start_utc, end_utc))
     row = cursor.fetchone()  # ✅ Cette ligne manquait
     
     nb_paris = row[0] if row[0] else 0
