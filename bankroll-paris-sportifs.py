@@ -201,7 +201,7 @@ with tab1:
                             st.session_state.cote_simple,
                             round(st.session_state.mise_finale_simple, 2),
                             st.session_state.strategie_simple,
-                            datetime.datetime.now()
+                            datetime.now()
                         ))
                         conn.commit()
                         st.success("✅ Pari enregistré et bankroll mise à jour !")
@@ -296,7 +296,7 @@ with tab1:
                                 st.session_state.cote_combinee,
                                 st.session_state.mise_finale_combine,
                                 st.session_state.strategie_combine,
-                                datetime.datetime.now()
+                                datetime.now()
                             ))
                         except Exception as e:
                             st.error(f"Erreur lors de l'enregistrement : {e}")
