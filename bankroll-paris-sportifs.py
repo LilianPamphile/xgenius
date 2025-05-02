@@ -273,6 +273,112 @@ with tab1:
                         st.success("Combiné enregistré et bankroll mise à jour !")
                         st.session_state.combine_ready = False
                         st.rerun()
+    
+
+    # --- Traitement des paris non joués ---
+    st.markdown("---")
+    st.markdown("### 🔧 Traiter les paris non joués")
+    cursor.execute("SELECT id, match, pari, cote, mise FROM paris WHERE resultat = 'Non joué' ORDER BY date DESC")
+    non_joues = cursor.fetchall()
+    
+    if non_joues:
+        for pid, m, p, c, mise in non_joues:
+            st.markdown(f"➡️ **{m}** - {p} @ {c} | Mise : {mise:.2f} €")
+            col1, col2, col3 = st.columns(3)
+    
+            with col1:
+                if st.button("✅ Gagné", key=f"g{pid}"):
+                    gain = round(mise * c, 2)
+                    update_bankroll(gain)
+                    cursor.execute("UPDATE paris SET resultat = 'Gagné', gain = %s WHERE id = %s", (gain, pid))
+                    conn.commit()
+                    st.success("Pari mis à jour comme Gagné")
+                    st.rerun()
+    
+            with col2:
+                if st.button("❌ Perdu", key=f"p{pid}"):
+                    cursor.execute("UPDATE paris SET resultat = 'Perdu', gain = 0 WHERE id = %s", (pid,))
+                    conn.commit()
+                    st.error("Pari mis à jour comme Perdu")
+                    st.rerun()
+    
+            with col3:
+                if st.button("🗑️ Annuler", key=f"a{pid}"):
+                    update_bankroll(mise)  # On rembourse la mise
+                    cursor.execute("DELETE FROM paris WHERE id = %s", (pid,))
+                    conn.commit()
+                    st.warning("Pari annulé et mise remboursée")
+                    st.rerun()
+    else:
+        st.info("Aucun pari à traiter.")
+    
+    # --- Résumé du jour ---
+    st.markdown("---")
+    st.markdown("### 📅 Résumé de ta journée de paris")
+    
+    # Récupération des stats du jour
+    start_utc, end_utc = get_local_day_range_utc()
+    cursor.execute("""
+        SELECT 
+            COUNT(*) AS nb_paris,
+            SUM(mise) AS total_mises,
+            SUM(gain) AS total_gains,
+            SUM(CASE WHEN resultat = 'Gagné' THEN 1 ELSE 0 END) AS nb_gagnes
+        FROM paris
+        WHERE date >= %s AND date < %s
+    """, (start_utc, end_utc))
+    row = cursor.fetchone()  # ✅ Cette ligne manquait
+    
+    nb_paris = row[0] if row[0] else 0
+    total_mises = row[1] if row[1] else 0
+    total_gains = row[2] if row[2] else 0
+    nb_gagnes = row[3] if row[3] else 0
+    
+    taux_reussite = (nb_gagnes / nb_paris * 100) if nb_paris > 0 else 0
+    gain_net = total_gains - total_mises
+    roi_global = (gain_net / total_mises * 100) if total_mises > 0 else 0
+    
+    # Définir couleurs pour chaque KPI
+    color_paris = "white"  # Neutre
+    color_gain = "green" if gain_net >= 0 else "red"
+    color_roi = "green" if roi_global >= 0 else "red"
+    color_taux = "green" if taux_reussite >= 50 else "red"
+    
+    # Émojis dynamiques
+    roi_emoji = "📈" if roi_global >= 0 else "📉"
+    taux_emoji = "🔥" if taux_reussite >= 50 else "❄️"
+    
+    # Affichage KPI aligné
+    col1, col2, col3, col4 = st.columns(4)
+    
+    col1.markdown(
+        f"<div style='text-align:center; font-size:1.5rem; color:{color_paris};'>{nb_paris}</div>"
+        "<div style='text-align:center;'>Paris joués</div>",
+        unsafe_allow_html=True
+    )
+    
+    col2.markdown(
+        f"<div style='text-align:center; font-size:1.5rem; color:{color_gain};'>{gain_net:.2f} €</div>"
+        "<div style='text-align:center;'>Gain net</div>",
+        unsafe_allow_html=True
+    )
+    
+    col3.markdown(
+        f"<div style='text-align:center; font-size:1.5rem; color:{color_roi};'>{roi_emoji} {roi_global:.1f}%</div>"
+        "<div style='text-align:center;'>ROI global</div>",
+        unsafe_allow_html=True
+    )
+    
+    col4.markdown(
+        f"<div style='text-align:center; font-size:1.5rem; color:{color_taux};'>{taux_emoji} {taux_reussite:.1f}%</div>"
+        "<div style='text-align:center;'>Taux réussite</div>",
+        unsafe_allow_html=True
+    )
+    
+    # Alerte sur le nombre de paris
+    seuil_paris = 5
+    if nb_paris > seuil_paris:
+        st.error(f"🚨 Attention : {nb_paris} paris effectués aujourd'hui. Risque de surbetting, reste concentré !")
 
 with tab2:
     st.markdown("## 📊 Dashboard Avancé – Suivi intelligent")
