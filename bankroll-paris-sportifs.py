@@ -9,24 +9,31 @@ from datetime import datetime, timedelta, time
 DATABASE_URL = "postgresql://postgres:jDDqfaqpspVDBBwsqxuaiSDNXjTxjMmP@shortline.proxy.rlwy.net:36536/railway"
 conn = psycopg2.connect(DATABASE_URL)
 cursor = conn.cursor()
-cursor.execute("SET search_path TO public")
+
+def set_public_path():
+    cursor.execute("SET search_path TO public")
+
+set_public_path()
 
 # --- Bankroll helper ---
 def get_bankroll():
-    cursor.execute("SELECT solde FROM bankroll ORDER BY id DESC LIMIT 1")
+    set_public_path()
+    cursor.execute("SELECT solde FROM public.bankroll ORDER BY id DESC LIMIT 1")
     res = cursor.fetchone()
     return res[0] if res else 50.0
 
 def init_bankroll():
-    cursor.execute("SELECT COUNT(*) FROM bankroll")
+    set_public_path()
+    cursor.execute("SELECT COUNT(*) FROM public.bankroll")
     if cursor.fetchone()[0] == 0:
-        cursor.execute("INSERT INTO bankroll (solde) VALUES (50.0)")
+        cursor.execute("INSERT INTO public.bankroll (solde) VALUES (50.0)")
         conn.commit()
 
 def update_bankroll(delta):
+    set_public_path()
     solde = get_bankroll() + delta
     cursor.execute(
-        "UPDATE bankroll SET solde = %s WHERE id = (SELECT id FROM bankroll ORDER BY id DESC LIMIT 1)",
+        "UPDATE public.bankroll SET solde = %s WHERE id = (SELECT id FROM public.bankroll ORDER BY id DESC LIMIT 1)",
         (solde,)
     )
     conn.commit()
@@ -53,10 +60,11 @@ def get_local_day_range_utc():
     return start_local.astimezone(pytz.utc), end_local.astimezone(pytz.utc)
 
 def pertes_journalieres():
+    set_public_path()
     start_utc, end_utc = get_local_day_range_utc()
     cursor.execute("""
         SELECT COALESCE(SUM(mise) - SUM(gain), 0)
-        FROM paris
+        FROM public.paris
         WHERE date >= %s AND date < %s
     """, (start_utc, end_utc))
     return round(cursor.fetchone()[0], 2)
@@ -89,23 +97,23 @@ with tab1:
         st.markdown(f"### 💰 Bankroll actuelle : {bk_actuelle:.2f} €")
         st.caption(f"🔒 Limite de perte aujourd'hui : {seuil_perte:.2f} €")
 
+        # Modifier la bankroll
         confirmer = st.checkbox("Je confirme la suppression de l’historique")
         if st.button("🔁 Modifier la bankroll"):
             st.session_state.edit_bankroll = not st.session_state.get("edit_bankroll", False)
         if st.session_state.get("edit_bankroll", False):
-            nouveau = st.number_input("Nouvelle bankroll (€)", min_value=1.0, max_value=100000.0, value=bk_actuelle, step=1.0, format="%.2f")
+            nouveau = st.number_input("Nouvelle bankroll (€)", min_value=1.0, max_value=100000.0,
+                                     value=bk_actuelle, step=1.0, format="%.2f")
             if st.button("✅ Valider"):
-                cursor.execute(
-                    "UPDATE bankroll SET solde = %s WHERE id = (SELECT id FROM bankroll ORDER BY id DESC LIMIT 1)",
-                    (nouveau,)
-                )
-                conn.commit()
+                update_bankroll(nouveau - bk_actuelle)
                 st.success(f"Bankroll mise à jour à {nouveau:.2f} €")
                 st.session_state.edit_bankroll = False
                 st.rerun()
 
+        # Réinitialiser historique
         if confirmer and st.button("🗑️ Réinitialiser historique"):
-            cursor.execute("DELETE FROM paris")
+            set_public_path()
+            cursor.execute("DELETE FROM public.paris")
             conn.commit()
             st.success("Historique vidé")
             st.rerun()
@@ -113,12 +121,12 @@ with tab1:
         # Courbe Kelly vs Cote
         st.markdown("---")
         st.markdown("### 📈 Courbe Kelly vs Cote")
-        cotes_range = np.linspace(1.01, 5.0, 60)
-        probas = [proba_estimee(c) for c in cotes_range]
-        kelly_vals = [kelly(100, p, c) for p, c in zip(probas, cotes_range)]
-        fig, ax = plt.subplots(figsize=(3.5, 2.5))
-        ax.plot(cotes_range, kelly_vals, linewidth=2)
-        ax.set_xlabel("Cote"); ax.set_ylabel("Mise (€)"); ax.set_title("Kelly vs Cote"); ax.grid(True)
+        cotes = np.linspace(1.01, 5.0, 60)
+        probas = [proba_estimee(c) for c in cotes]
+        vals = [kelly(100, p, c) for p, c in zip(probas, cotes)]
+        fig, ax = plt.subplots(figsize=(3.5,2.5))
+        ax.plot(cotes, vals, linewidth=2)
+        ax.set_xlabel("Cote"); ax.set_ylabel("Mise (€)"); ax.grid(True)
         st.pyplot(fig, clear_figure=True)
         st.caption("📌 Proba = (1 / cote) × 1.08")
 
@@ -131,56 +139,55 @@ with tab1:
             st.session_state.paris_simple_ready = False
 
         with st.form("form_pari_simple"):
-            match = st.text_input("Match / Événement")
-            col1, col2 = st.columns(2)
-            with col1:
-                sport = st.selectbox("Sport", ["Football", "Basket", "Tennis"])
-            with col2:
-                type_pari = st.selectbox("Type de pari", ["Vainqueur", "Over/Under", "Score exact", "Autre"])
+            m = st.text_input("Match / Événement")
+            c1, c2 = st.columns(2)
+            with c1:
+                sport = st.selectbox("Sport", ["Football","Basket","Tennis"])
+            with c2:
+                t = st.selectbox("Type de pari", ["Vainqueur","Over/Under","Score exact","Autre"])
             pari = st.text_input("Ton pari")
             cote = st.number_input("Cote", min_value=1.01, max_value=50.0, step=0.01)
-            strategie = st.radio("Stratégie", ["Kelly", "Demi-Kelly"], horizontal=True)
+            strat = st.radio("Stratégie", ["Kelly","Demi-Kelly"], horizontal=True)
 
-            pertes_du_jour = pertes_journalieres()
-            seuil_perte = get_bankroll() * MAX_PERTES_POURCENT_BK
-            calculer = st.form_submit_button("💸 Calculer mise recommandée", disabled=pertes_du_jour >= seuil_perte)
+            pertes = pertes_journalieres()
+            seuil = get_bankroll() * MAX_PERTES_POURCENT_BK
+            calc = st.form_submit_button("💸 Calculer mise recommandée", disabled=pertes>=seuil)
 
-        if calculer:
-            if match and pari and cote >= 1.01:
-                proba = proba_estimee(cote)
-                mise_k = kelly(get_bankroll(), proba, cote)
-                mise_finale = round(mise_k if strategie == "Kelly" else mise_k / 2, 2)
-                st.session_state.match_simple = match
-                st.session_state.sport_simple = sport
-                st.session_state.type_pari_simple = type_pari
-                st.session_state.pari_simple = pari
-                st.session_state.cote_simple = cote
-                st.session_state.strategie_simple = strategie
-                st.session_state.mise_finale_simple = mise_finale
-                st.session_state.paris_simple_ready = True
-                st.success(f"Mise recommandée : {mise_finale:.2f} €")
-            else:
-                st.error("Remplis tous les champs pour calculer.")
+        if calc and m and pari and cote>=1.01:
+            pr = proba_estimee(cote)
+            k = kelly(get_bankroll(), pr, cote)
+            mf = round(k if strat=="Kelly" else k/2,2)
+            st.session_state.update({
+                "match_simple": m,
+                "sport_simple": sport,
+                "type_pari_simple": t,
+                "pari_simple": pari,
+                "cote_simple": cote,
+                "strategie_simple": strat,
+                "mise_finale_simple": mf,
+                "paris_simple_ready": True
+            })
+            st.success(f"Mise recommandée : {mf:.2f} €")
 
         if st.session_state.paris_simple_ready:
-            st.markdown("---")
-            st.markdown("### 🔍 Récapitulatif")
-            st.info(f"**{st.session_state.match_simple}** ➔ **{st.session_state.pari_simple}** @ {st.session_state.cote_simple:.2f}")
+            st.markdown("---\n### 🔍 Récapitulatif")
+            st.info(f"**{st.session_state.match_simple}** ➔ {st.session_state.pari_simple}@{st.session_state.cote_simple:.2f}")
             with st.form("form_valide_simple"):
-                enregistrer = st.form_submit_button("✅ Enregistrer pari")
-                if enregistrer:
-                    pertes_du_jour = pertes_journalieres()
-                    seuil_perte = get_bankroll() * MAX_PERTES_POURCENT_BK
+                ok = st.form_submit_button("✅ Enregistrer pari")
+                if ok:
+                    pertes = pertes_journalieres()
+                    seuil = get_bankroll() * MAX_PERTES_POURCENT_BK
                     mf = st.session_state.mise_finale_simple
-                    if pertes_du_jour + mf > seuil_perte:
-                        st.error(f"Limite pertes journalières atteinte ({pertes_du_jour:.2f}€ / {seuil_perte:.2f}€).")
+                    if pertes + mf > seuil:
+                        st.error(f"Limite pertes journalières atteinte ({pertes:.2f}€/{seuil:.2f}€).")
                     else:
                         update_bankroll(-mf)
                         try:
+                            set_public_path()
                             cursor.execute("""
-                                INSERT INTO paris
+                                INSERT INTO public.paris
                                 (match, sport, type, pari, cote, mise, strategie, resultat, gain, date)
-                                VALUES (%s, %s, %s, %s, %s, %s, %s, 'Non joué', 0, %s)
+                                VALUES (%s,%s,%s,%s,%s,%s,%s,'Non joué',0,%s)
                             """, (
                                 st.session_state.match_simple,
                                 st.session_state.sport_simple,
@@ -189,10 +196,10 @@ with tab1:
                                 st.session_state.cote_simple,
                                 mf,
                                 st.session_state.strategie_simple,
-                                datetime.now(pytz.utc)
+                                datetime.now(pytz.utc),
                             ))
                             conn.commit()
-                            st.success("Pari enregistré et bankroll mise à jour !")
+                            st.success("Pari enregistré !")
                         except Exception as e:
                             st.error(f"Erreur BDD : {e}")
                         st.session_state.paris_simple_ready = False
@@ -203,63 +210,62 @@ with tab1:
         if "combine_ready" not in st.session_state:
             st.session_state.combine_ready = False
 
-        with st.form("form_combine"):
-            selections = []
-            for i in range(1, 4):
+        with st.form("form_pari_combine"):
+            sel = []
+            for i in range(1,4):
                 with st.expander(f"Sélection {i}"):
                     m = st.text_input(f"Match {i}", key=f"m{i}")
                     p = st.text_input(f"Pari {i}", key=f"p{i}")
                     c = st.number_input(f"Cote {i}", min_value=1.01, key=f"c{i}")
-                    if m and p and c >= 1.01:
-                        selections.append((m, p, c))
-            strategie = st.radio("Stratégie", ["Kelly", "Demi-Kelly"], key="strat_c", horizontal=True)
+                    if m and p and c>=1.01:
+                        sel.append((m,p,c))
+            strat = st.radio("Stratégie", ["Kelly","Demi-Kelly"], key="sc", horizontal=True)
+            pertes = pertes_journalieres()
+            seuil = get_bankroll() * MAX_PERTES_POURCENT_BK
+            calc = st.form_submit_button("💸 Calculer combiné", disabled=pertes>=seuil)
 
-            pertes_du_jour = pertes_journalieres()
-            seuil_perte = get_bankroll() * MAX_PERTES_POURCENT_BK
-            calculer_c = st.form_submit_button("💸 Calculer mise recomb.", disabled=pertes_du_jour >= seuil_perte)
-
-        if calculer_c and len(selections) >= 2:
-            prod_cote = np.prod([c for _, _, c in selections])
-            proba = proba_estimee(prod_cote)
-            mise_k = kelly(get_bankroll(), proba, prod_cote)
-            mf = round(mise_k if strategie == "Kelly" else mise_k / 2, 2)
-            st.session_state.selections = selections
-            st.session_state.cote_combinee = prod_cote
+        if calc and len(sel)>=2:
+            prod = np.prod([c for _,_,c in sel])
+            pr = proba_estimee(prod)
+            k = kelly(get_bankroll(), pr, prod)
+            mf = round(k if strat=="Kelly" else k/2,2)
+            st.session_state.selections = sel
+            st.session_state.cote_combinee = prod
             st.session_state.mise_finale_combine = mf
-            st.session_state.strategie_combine = strategie
+            st.session_state.strategie_combine = strat
             st.session_state.combine_ready = True
-            st.success(f"Mise recommandée : {mf:.2f} € pour cote {prod_cote:.2f}")
+            st.success(f"Mise recommandée : {mf:.2f} € pour cote {prod:.2f}")
 
         if st.session_state.combine_ready:
-            st.markdown("---")
-            st.markdown("### 🔍 Récapitulatif combiné")
-            for m, p, c in st.session_state.selections:
-                st.markdown(f"- **{m}** ➔ {p} @ {c:.2f}")
+            st.markdown("---\n### 🔍 Récapitulatif combiné")
+            for m,p,c in st.session_state.selections:
+                st.markdown(f"- **{m}** ➔ {p} @{c:.2f}")
             mf = st.session_state.mise_finale_combine
             with st.form("form_valide_combine"):
-                save = st.form_submit_button("✅ Enregistrer combiné")
-                if save:
-                    pertes_du_jour = pertes_journalieres()
-                    seuil_perte = get_bankroll() * MAX_PERTES_POURCENT_BK
-                    if pertes_du_jour + mf > seuil_perte:
-                        st.error(f"Limite pertes journalières atteinte ({pertes_du_jour:.2f}€ / {seuil_perte:.2f}€).")
+                ok = st.form_submit_button("✅ Enregistrer combiné")
+                if ok:
+                    pertes = pertes_journalieres()
+                    seuil = get_bankroll() * MAX_PERTES_POURCENT_BK
+                    if pertes + mf > seuil:
+                        st.error(f"Limite pertes journalières atteinte ({pertes:.2f}€/{seuil:.2f}€).")
                     else:
                         update_bankroll(-mf)
                         try:
+                            set_public_path()
                             cursor.execute("""
-                                INSERT INTO paris
+                                INSERT INTO public.paris
                                 (match, sport, type, pari, cote, mise, strategie, resultat, gain, date)
-                                VALUES (%s, %s, %s, %s, %s, %s, %s, 'Non joué', 0, %s)
+                                VALUES (%s,%s,%s,%s,%s,%s,%s,'Non joué',0,%s)
                             """, (
-                                "Combiné", "Multi", "Combiné",
-                                " + ".join(f"{m} - {p}" for m, p, _ in selections),
+                                "Combiné","Multi","Combiné",
+                                " + ".join(f"{m} - {p}" for m,p,_ in sel),
                                 st.session_state.cote_combinee,
                                 mf,
                                 st.session_state.strategie_combine,
-                                datetime.now(pytz.utc)
+                                datetime.now(pytz.utc),
                             ))
                             conn.commit()
-                            st.success("Combiné enregistré et bankroll mise à jour !")
+                            st.success("Combiné enregistré !")
                         except Exception as e:
                             st.error(f"Erreur BDD : {e}")
                         st.session_state.combine_ready = False
