@@ -331,10 +331,10 @@ with tab1:
     st.markdown("---")
     st.markdown("### 📅 Résumé de ta journée de paris")
     
-    # Date actuelle
-    today = datetime.date.today()
-    
     # Récupération des stats du jour
+    today = datetime.date.today()
+    tomorrow = today + datetime.timedelta(days=1)
+    
     cursor.execute("""
         SELECT 
             COUNT(*) AS nb_paris,
@@ -342,9 +342,9 @@ with tab1:
             SUM(gain) AS total_gains,
             SUM(CASE WHEN resultat = 'Gagné' THEN 1 ELSE 0 END) AS nb_gagnes
         FROM paris
-        WHERE DATE(date) = %s
-    """, (today,))
-    row = cursor.fetchone()
+        WHERE date >= %s AND date < %s
+    """, (today, tomorrow))
+
     
     nb_paris = row[0] if row[0] else 0
     total_mises = row[1] if row[1] else 0
