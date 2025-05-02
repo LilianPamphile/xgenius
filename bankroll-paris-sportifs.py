@@ -30,14 +30,17 @@ def init_bankroll():
         conn.commit()
 
 def update_bankroll(delta):
+    # On force delta et solde en float pour éviter le passage de types numpy
+    delta = float(delta)
+    solde_actuel = get_bankroll()
+    new_solde = float(solde_actuel + delta)
     set_public_path()
-    solde = get_bankroll() + delta
     cursor.execute(
         "UPDATE public.bankroll SET solde = %s WHERE id = (SELECT id FROM public.bankroll ORDER BY id DESC LIMIT 1)",
-        (solde,)
+        (new_solde,)
     )
     conn.commit()
-    return solde
+    return new_solde
 
 init_bankroll()
 
@@ -98,19 +101,20 @@ with tab1:
         st.caption(f"🔒 Limite de perte aujourd'hui : {seuil_perte:.2f} €")
 
         # Modifier la bankroll
-        confirmer = st.checkbox("Je confirme la suppression de l’historique")
         if st.button("🔁 Modifier la bankroll"):
             st.session_state.edit_bankroll = not st.session_state.get("edit_bankroll", False)
         if st.session_state.get("edit_bankroll", False):
             nouveau = st.number_input("Nouvelle bankroll (€)", min_value=1.0, max_value=100000.0,
                                      value=bk_actuelle, step=1.0, format="%.2f")
             if st.button("✅ Valider"):
+                # On passe maintenant un float pur
                 update_bankroll(nouveau - bk_actuelle)
                 st.success(f"Bankroll mise à jour à {nouveau:.2f} €")
                 st.session_state.edit_bankroll = False
                 st.rerun()
 
         # Réinitialiser historique
+        confirmer = st.checkbox("Je confirme la suppression de l’historique")
         if confirmer and st.button("🗑️ Réinitialiser historique"):
             set_public_path()
             cursor.execute("DELETE FROM public.paris")
