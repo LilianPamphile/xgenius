@@ -247,35 +247,54 @@ with tab1:
             mf = st.session_state.mise_finale_combine
             with st.form("form_valide_combine"):
                 ok = st.form_submit_button("✅ Enregistrer combiné")
+                # … dans le if ok: de votre form_valide_combine
                 if ok:
                     pertes = pertes_journalieres()
                     seuil  = get_bankroll() * MAX_PERTES_POURCENT_BK
+                    mf     = st.session_state.mise_finale_combine  # np.float64 ? on s’en fiche, on caste juste après
+                
                     if pertes + mf > seuil:
                         st.error(f"Limite pertes journalières atteinte ({pertes:.2f}€/{seuil:.2f}€).")
                     else:
                         try:
                             set_public_path()
-                            cursor.execute("""
+                
+                            # 1) on convertit explicitement en float Python
+                            cote_combinee = float(st.session_state.cote_combinee)
+                            mise = float(mf)
+                
+                            cursor.execute(
+                                """
                                 INSERT INTO public.paris
-                                ("match", sport, type, pari, cote, mise, strategie, resultat, gain, date)
+                                  ("match", sport, type, pari, cote, mise, strategie, resultat, gain, date)
                                 VALUES (%s, %s, %s, %s, %s, %s, %s, 'Non joué', 0, %s)
-                            """, (
-                                "Combiné",
-                                "Multi",
-                                "Combiné",
-                                " + ".join(f"{m} - {p}" for m, p, _ in sel),
-                                st.session_state.cote_combinee,
-                                mf,
-                                st.session_state.strategie_combine,
-                                datetime.now(pytz.utc),
-                            ))
+                                """,
+                                (
+                                  "Combiné",
+                                  "Multi",
+                                  "Combiné",
+                                  " + ".join(f"{m} - {p}" for m, p, _ in st.session_state.selections),
+                                  cote_combinee,
+                                  mise,
+                                  st.session_state.strategie_combine,
+                                  datetime.now(pytz.utc),
+                                )
+                            )
+                            # 2) commit de l'INSERT
                             conn.commit()
-                            update_bankroll(-mf)
+                
+                            # 3) mise à jour de la bankroll (débit)
+                            update_bankroll(-mise)
+                
                             st.success("✅ Combiné enregistré et bankroll mise à jour !")
                             st.session_state.combine_ready = False
                             st.rerun()
+                
                         except Exception as e:
+                            # 4) en cas d’erreur, rollback pour « débloquer » la transaction
+                            conn.rollback()
                             st.error(f"Erreur BDD : {e}")
+
 
     # --- Traiter les paris non joués ---
     st.markdown("---")
