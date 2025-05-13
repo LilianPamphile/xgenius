@@ -877,7 +877,7 @@ try:
     send_email(
         subject="📊 Analyse quotidienne GMOS (Top matchs ouverts/fermés/neutres)",
         body="\n".join(mail_lines),
-        to_email = ["lilian.pamphile.bts@gmail.com", "josejacinto.buepoyo@gmail.com"]
+        to_email = ["lilian.pamphile.bts@gmail.com"]
     )
 
 
