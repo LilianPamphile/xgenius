@@ -487,9 +487,6 @@ try:
     with open("model_files/features_list.pkl", "rb") as f:
         features = pickle.load(f)
 
-
-    print("✅ Features attendues par KMeans :", features_kmeans)
-
     # === Récupération historique des anciens matchs ===
     query_hist = """
         SELECT m.date::date AS date_match, m.equipe_domicile AS dom, m.equipe_exterieur AS ext,
