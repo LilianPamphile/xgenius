@@ -141,12 +141,6 @@ def compute_gmos(pred_ml, p25, p75, score_heuristique, cluster_type):
     base_score = 0.4 * (min(pred_ml / 5, 1) * 100) + 0.3 * score_heuristique + 0.3 * (range_score * 100)
     return round(min(max(base_score, 0), 100), 2)
 
-
-CLUSTERS_MAP = {
-    0: "🧨 Match atypique (ouvert ou fermé)",
-    1: "⚖️ Match standard attendu"
-}
-
 ###################################################################################################
 
 # === 📌 1️⃣ Récupération des Matchs ===
@@ -721,32 +715,9 @@ try:
     # === Ajout cluster_type (avant scaler)
     X_live = pd.DataFrame([m["features"] for m in matchs_jour], columns=features)  # 34 colonnes
 
-    # Crée un DataFrame avec les features KMeans uniquement
-    X_kmeans_df = pd.DataFrame([m["features_kmeans"] for m in matchs_jour], columns=features_kmeans)
-    print("✅ Features attendues par KMeans :", features_kmeans)
-    print("✅ Shape X_kmeans_df :", X_kmeans_df.shape)
-
-    X_kmeans_live_scaled = scaler_kmeans.transform(X_kmeans_df)
-    X_kmeans_live_pca = pca_kmeans.transform(X_kmeans_live_scaled)
-    cluster_labels = model_kmeans.predict(X_kmeans_live_pca)  # ✅ OK maintenant
-
-
-    # Juste après avoir ajouté cluster_type :
-    X_live["cluster_type"] = cluster_labels
-
-    # ❗ Ne pas scaler avec cluster_type
-    X_live_clean = X_live.drop(columns=["cluster_type"])
-
     # ✅ Transformation
-    X_live_scaled = scaler_ml.transform(X_live_clean)
-
-
-    for i, match in enumerate(matchs_jour):
-        match["cluster_type"] = int(cluster_labels[i])
-    
-    print("✅ X_live_clean shape :", X_live_clean.shape)
-    print("✅ Features attendues par le modèle :", len(features))  # Doit être 34
-
+    X_live = pd.DataFrame([m["features"] for m in matchs_jour], columns=features)
+    X_live_scaled = scaler_ml.transform(X_live)
     
     # prédiction principale
     preds_cat = model_cat.predict(X_live_scaled)
@@ -815,7 +786,6 @@ try:
             f"🔮 GMOS : {gmos_score}\n"
             f"📊 Estimé entre {int(p25)} et {int(p75)} buts\n"
             f"📈 Prédiction (CAT/LGB/XGB) : {pred_buts[i]:.2f}\n"
-            f"🧬 Cluster : {CLUSTERS_MAP.get(match['cluster_type'], '❓ Inconnu')}"
         )
     
         if gmos_score >= 65:
