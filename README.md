@@ -1,7 +1,7 @@
 # ⚽ Soccer Match Prediction Pipeline
 
 **Projet personnel - 2025**  
-Pipeline complet et automatisé de **prédiction quotidienne du profil offensif** des matchs de football européens.
+Pipeline complet et automatisé de **prédiction quotidienne du profil offensif ou défensif** des matchs de football européens.
 
 ---
 
