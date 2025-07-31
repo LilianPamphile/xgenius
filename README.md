@@ -89,20 +89,19 @@ pip install -r requirements.txt
 ```
 
 ### ▶️ Exécution
-bash
-Copier
-Modifier
+```bash
 python train_model.py   # Pour entraîner les modèles
 python main.py          # Pour lancer la prédiction quotidienne
+```
 
 ### 📥 Exemple de sortie (email quotidien)
 <img width="857" height="498" alt="image" src="https://github.com/user-attachments/assets/d7ea5f0c-858c-4006-a754-e29187002903" />
 
-###📁 Modèles sauvegardés
+### 📁 Modèles sauvegardés
 📂 Dossier model_files
 Contient : modèles .pkl, scaler, features.
 
-###👤 Auteur
+### 👤 Auteur
 Lilian Pamphile
 
 📧 lilian.pamphile.bts@gmail.com
