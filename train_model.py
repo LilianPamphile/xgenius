@@ -258,11 +258,13 @@ model_path = f"{CLONE_DIR}/model_files"
 os.makedirs(model_path, exist_ok=True)
 
 # === Sauvegarde des modèles ===
-for name, infos in results.items():
-    model = infos.get("model")
-    if model:
-        with open(f"{model_path}/model_total_buts_{name}.pkl", "wb") as f:
-            pickle.dump(model, f)
+# CatBoost Optuna
+with open(f"{model_path}/model_total_buts_catboost_optuna.pkl", "wb") as f:
+    pickle.dump(best_cat, f)
+
+# HistGradientBoosting
+with open(f"{model_path}/model_total_buts_hist_gradient_boosting.pkl", "wb") as f:
+    pickle.dump(hgb, f)
 
 # Conformal models
 with open(f"{model_path}/model_total_buts_conformal_p25.pkl", "wb") as f:
@@ -275,6 +277,7 @@ with open(f"{model_path}/scaler_total_buts.pkl", "wb") as f:
     pickle.dump(scaler, f)
 with open(f"{model_path}/features_list.pkl", "wb") as f:
     pickle.dump(FEATURES_TOTAL_BUTS, f)
+
 
 # === Commit & Push GitHub ===
 os.system(f"cd {CLONE_DIR} && git add model_files && git commit -m '🔁 Update models v3' && git push")
