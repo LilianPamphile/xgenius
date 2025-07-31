@@ -132,7 +132,7 @@ def telecharger_model_depuis_github():
         else:
             print(f"❌ Échec du téléchargement de {chemin_local} ({response.status_code})")
 
-def compute_gmos(pred_ml, p25, p75, score_heuristique, cluster_type):
+def compute_gmos(pred_ml, p25, p75, score_heuristique):
     """Calcule un score GMOS (entre 0 et 100) à partir des éléments clés."""
 
     variance_range = max(p75 - p25, 0.1)  # éviter division par 0
@@ -688,9 +688,6 @@ try:
                 "buts_encaissés_ext": to_float(enc_ext)
             }
 
-            # Crée le vecteur de features KMeans dans l’ordre attendu
-            features_kmeans_vector = [features_dict[f] for f in features_kmeans]
-
 
             matchs.append({
                 "match": f"{dom} vs {ext}",
@@ -702,8 +699,7 @@ try:
                 "solidite_dom": float(solidite_dom),
                 "solidite_ext": float(solidite_ext),
                 "clean_sheets_dom": float(clean_sheets_dom),
-                "clean_sheets_ext": float(clean_sheets_ext),
-                "features_kmeans": features_kmeans_vector
+                "clean_sheets_ext": float(clean_sheets_ext)
             })
 
         cursor.close()
@@ -779,7 +775,7 @@ try:
           else:
               return 100
     
-        gmos_score = compute_gmos(pred_total, p25, p75, score_heuristique, match["cluster_type"])
+        gmos_score = compute_gmos(pred_total, p25, p75, score_heuristique)
         match["gmos_score"] = gmos_score
     
         ligne = (
