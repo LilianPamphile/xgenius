@@ -237,27 +237,7 @@ coverage = np.mean((y_test >= p25) & (y_test <= p75))
 width = np.mean(p75 - p25)
 results["conformal"] = {"coverage": coverage, "width": width}
 
-# Résumé
-res_table = []
-for name, res in results.items():
-    if "mae" in res:
-        res_table.append({
-            "Modèle": name,
-            "MAE": round(res["mae"], 3),
-            "RMSE": round(res["rmse"], 3),
-            "R²": round(res["r2"], 3)
-        })
-df_res = pd.DataFrame(res_table).sort_values("RMSE")
-print("\n🔍 Résumé des performances :")
-print(df_res.to_string(index=False))
-
-# Intervalle de confiance
-print("\n📏 Intervalles de confiance :")
-print(f"LGBM Conformal → Coverage : {coverage:.2%}, Width : {width:.2f} buts")
-
-
 import shutil
-
 # === Git Config & Clone ===
 os.system("git config --global user.email 'lilian.pamphile.bts@gmail.com'")
 os.system("git config --global user.name 'LilianPamphile'")
