@@ -106,18 +106,12 @@ def telecharger_model_depuis_github():
     
     # Liste des fichiers à télécharger (avec chemin dans le repo GitHub)
     fichiers = {
-        "model_files/model_total_buts_catboost.pkl": "model_files/model_total_buts_catboost.pkl",
-        "model_files/model_total_buts_lightgbm.pkl": "model_files/model_total_buts_lightgbm.pkl",
-        "model_files/model_total_buts_xgboost.pkl": "model_files/model_total_buts_xgboost.pkl",
+        "model_files/model_total_buts_catboost_optuna.pkl": "model_files/model_total_buts_catboost_optuna.pkl",
+        "model_files/model_total_buts_hist_gradient_boosting.pkl": "model_files/model_total_buts_hist_gradient_boosting.pkl",
+        "model_files/model_total_buts_conformal_p25.pkl": "model_files/model_total_buts_conformal_p25.pkl",
+        "model_files/model_total_buts_conformal_p75.pkl": "model_files/model_total_buts_conformal_p75.pkl",
         "model_files/scaler_total_buts.pkl": "model_files/scaler_total_buts.pkl",
-        "model_files/model_total_buts_rf_simul.pkl": "model_files/model_total_buts_rf_simul.pkl",
-        "model_files/model_total_buts_quantile_p25.pkl": "model_files/model_total_buts_quantile_p25.pkl",
-        "model_files/model_total_buts_quantile_p75.pkl": "model_files/model_total_buts_quantile_p75.pkl",
-        "model_files/features_list.pkl": "model_files/features_list.pkl",
-        "model_files/features_kmeans_list.pkl": "model_files/features_kmeans_list.pkl",
-        "model_files/scaler_kmeans.pkl": "model_files/scaler_kmeans.pkl",
-        "model_files/kmeans_cluster.pkl": "model_files/kmeans_cluster.pkl",
-        "model_files/pca_kmeans.pkl": "model_files/pca_kmeans.pkl"
+        "model_files/features_list.pkl": "model_files/features_list.pkl"
     }
 
     for chemin_dist, chemin_local in fichiers.items():
@@ -486,31 +480,19 @@ try:
     print("✅ Récupération des données terminée !")
 
     # === Chargement du modèle ML et scaler ===
+    with open("model_files/model_total_buts_catboost_optuna.pkl", "rb") as f:
+        model_cat = pickle.load(f)
+    with open("model_files/model_total_buts_hist_gradient_boosting.pkl", "rb") as f:
+        model_hgb = pickle.load(f)
+    with open("model_files/model_total_buts_conformal_p25.pkl", "rb") as f:
+        model_p25 = pickle.load(f)
+    with open("model_files/model_total_buts_conformal_p75.pkl", "rb") as f:
+        model_p75 = pickle.load(f)
     with open("model_files/scaler_total_buts.pkl", "rb") as f:
         scaler_ml = pickle.load(f)
-    with open("model_files/model_total_buts_catboost.pkl", "rb") as f:
-        model_cat = pickle.load(f)
-    with open("model_files/model_total_buts_lightgbm.pkl", "rb") as f:
-        model_lgb = pickle.load(f)
-    with open("model_files/model_total_buts_xgboost.pkl", "rb") as f:
-        model_xgb = pickle.load(f)
-    with open("model_files/model_total_buts_rf_simul.pkl", "rb") as f:
-        model_rf_simul = pickle.load(f)
-    with open("model_files/model_total_buts_quantile_p25.pkl", "rb") as f:
-        model_p25 = pickle.load(f)
-    with open("model_files/model_total_buts_quantile_p75.pkl", "rb") as f:
-        model_p75 = pickle.load(f)
-    with open("model_files/kmeans_cluster.pkl", "rb") as f:
-        model_kmeans = pickle.load(f)
-    # Charger la liste des noms de colonnes d'origine
     with open("model_files/features_list.pkl", "rb") as f:
         features = pickle.load(f)
-    with open("model_files/features_kmeans_list.pkl", "rb") as f:
-        features_kmeans = pickle.load(f)
-    with open("model_files/scaler_kmeans.pkl", "rb") as f:
-        scaler_kmeans = pickle.load(f)
-    with open("model_files/pca_kmeans.pkl", "rb") as f:
-        pca_kmeans = pickle.load(f)
+
 
     print("✅ Features attendues par KMeans :", features_kmeans)
 
@@ -735,7 +717,6 @@ try:
 
     matchs_jour = get_matchs_jour_for_prediction()
 
-
     # === Prédictions ===
     # === Ajout cluster_type (avant scaler)
     X_live = pd.DataFrame([m["features"] for m in matchs_jour], columns=features)  # 34 colonnes
@@ -767,24 +748,20 @@ try:
     print("✅ Features attendues par le modèle :", len(features))  # Doit être 34
 
     
+    # prédiction principale
     preds_cat = model_cat.predict(X_live_scaled)
-    preds_lgb = model_lgb.predict(X_live_scaled)
-    preds_xgb = model_xgb.predict(X_live_scaled)
+    preds_hgb = model_hgb.predict(X_live_scaled)
+    # Prédiction des bornes conformal
     pred_p25 = model_p25.predict(X_live_scaled)
     pred_p75 = model_p75.predict(X_live_scaled)
-    
-    sim_preds = [model_rf_simul.predict(X_live_scaled + np.random.normal(0, 0.1, X_live_scaled.shape)) for _ in range(100)]
-
-    sim_preds = np.array(sim_preds)
-    sim_mean = np.mean(sim_preds, axis=0)
-    sim_std = np.std(sim_preds, axis=0)
     
     matchs_ouverts = []
     matchs_fermes = []
     matchs_neutres = []
 
-    pred_buts = 0.60 * preds_cat + 0.20 * preds_lgb + 0.20 * preds_xgb
-    
+    # combinaison pondérée
+    pred_buts = 0.7 * preds_cat + 0.3 * preds_hgb
+
     for i, match in enumerate(matchs_jour):
         features_vec = match["features"]
         pred_total = pred_buts[i]
