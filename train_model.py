@@ -1,20 +1,31 @@
-import psycopg2
-import pandas as pd
-import pickle
-from decimal import Decimal
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import mean_squared_error, mean_absolute_error
-from sklearn.metrics import r2_score, silhouette_score
-from xgboost import XGBRegressor
-from lightgbm import LGBMRegressor
-from catboost import CatBoostRegressor
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.cluster import KMeans, DBSCAN
-from sklearn.decomposition import PCA
-import numpy as np
+# === Standard Libraries ===
 import os
+import pickle
 from datetime import date
+from decimal import Decimal
+
+# === Data & Math ===
+import numpy as np
+import pandas as pd
+
+# === Database ===
+import psycopg2
+
+# === Scikit-learn ===
+from sklearn.model_selection import train_test_split, KFold
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.ensemble import HistGradientBoostingRegressor
+
+# === Regressors ===
+from catboost import CatBoostRegressor
+from lightgbm import LGBMRegressor
+
+# === Hyperparameter Optimization ===
+import optuna
+from optuna.integration import OptunaSearchCV
+from optuna.distributions import IntDistribution, FloatDistribution
+
 
 # --- Connexion BDD ---
 DATABASE_URL = "postgresql://postgres:jDDqfaqpspVDBBwsqxuaiSDNXjTxjMmP@shortline.proxy.rlwy.net:36536/railway"
@@ -32,19 +43,6 @@ FEATURES_TOTAL_BUTS = [
     "clean_sheets_dom", "clean_sheets_ext", "solidite_dom", "solidite_ext",
     "std_marq_dom", "std_enc_dom", "std_marq_ext", "std_enc_ext",
     "clean_dom", "clean_ext", "solidite_def_dom", "solidite_def_ext"
-]
-
-FEATURES_KMEANS = [
-    "forme_dom_enc", "forme_ext_enc", "std_enc_dom", "std_enc_ext",
-    "solidite_dom", "solidite_ext", "clean_sheets_dom", "clean_sheets_ext",
-    "diff_xg", "sum_xg", "total_tirs", "total_tirs_cadres",
-    "diff_over25", "sum_btts",
-    "forme_dom_marq", "forme_ext_marq",
-    "std_marq_dom", "std_marq_ext",
-    "solidite_def_dom", "solidite_def_ext",
-    "clean_dom", "clean_ext",
-    "moyenne_xg_dom", "moyenne_xg_ext",
-    "buts_encaissés_dom", "buts_encaissés_ext"
 ]
 
 # ========== 🗃️ Récupération des données historiques ========== #
@@ -181,220 +179,116 @@ df["total_buts"] = df["total_buts"].clip(upper=5)
 
 # Enrichissements features + dérivées (inchangé)
 
+# Dataset final
 X = df[FEATURES_TOTAL_BUTS]
 y = df["total_buts"]
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
-
-# KMEANS
-X_kmeans = df[FEATURES_KMEANS]
-scaler_kmeans = StandardScaler()
-X_kmeans_scaled = scaler_kmeans.fit_transform(X_kmeans)
-print(f"✅ Nombre de features KMeans : {len(FEATURES_KMEANS)}")
-print(f"📋 Liste des features KMeans : {FEATURES_KMEANS}")
-
-pca = PCA(n_components=0.95)
-X_kmeans_pca = pca.fit_transform(X_kmeans_scaled)
-
-# Appliquer KMeans avec k=2
-k = 2
-kmeans = KMeans(n_clusters=k, random_state=42, n_init='auto')
-labels = kmeans.fit_predict(X_kmeans_pca)
-
-# Calcul du score de silhouette
-score = silhouette_score(X_kmeans_pca, labels)
-print(f"✅ KMeans à 2 clusters → Silhouette Score : {score:.4f}")
-
-# Ajout des labels au DataFrame
-df["cluster_type"] = labels
-
-# Re-standardisation
-X_scaled = scaler.fit_transform(X)
-
-# Résumé des clusters
-unique, counts = np.unique(labels, return_counts=True)
-for label, count in zip(unique, counts):
-    print(f"🔍 Cluster {label} → {count} éléments ({(count / len(labels)):.1%})")
-
-# Stockage des résultats
-results = {}
-results["kmeans"] = {
-    "model": kmeans,
-    "silhouette": score
-}
-
 X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
 
-# Modèles
-models = {
-    "catboost": CatBoostRegressor(iterations=300, learning_rate=0.05, depth=6, random_seed=42, verbose=0),
-    "lightgbm": LGBMRegressor(n_estimators=300, learning_rate=0.05, max_depth=6, random_state=42),
-    "xgboost": XGBRegressor(n_estimators=300, learning_rate=0.05, max_depth=6, subsample=0.8, colsample_bytree=0.8, random_state=42)
+# Résultats
+results = {}
+
+# CatBoost Optuna
+param_distributions = {
+    "depth": IntDistribution(4, 10),
+    "learning_rate": FloatDistribution(0.01, 0.1),
+    "iterations": IntDistribution(200, 500)
+}
+catboost_search = OptunaSearchCV(
+    estimator=CatBoostRegressor(verbose=0, random_seed=42),
+    param_distributions=param_distributions,
+    n_trials=20,
+    cv=KFold(n_splits=3, shuffle=True, random_state=42),
+    scoring="neg_mean_absolute_error",
+    n_jobs=-1
+)
+catboost_search.fit(X_train, y_train)
+best_cat = catboost_search.best_estimator_
+preds = best_cat.predict(X_test)
+results["catboost_optuna"] = {
+    "mae": mean_absolute_error(y_test, preds),
+    "rmse": np.sqrt(mean_squared_error(y_test, preds)),
+    "r2": r2_score(y_test, preds)
 }
 
-# RandomForest pour Simulation Monte Carlo
-rf_simul = RandomForestRegressor(n_estimators=200, max_depth=6, random_state=42)
-rf_simul.fit(X_train, y_train)
-
-# === LGBM Conformal (quantile regression P25 & P75) ===
-OFFSET = 0.25  # Ajuste la largeur selon besoin
-
-params_base = {
-    "n_estimators": 300,
-    "max_depth": 6,
-    "learning_rate": 0.05,
-    "random_state": 42
+# HistGradientBoosting
+hgb = HistGradientBoostingRegressor(max_iter=300, learning_rate=0.05, max_depth=6, random_state=42)
+hgb.fit(X_train, y_train)
+preds = hgb.predict(X_test)
+results["hist_gradient_boosting"] = {
+    "mae": mean_absolute_error(y_test, preds),
+    "rmse": np.sqrt(mean_squared_error(y_test, preds)),
+    "r2": r2_score(y_test, preds)
 }
 
+# LGBM Conformal Interval
+params_base = {"n_estimators": 300, "max_depth": 6, "learning_rate": 0.05, "random_state": 42}
+OFFSET = 0.25
 q_models = {
     0.25: LGBMRegressor(objective="quantile", alpha=0.25, **params_base),
     0.75: LGBMRegressor(objective="quantile", alpha=0.75, **params_base)
 }
+for q, m in q_models.items():
+    m.fit(X_train, y_train)
+p25 = q_models[0.25].predict(X_test) - OFFSET
+p75 = q_models[0.75].predict(X_test) + OFFSET
+coverage = np.mean((y_test >= p25) & (y_test <= p75))
+width = np.mean(p75 - p25)
+results["conformal"] = {"coverage": coverage, "width": width}
 
-for q, model_q in q_models.items():
-    model_q.fit(X_train, y_train)
+# Résumé
+res_table = []
+for name, res in results.items():
+    if "mae" in res:
+        res_table.append({
+            "Modèle": name,
+            "MAE": round(res["mae"], 3),
+            "RMSE": round(res["rmse"], 3),
+            "R²": round(res["r2"], 3)
+        })
+df_res = pd.DataFrame(res_table).sort_values("RMSE")
+print("\n🔍 Résumé des performances :")
+print(df_res.to_string(index=False))
 
-# Prédictions brutes
-pred_p25 = q_models[0.25].predict(X_test)
-pred_p75 = q_models[0.75].predict(X_test)
-
-# Calibration manuelle
-pred_p25_adj = pred_p25 - OFFSET
-pred_p75_adj = pred_p75 + OFFSET
-
-# Évaluation
-coverage = np.mean((y_test >= pred_p25_adj) & (y_test <= pred_p75_adj))
-width = np.mean(pred_p75_adj - pred_p25_adj)
-
-results["conformal"] = {
-    "model": (q_models[0.25], q_models[0.75]),
-    "coverage": coverage,
-    "width": width
-}
-
-for name, model in models.items():
-    model.fit(X_train, y_train)
-    preds = model.predict(X_test)
-    mae = mean_absolute_error(y_test, preds)
-    rmse = np.sqrt(mean_squared_error(y_test, preds))
-    r2 = r2_score(y_test, preds)
-    results[name] = {
-        "model": model,
-        "mae": mae,
-        "rmse": rmse,
-        "r2": r2
-    }
-
-# Quantile Evaluation
-pred_p25 = q_models[0.25].predict(X_test)
-pred_p75 = q_models[0.75].predict(X_test)
-
-# ✅ Calibration simple des bornes (tu peux ajuster l'offset)
-OFFSET = 0.25  # entre 0.2 et 0.4 selon largeur moyenne
-
-pred_p25_adj = pred_p25 - OFFSET
-pred_p75_adj = pred_p75 + OFFSET
-
-# Recalcul coverage & largeur
-coverage = np.mean((y_test >= pred_p25_adj) & (y_test <= pred_p75_adj))
-width = np.mean(pred_p75_adj - pred_p25_adj)
-
-# Simulation Monte Carlo
-sim_preds = [rf_simul.predict(X_test + np.random.normal(0, 0.1, X_test.shape)) for _ in range(100)]
-sim_preds = np.array(sim_preds)
-sim_mean = np.mean(sim_preds)
-sim_std = np.std(sim_preds)
-
-results["rf_simul"] = {
-    "model": rf_simul,
-    "mean": sim_mean,
-    "std": sim_std
-}
+# Intervalle de confiance
+print("\n📏 Intervalles de confiance :")
+print(f"LGBM Conformal → Coverage : {coverage:.2%}, Width : {width:.2f} buts")
 
 
-# Git config
-os.system("git config --global user.email 'lilian.pamphile.bts@gmail.com'")
-os.system("git config --global user.name 'LilianPamphile'")
-
-# Token
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-if not GITHUB_TOKEN:
-    raise ValueError("❌ Le token GitHub n'est pas défini.")
-
-GITHUB_REPO = f"https://{GITHUB_TOKEN}@github.com/LilianPamphile/paris-sportifs.git"
-CLONE_DIR = "model_push"
-
-os.system(f"rm -rf {CLONE_DIR}")
-os.system(f"git clone {GITHUB_REPO} {CLONE_DIR}")
-
-model_path = f"{CLONE_DIR}/model_files"
-os.makedirs(model_path, exist_ok=True)
-
-# Sauvegarde
-for name, infos in results.items():
-    model = infos["model"] if isinstance(infos, dict) and "model" in infos else None
-    if model :
-        if name == "conformal":
-            with open(f"{model_path}/model_total_buts_conformal_p25.pkl", "wb") as f:
-                pickle.dump(q_models[0.25], f)
-            with open(f"{model_path}/model_total_buts_conformal_p75.pkl", "wb") as f:
-                pickle.dump(q_models[0.75], f)
-            continue
-
-        with open(f"{model_path}/model_total_buts_{name}.pkl", "wb") as f:
-            pickle.dump(model, f)
-
-with open(f"{model_path}/scaler_total_buts.pkl", "wb") as f:
-    pickle.dump(scaler, f)
-
-with open(f"{model_path}/features_list.pkl", "wb") as f:
-    pickle.dump(FEATURES_TOTAL_BUTS, f)
-
-
-# --- KMEANS ---#
-with open(f"{model_path}/features_kmeans_list.pkl", "wb") as f:
-    pickle.dump(FEATURES_KMEANS, f)
-
-with open(f"{model_path}/scaler_kmeans.pkl", "wb") as f:
-    pickle.dump(scaler_kmeans, f)
-
-with open(f"{model_path}/kmeans_cluster.pkl", "wb") as f:
-    pickle.dump(kmeans, f)
-
-with open(f"{model_path}/pca_kmeans.pkl", "wb") as f:
-    pickle.dump(pca, f)
-
-
-# Commit + push
+# === Git Commit & Push ===
+CLONE_DIR = "."  # à adapter si besoin
 os.system(f"cd {CLONE_DIR} && git add model_files && git commit -m '🔁 Update models v3' && git push")
 print("✅ Modèles commités et poussés sur GitHub.")
 
-# Email notif
+# === Email de notification ===
 def send_email(subject, body, to_email):
     from email.mime.text import MIMEText
     import smtplib
+
     msg = MIMEText(body)
     msg["Subject"] = subject
     msg["From"] = "lilian.pamphile.bts@gmail.com"
     msg["To"] = to_email
+
     try:
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            # Stocke le mot de passe en variable d'environnement !
             server.login("lilian.pamphile.bts@gmail.com", "fifkktsenfxsqiob")
             server.send_message(msg)
         print("📬 Email envoyé.")
     except Exception as e:
         print("❌ Email erreur:", e)
 
-# === Génération contenu du mail ===
+# === Contenu dynamique du mail ===
 today = date.today()
-
 subject = "📊 Modèles total_buts mis à jour"
 body_lines = [f"Les modèles `total_buts` ont été réentraînés le {today}.\n"]
 
 for name, infos in results.items():
     body_lines.append(f"\n🔧 **{name.upper()}**")
 
-    if name in ["catboost", "lightgbm", "xgboost"]:
+    if "mae" in infos:
         mae = infos["mae"]
         rmse = infos["rmse"]
         r2 = infos["r2"]
@@ -404,25 +298,15 @@ for name, infos in results.items():
             perf = "🟡 Correct"
         else:
             perf = "🔴 À surveiller"
+
         body_lines.append(
-            f"\n• MAE : {mae:.4f}\n• RMSE : {rmse:.4f}\n• R² : {r2:.4f}\n• Interprétation : {perf}"
-        )
-        
-    elif name == "conformal":
-        body_lines.append(
-            f"\n• Coverage (p25–p75) : {infos['coverage']:.2%}\n• Largeur moyenne : {infos['width']:.2f} buts"
+            f"• MAE : {mae:.4f}\n• RMSE : {rmse:.4f}\n• R² : {r2:.4f}\n• Interprétation : {perf}"
         )
 
-    elif name == "rf_simul":
+    elif "coverage" in infos:
         body_lines.append(
-            f"\n• Moyenne (simulée) : {infos['mean']:.2f} buts\n• Écart-type : {infos['std']:.2f}"
+            f"• Coverage (p25–p75) : {infos['coverage']:.2%}\n• Largeur moyenne : {infos['width']:.2f} buts"
         )
-
-    elif name == "kmeans":
-        body_lines.append(
-            f"\n• Silhouette Score (clustering matchs) : {infos['silhouette']:.4f}"
-        )
-
 
 body_lines += [
     "\n📁 Fichiers générés : modèles + scaler",
@@ -431,5 +315,4 @@ body_lines += [
 ]
 
 body = "\n".join(body_lines)
-
 send_email(subject, body, "lilian.pamphile.bts@gmail.com")
