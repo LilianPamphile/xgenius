@@ -236,14 +236,42 @@ models = {
 rf_simul = RandomForestRegressor(n_estimators=200, max_depth=6, random_state=42)
 rf_simul.fit(X_train, y_train)
 
-quantiles = [0.25, 0.75]
-q_models = {}
-for q in quantiles:
-    model_q = LGBMRegressor(objective="quantile", alpha=q, n_estimators=200, max_depth=6, learning_rate=0.05)
-    model_q.fit(X_train, y_train)
-    q_models[q] = model_q
+# === LGBM Conformal (quantile regression P25 & P75) ===
+OFFSET = 0.25  # Ajuste la largeur selon besoin
 
-results = {}
+params_base = {
+    "n_estimators": 300,
+    "max_depth": 6,
+    "learning_rate": 0.05,
+    "random_state": 42
+}
+
+q_models = {
+    0.25: LGBMRegressor(objective="quantile", alpha=0.25, **params_base),
+    0.75: LGBMRegressor(objective="quantile", alpha=0.75, **params_base)
+}
+
+for q, model_q in q_models.items():
+    model_q.fit(X_train, y_train)
+
+# Prédictions brutes
+pred_p25 = q_models[0.25].predict(X_test)
+pred_p75 = q_models[0.75].predict(X_test)
+
+# Calibration manuelle
+pred_p25_adj = pred_p25 - OFFSET
+pred_p75_adj = pred_p75 + OFFSET
+
+# Évaluation
+coverage = np.mean((y_test >= pred_p25_adj) & (y_test <= pred_p75_adj))
+width = np.mean(pred_p75_adj - pred_p25_adj)
+
+results["conformal"] = {
+    "model": (q_models[0.25], q_models[0.75]),
+    "coverage": coverage,
+    "width": width
+}
+
 for name, model in models.items():
     model.fit(X_train, y_train)
     preds = model.predict(X_test)
@@ -258,8 +286,6 @@ for name, model in models.items():
     }
 
 # Ajout des modèles quantiles au dico
-results["quantile_p25"] = (q_models[0.25], None, None)
-results["quantile_p75"] = (q_models[0.75], None, None)
 results["rf_simul"] = (rf_simul, None, None)
 
 # Quantile Evaluation
@@ -275,12 +301,6 @@ pred_p75_adj = pred_p75 + OFFSET
 # Recalcul coverage & largeur
 coverage = np.mean((y_test >= pred_p25_adj) & (y_test <= pred_p75_adj))
 width = np.mean(pred_p75_adj - pred_p25_adj)
-
-results["quantile"] = {
-    "model": (q_models[0.25], q_models[0.75]),
-    "coverage": coverage,
-    "width": width
-}
 
 # Simulation Monte Carlo
 sim_preds = [rf_simul.predict(X_test + np.random.normal(0, 0.1, X_test.shape)) for _ in range(100)]
@@ -316,14 +336,13 @@ os.makedirs(model_path, exist_ok=True)
 # Sauvegarde
 for name, infos in results.items():
     model = infos["model"] if isinstance(infos, dict) and "model" in infos else None
-    if model:
-        # 🔁 Cas spécial : quantile p25 / p75
-        if name == "quantile":
-            with open(f"{model_path}/model_total_buts_quantile_p25.pkl", "wb") as f:
+    if model :
+        if name == "conformal":
+            with open(f"{model_path}/model_total_buts_conformal_p25.pkl", "wb") as f:
                 pickle.dump(q_models[0.25], f)
-            with open(f"{model_path}/model_total_buts_quantile_p75.pkl", "wb") as f:
+            with open(f"{model_path}/model_total_buts_conformal_p75.pkl", "wb") as f:
                 pickle.dump(q_models[0.75], f)
-            continue  # on saute ce cas pour pas l'écraser dans la suite
+            continue
 
         with open(f"{model_path}/model_total_buts_{name}.pkl", "wb") as f:
             pickle.dump(model, f)
@@ -391,8 +410,8 @@ for name, infos in results.items():
         body_lines.append(
             f"\n• MAE : {mae:.4f}\n• RMSE : {rmse:.4f}\n• R² : {r2:.4f}\n• Interprétation : {perf}"
         )
-
-    elif name == "quantile":
+        
+    elif name == "conformal":
         body_lines.append(
             f"\n• Coverage (p25–p75) : {infos['coverage']:.2%}\n• Largeur moyenne : {infos['width']:.2f} buts"
         )
