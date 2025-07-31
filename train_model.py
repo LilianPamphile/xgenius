@@ -285,9 +285,6 @@ for name, model in models.items():
         "r2": r2
     }
 
-# Ajout des modèles quantiles au dico
-results["rf_simul"] = (rf_simul, None, None)
-
 # Quantile Evaluation
 pred_p25 = q_models[0.25].predict(X_test)
 pred_p75 = q_models[0.75].predict(X_test)
