@@ -34,8 +34,6 @@ Ce projet a pour but de prédire le **nombre total de buts** attendus pour chaqu
    - Classement des matchs : `ouverts` / `fermés` / `neutres`
    - Envoi automatisé quotidien par email 📩
 
----
-
 ## 🧠 Modèles ML utilisés
 
 | Modèle                  | Description                          |
@@ -44,7 +42,6 @@ Ce projet a pour but de prédire le **nombre total de buts** attendus pour chaqu
 | HistGradientBoosting    | Modèle secondaire d’ensemble         |
 | LightGBM quantile       | Estimation de l’intervalle de buts   |
 
----
 
 ## 🧬 Features extraites
 
@@ -52,8 +49,6 @@ Ce projet a pour but de prédire le **nombre total de buts** attendus pour chaqu
 - **Défensif :** solidité, clean sheets, std buts encaissés  
 - **Forme récente :** marqués/encaissés sur les 5 derniers matchs  
 - **Profil match :** fautes, cartons, corners, possession  
-
----
 
 ## 📊 GMOS Score
 
@@ -68,7 +63,6 @@ Il combine :
 - les intervalles de confiance (p25–p75)
 - des facteurs heuristiques (forme, xG, tirs, etc.)
 
----
 
 ## ⚙️ Lancement du projet
 
