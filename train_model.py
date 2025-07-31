@@ -198,7 +198,7 @@ param_distributions = {
 catboost_search = OptunaSearchCV(
     estimator=CatBoostRegressor(verbose=0, random_seed=42),
     param_distributions=param_distributions,
-    n_trials=5,
+    n_trials=7,
     cv=KFold(n_splits=3, shuffle=True, random_state=42),
     scoring="neg_mean_absolute_error",
     n_jobs=-1
