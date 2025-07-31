@@ -8,3 +8,4 @@ catboost
 requests
 streamlit
 matplotlib
+optuna
