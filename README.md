@@ -3,7 +3,7 @@
 **Projet personnel - 2025**  
 Pipeline complet et automatisé de **prédiction quotidienne du profil offensif ou défensif** des matchs de football européens.
 
----
+
 
 ## 🚀 Objectif du projet
 
@@ -12,7 +12,6 @@ Ce projet a pour but de prédire le **nombre total de buts** attendus pour chaqu
 - des données enrichies (forme, xG, statistiques défensives...)
 - un score heuristique & prédictif : **GMOS**
 
----
 
 ## 🧱 Architecture du pipeline
 
@@ -105,4 +104,3 @@ Contient : modèles .pkl, scaler, features.
 Lilian Pamphile
 
 📧 lilian.pamphile.bts@gmail.com
-📅 Projet personnel M2 Informatique – 2025
