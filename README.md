@@ -86,6 +86,7 @@ Il combine :
 git clone https://github.com/LilianPamphile/paris-sportifs.git
 cd paris-sportifs
 pip install -r requirements.txt
+```
 
 ### ▶️ Exécution
 bash
