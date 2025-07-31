@@ -256,8 +256,47 @@ print("\n📏 Intervalles de confiance :")
 print(f"LGBM Conformal → Coverage : {coverage:.2%}, Width : {width:.2f} buts")
 
 
-# === Git Commit & Push ===
-CLONE_DIR = "."  # à adapter si besoin
+import shutil
+
+# === Git Config & Clone ===
+os.system("git config --global user.email 'lilian.pamphile.bts@gmail.com'")
+os.system("git config --global user.name 'LilianPamphile'")
+
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+if not GITHUB_TOKEN:
+    raise ValueError("❌ Le token GitHub (GITHUB_TOKEN) n'est pas défini.")
+
+GITHUB_REPO = f"https://{GITHUB_TOKEN}@github.com/LilianPamphile/paris-sportifs.git"
+CLONE_DIR = "model_push"
+
+# Nettoyage / clone du dépôt
+if os.path.exists(CLONE_DIR):
+    shutil.rmtree(CLONE_DIR)
+os.system(f"git clone {GITHUB_REPO} {CLONE_DIR}")
+
+model_path = f"{CLONE_DIR}/model_files"
+os.makedirs(model_path, exist_ok=True)
+
+# === Sauvegarde des modèles ===
+for name, infos in results.items():
+    model = infos.get("model")
+    if model:
+        with open(f"{model_path}/model_total_buts_{name}.pkl", "wb") as f:
+            pickle.dump(model, f)
+
+# Conformal models
+with open(f"{model_path}/model_total_buts_conformal_p25.pkl", "wb") as f:
+    pickle.dump(q_models[0.25], f)
+with open(f"{model_path}/model_total_buts_conformal_p75.pkl", "wb") as f:
+    pickle.dump(q_models[0.75], f)
+
+# Scaler & features
+with open(f"{model_path}/scaler_total_buts.pkl", "wb") as f:
+    pickle.dump(scaler, f)
+with open(f"{model_path}/features_list.pkl", "wb") as f:
+    pickle.dump(FEATURES_TOTAL_BUTS, f)
+
+# === Commit & Push GitHub ===
 os.system(f"cd {CLONE_DIR} && git add model_files && git commit -m '🔁 Update models v3' && git push")
 print("✅ Modèles commités et poussés sur GitHub.")
 
@@ -265,7 +304,7 @@ print("✅ Modèles commités et poussés sur GitHub.")
 def send_email(subject, body, to_email):
     from email.mime.text import MIMEText
     import smtplib
-
+    
     msg = MIMEText(body)
     msg["Subject"] = subject
     msg["From"] = "lilian.pamphile.bts@gmail.com"
@@ -273,14 +312,13 @@ def send_email(subject, body, to_email):
 
     try:
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            # Stocke le mot de passe en variable d'environnement !
             server.login("lilian.pamphile.bts@gmail.com", "fifkktsenfxsqiob")
             server.send_message(msg)
         print("📬 Email envoyé.")
     except Exception as e:
-        print("❌ Email erreur:", e)
+        print("❌ Email erreur :", e)
 
-# === Contenu dynamique du mail ===
+# === Génération du contenu du mail ===
 today = date.today()
 subject = "📊 Modèles total_buts mis à jour"
 body_lines = [f"Les modèles `total_buts` ont été réentraînés le {today}.\n"]
@@ -292,13 +330,12 @@ for name, infos in results.items():
         mae = infos["mae"]
         rmse = infos["rmse"]
         r2 = infos["r2"]
-        if rmse < 1.8:
+        if rmse < 1.5:
             perf = "🟢 Excellent"
-        elif rmse < 2.2:
+        elif rmse < 2:
             perf = "🟡 Correct"
         else:
             perf = "🔴 À surveiller"
-
         body_lines.append(
             f"• MAE : {mae:.4f}\n• RMSE : {rmse:.4f}\n• R² : {r2:.4f}\n• Interprétation : {perf}"
         )
