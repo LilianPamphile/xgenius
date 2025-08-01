@@ -532,7 +532,7 @@ try:
                 m.game_id,
                 m.date::date AS date_match,
                 m.equipe_domicile, m.equipe_exterieur,
-
+            
                 sg1.moyenne_buts, sg1.buts_encaisse::FLOAT / NULLIF(sg1.matchs_joues, 0), sg1.pourcentage_over_2_5,
                 sg1.pourcentage_over_1_5, sg1.pourcentage_BTTS, sg1.passes_pourcent, sg1.passes_reussies,
                 sg1.possession, sg1.corners, sg1.fautes, sg1.cartons_jaunes, sg1.cartons_rouges,
@@ -543,8 +543,16 @@ try:
                 sg2.passes_reussies, sg2.possession, sg2.corners, sg2.fautes,
                 sg2.cartons_jaunes, sg2.cartons_rouges, sg2.moyenne_xg_ext, sg2.tirs, sg2.tirs_cadres
             FROM matchs_v2 m
-            JOIN stats_globales_v2 sg1 ON m.equipe_domicile = sg1.equipe AND m.competition = sg1.competition AND m.saison = sg1.saison
-            JOIN stats_globales_v2 sg2 ON m.equipe_exterieur = sg2.equipe AND m.competition = sg2.competition AND m.saison = sg2.saison
+            JOIN LATERAL (
+                SELECT * FROM stats_globales_v2 s1
+                WHERE s1.equipe = m.equipe_domicile AND s1.competition = m.competition
+                ORDER BY saison DESC LIMIT 1
+            ) sg1 ON TRUE
+            JOIN LATERAL (
+                SELECT * FROM stats_globales_v2 s2
+                WHERE s2.equipe = m.equipe_exterieur AND s2.competition = m.competition
+                ORDER BY saison DESC LIMIT 1
+            ) sg2 ON TRUE
             WHERE DATE(m.date) = %s
         """
         cursor.execute(query, (today,))
