@@ -152,7 +152,7 @@ def recuperer_matchs(date, API_KEY):
         "x-rapidapi-host": "api-football-v1.p.rapidapi.com"
     }
 
-    saison_api = datetime.now().year if datetime.now().month >= 7 else datetime.now().year - 1
+    saison_api = 2025
     total_matchs = 0
 
     print(f"📅 Récupération des matchs pour le {date}")
@@ -214,7 +214,7 @@ def recuperer_stats_matchs(date, API_KEY):
     for competition_name, competition_id in COMPETITIONS.items():
         params = {
             "league": competition_id,
-            "season": datetime.now().year if datetime.now().month >= 7 else datetime.now().year - 1,
+            "season": 2025,
             "date": date,
             "timezone": "Europe/Paris"
         }
