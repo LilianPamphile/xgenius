@@ -17,6 +17,9 @@ API_KEY = "b63f99b8e4mshb5383731d310a85p103ea1jsn47e34368f5df"
 
 today = datetime.today().date()
 yesterday = today - timedelta(days=1)
+annee = datetime.now().year
+saison1 = annee - 1 
+saison2 = annee - 2 
 
 # 🏆 Liste des compétitions à récupérer
 COMPETITIONS = {
@@ -542,20 +545,24 @@ try:
                 sg2.pourcentage_over_1_5, sg2.pourcentage_BTTS, sg2.passes_pourcent,
                 sg2.passes_reussies, sg2.possession, sg2.corners, sg2.fautes,
                 sg2.cartons_jaunes, sg2.cartons_rouges, sg2.moyenne_xg_ext, sg2.tirs, sg2.tirs_cadres
+            
             FROM matchs_v2 m
+            
             JOIN LATERAL (
                 SELECT * FROM stats_globales_v2 s1
-                WHERE s1.equipe = m.equipe_domicile AND s1.competition = m.competition
-                ORDER BY saison DESC LIMIT 1
+                WHERE s1.equipe = m.equipe_domicile
+                  AND s1.saison IN (%s, %s)
             ) sg1 ON TRUE
+            
             JOIN LATERAL (
                 SELECT * FROM stats_globales_v2 s2
-                WHERE s2.equipe = m.equipe_exterieur AND s2.competition = m.competition
-                ORDER BY saison DESC LIMIT 1
+                WHERE s2.equipe = m.equipe_exterieur
+                  AND s2.saison IN (%s, %s)
             ) sg2 ON TRUE
+            
             WHERE DATE(m.date) = %s
         """
-        cursor.execute(query, (today,))
+        cursor.execute(query, (saison1, saison2, saison1, saison2, today,))
         rows = cursor.fetchall()
 
         # 2. Récupère l'historique pour forme récente
