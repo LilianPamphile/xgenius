@@ -216,21 +216,21 @@ catboost_search = OptunaSearchCV(
 )
 catboost_search.fit(X_train, y_train)
 best_cat = catboost_search.best_estimator_
-preds = best_cat.predict(X_test)
+preds_cat = best_cat.predict(X_test)
 results["catboost_optuna"] = {
-    "mae": mean_absolute_error(y_test, preds),
-    "rmse": np.sqrt(mean_squared_error(y_test, preds)),
-    "r2": r2_score(y_test, preds)
+    "mae": mean_absolute_error(y_test, preds_cat),
+    "rmse": np.sqrt(mean_squared_error(y_test, preds_cat)),
+    "r2": r2_score(y_test, preds_cat)
 }
 
 # HistGradientBoosting
 hgb = HistGradientBoostingRegressor(max_iter=300, learning_rate=0.05, max_depth=6, random_state=42)
 hgb.fit(X_train, y_train)
-preds = hgb.predict(X_test)
+preds_hgb = hgb.predict(X_test)
 results["hist_gradient_boosting"] = {
-    "mae": mean_absolute_error(y_test, preds),
-    "rmse": np.sqrt(mean_squared_error(y_test, preds)),
-    "r2": r2_score(y_test, preds)
+    "mae": mean_absolute_error(y_test, preds_hgb),
+    "rmse": np.sqrt(mean_squared_error(y_test, preds_hgb)),
+    "r2": r2_score(y_test, preds_hgb)
 }
 
 # LGBM Conformal Interval
@@ -385,12 +385,12 @@ results["score_heuristique"] = {
 os.system(f"cd {CLONE_DIR} && git add model_files && git commit -m '🔁 Update models v3' && git push")
 print("✅ Modèles commités et poussés sur GitHub.")
 
+# === Sauvegarde des MAE pondérations ===
 mae_info = {
-    "mae_cat": mae_cat,   # valeur réelle obtenue dans ton script d'entraînement
+    "mae_cat": mae_cat,
     "mae_hgb": mae_hgb
 }
-
-with open("model_files/mae_models.pkl", "wb") as f:
+with open(f"{model_path}/mae_models.pkl", "wb") as f:
     pickle.dump(mae_info, f)
 
 # === Email de notification ===
