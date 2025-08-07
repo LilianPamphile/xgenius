@@ -764,16 +764,30 @@ try:
         fautes = float(match.get("fautes", 20))
         cartons = float(match.get("cartons", 3))
     
-        X_input_heur = pd.DataFrame([[
-            buts_dom, buts_ext, over25_dom, over25_ext, btts_dom, btts_ext,
-            xg_dom, xg_ext, tirs_cadres_total, forme_pond_dom, forme_pond_ext,
-            solidite_dom, solidite_ext, corners, fautes, cartons, poss
-        ]], columns=[
-            "buts_dom", "buts_ext", "over25_dom", "over25_ext", "btts_dom", "btts_ext",
-            "xg_dom", "xg_ext", "tirs_cadres_total", "forme_pond_dom", "forme_pond_ext",
-            "solidite_dom", "solidite_ext", "corners", "fautes", "cartons", "poss"
-        ])
+        # Construction dynamique des features heuristiques
+        d = {
+            "buts_dom": buts_dom,
+            "buts_ext": buts_ext,
+            "over25_dom": over25_dom,
+            "over25_ext": over25_ext,
+            "btts_dom": btts_dom,
+            "btts_ext": btts_ext,
+            "xg_dom": xg_dom,
+            "xg_ext": xg_ext,
+            "tirs_cadres_total": tirs_cadres_total,
+            "forme_pond_dom": forme_pond_dom,
+            "forme_pond_ext": forme_pond_ext,
+            "solidite_dom": solidite_dom,
+            "solidite_ext": solidite_ext,
+            "corners": corners,
+            "fautes": fautes,
+            "cartons": cartons,
+            "poss": poss
+        }
         
+        # Alignement des features selon le fichier sauvegardé
+        X_input_heur = pd.DataFrame([[d.get(f, 0.0) for f in features_heur]], columns=features_heur)
+
         score_heuristique = model_heuristique.predict(X_input_heur)[0]
 
         gmos_score = compute_gmos(pred_total, p25, p75, score_heuristique)
