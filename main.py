@@ -489,7 +489,7 @@ try:
         scaler_ml = pickle.load(f)
     with open("model_files/features_list.pkl", "rb") as f:
         features = pickle.load(f)
-    with open("model_files/score_heuristique.pkl", "rb") as f:
+    with open("model_files/regression_score_heuristique.pkl", "rb") as f:
         model_heuristique = pickle.load(f)
 
     # === Récupération historique des anciens matchs ===
