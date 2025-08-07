@@ -355,8 +355,6 @@ acc_over25 = accuracy_score(y_test_class, model_over25.predict(X_test_class))
 # Sauvegarde
 with open(f"{model_path}/model_over25_classifier.pkl", "wb") as f:
     pickle.dump(model_over25, f)
-with open(f"{model_path}/features_list_over25.pkl", "wb") as f:
-    pickle.dump(FEATURES_TOTAL_BUTS, f)
 
 results["over25_classifier"] = {"accuracy": acc_over25}
 
