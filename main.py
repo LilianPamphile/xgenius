@@ -5,6 +5,7 @@ import psycopg2
 from datetime import datetime, timedelta
 import smtplib
 from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 import os
 import pickle
 import pandas as pd
@@ -82,22 +83,48 @@ def get_fixture_with_goals(fixture_id, headers):
     return 0, 0
 
 """## **Envoie de mail et execution des fonction de récupération de données**"""
-def send_email(subject, body, to_email):
+def send_email_html(subject, html_body, to_email):
     from_email = "lilian.pamphile.bts@gmail.com"
-    password = "fifkktsenfxsqiob"  # mot de passe d'application
+    password = "fifkktsenfxsqiob"  # mot de passe d'application Gmail
 
-    msg = MIMEText(body)
+    msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"] = from_email
     msg["To"] = ", ".join(to_email)
 
+    part_html = MIMEText(html_body, "html")
+    msg.attach(part_html)
+
     try:
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
             server.login(from_email, password)
-            server.send_message(msg, from_addr=from_email, to_addrs=to_email)
-        print("📬 Email envoyé avec succès.")
+            server.send_message(msg)
+        print("📬 Email HTML envoyé avec succès.")
     except Exception as e:
-        print("❌ Erreur lors de l'envoi de l'email :", e)
+        print("❌ Erreur lors de l'envoi de l'email HTML :", e)
+
+
+def gen_table(matchs, type_):
+    if not matchs:
+        return "<p>Aucun match détecté.</p>"
+
+    rows = ""
+    for prob, name, pred, intervalle, conf, heur in sorted(matchs, reverse=True if type_ == "Over" else False):
+        rows += f"""
+        <tr>
+            <td>{name}</td>
+            <td>{pred:.2f}</td>
+            <td>{intervalle}</td>
+            <td>{conf}</td>
+            <td>{heur:.2f}</td>
+        </tr>"""
+
+    return f"""
+    <table>
+        <tr><th>Match</th><th>Prédiction</th><th>Intervalle</th><th>Confiance</th><th>Score 🧠</th></tr>
+        {rows}
+    </table>"""
+
 
 # --- Téléchargement des fichiers modèle/scaler depuis GitHub ---
 def telecharger_model_depuis_github():
@@ -816,11 +843,53 @@ try:
     mail_lines.append("⚪ 0.4 – 0.6 : Potentiel moyen / incertain")
     mail_lines.append("🚫 < 0.4 : Faible potentiel de buts")
 
+    html_body = f"""
+    <html>
+    <head>
+    <style>
+        body {{ font-family: Arial, sans-serif; color: #333; }}
+        h2 {{ color: #d9534f; }}
+        .match-section {{ margin-bottom: 20px; }}
+        table {{ width: 100%; border-collapse: collapse; }}
+        th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+        th {{ background-color: #f2f2f2; }}
+        .note {{ font-size: 0.9em; color: #555; margin-top: 20px; }}
+    </style>
+    </head>
+    <body>
+    <h2>📅 Prévisions du {today}</h2>
+    
+    <div class="match-section">
+    <h3>🔥 Matchs à fort potentiel de buts (≥ 2.5)</h3>
+    {gen_table(matchs_hauts, "Over")}
+    </div>
+    
+    <div class="match-section">
+    <h3>❄️ Matchs potentiellement fermés (≤ 2.0)</h3>
+    {gen_table(matchs_bas, "Under")}
+    </div>
+    
+    <div class="match-section">
+    <h3>⚪ Matchs neutres ou incertains</h3>
+    {gen_table(matchs_incertain, "Incertains")}
+    </div>
+    
+    <div class="note">
+        <strong>🧠 Note méthodologique :</strong><br>
+        Prédiction finale = pondération CatBoost + HGB.<br>
+        Intervalle = Conformal Prediction [p25 – p75].<br>
+        Confiance = Faible si range > 2.0 buts.<br>
+        Classement basé sur un score composite (heuristique + ML).
+    </div>
+    </body>
+    </html>
+    """
 
-    send_email(
-        subject="📊 Analyse quotidienne Xgenius (Top matchs ouverts/fermés/neutres)",
-        body="\n".join(mail_lines),
-        to_email = ["lilian.pamphile.bts@gmail.com"]
+    
+    send_email_html(
+        subject="📊 Analyse quotidienne Xgenius (HTML)",
+        html_body=html_body,
+        to_email=["lilian.pamphile.bts@gmail.com"]
     )
 
 
