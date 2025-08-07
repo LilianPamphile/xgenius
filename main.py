@@ -656,19 +656,7 @@ try:
             forme_pond_dom = 0.6 * fdm + 0.4 * fdo25
             forme_pond_ext = 0.6 * fem + 0.4 * feo25
 
-            feature_vector = [
-                to_float(buts_dom), to_float(buts_ext), to_float(enc_dom), to_float(enc_ext),
-                to_float(over25_dom), to_float(over25_ext), to_float(btts_dom), to_float(btts_ext),
-                to_float(xg_dom), to_float(xg_ext), diff_xg, sum_xg,
-                fdm, fde, fdo25, fem, fee, feo25,
-                sum_btts, diff_over25, total_tirs, total_tirs_cadres,
-                clean_sheets_dom, clean_sheets_ext,
-                solidite_dom, solidite_ext,
-                forme_pond_dom, forme_pond_ext,
-                to_float(pass_pct_dom), to_float(pass_pct_ext),
-                to_float(corners_dom), to_float(corners_ext),
-                to_float(fautes_dom), to_float(fautes_ext)
-            ]
+            
 
             # Construction du dictionnaire temporaire avec les valeurs
             features_dict = {
@@ -700,6 +688,7 @@ try:
                 "buts_encaissés_ext": to_float(enc_ext)
             }
 
+            feature_vector = [features_dict.get(f, 0.0) for f in features]
 
             matchs.append({
                 "match": f"{dom} vs {ext}",
@@ -738,14 +727,22 @@ try:
     matchs_fermes = []
     matchs_neutres = []
 
-    # combinaison pondérée
-    pred_buts = 0.7 * preds_cat + 0.3 * preds_hgb
-
+   # === Pondération dynamique selon MAE inverse ===
+    mae_cat = 1.1068
+    mae_hgb = 1.1298
+    inv_total = 1 / mae_cat + 1 / mae_hgb
+    weight_cat = (1 / mae_cat) / inv_total
+    weight_hgb = (1 / mae_hgb) / inv_total
+    pred_buts = weight_cat * preds_cat + weight_hgb * preds_hgb
+    
+    matchs_ouverts, matchs_fermes, matchs_neutres = [], [], []
+    
     for i, match in enumerate(matchs_jour):
         features_vec = match["features"]
         pred_total = pred_buts[i]
         p25 = pred_p25[i]
         p75 = pred_p75[i]
+        incertitude = p75 - p25
     
         # Variables heuristiques
         buts_dom, buts_ext = float(features_vec[0]), float(features_vec[1])
@@ -774,35 +771,42 @@ try:
             0.10 * solidite_dom - 0.10 * solidite_ext +
             0.03 * corners + 0.03 * fautes + 0.02 * cartons + 0.05 * poss
         )
-
-        def convertir_pred_en_score_heuristique(pred_total):
-          if pred_total <= 2:
-              return 60
-          elif pred_total <= 3:
-              return 70
-          elif pred_total <= 4:
-              return 80 
-          elif pred_total <= 5:
-              return 90 
-          else:
-              return 100
     
         gmos_score = compute_gmos(pred_total, p25, p75, score_heuristique)
+    
+        # 🔍 Classification automatique
+        if pred_total >= 3.5 and gmos_score >= 65:
+            type_match = "🔥 Ouvert"
+        elif pred_total <= 2.0 and gmos_score <= 50:
+            type_match = "❄️ Fermé"
+        else:
+            type_match = "⚪ Neutre"
+
+        if incertitude > 2.5:
+            commentaire = "⚠️ Incertitude élevée"
+        elif incertitude < 1.5:
+            commentaire = "✅ Confiance élevée"
+        else:
+            commentaire = "ℹ️ Confiance modérée"
+    
         match["gmos_score"] = gmos_score
+        match["type_match"] = type_match
+        match["confiance"] = commentaire
+
     
         ligne = (
             f"🔮 GMOS : {gmos_score}\n"
             f"📊 Estimé entre {int(p25)} et {int(p75)} buts\n"
-            f"📈 Prédiction (CAT/LGB/XGB) : {pred_buts[i]:.2f}\n"
+            f"📈 Prédiction finale : {pred_total:.2f} buts\n"
+            f"{match['confiance']}\n"
         )
-    
-        if gmos_score >= 65:
+
+        if pred_total >= 3.5 and gmos_score >= 65:
             matchs_ouverts.append((gmos_score, match["match"], ligne))
-        elif gmos_score <= 50:
+        elif pred_total <= 2.0 and gmos_score <= 50:
             matchs_fermes.append((gmos_score, match["match"], ligne))
         else:
             matchs_neutres.append((gmos_score, match["match"], ligne))
-
     
     # === Génération du mail GMOS ===
     mail_lines = [f"📅 Prévisions du {today}\n"]
