@@ -385,6 +385,14 @@ results["score_heuristique"] = {
 os.system(f"cd {CLONE_DIR} && git add model_files && git commit -m '🔁 Update models v3' && git push")
 print("✅ Modèles commités et poussés sur GitHub.")
 
+mae_info = {
+    "mae_cat": mae_cat,   # valeur réelle obtenue dans ton script d'entraînement
+    "mae_hgb": mae_hgb
+}
+
+with open("model_files/mae_models.pkl", "wb") as f:
+    pickle.dump(mae_info, f)
+
 # === Email de notification ===
 def send_email(subject, body, to_email):
     from email.mime.text import MIMEText
