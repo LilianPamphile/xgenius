@@ -375,10 +375,6 @@ results["score_heuristique"] = {
     "r2": r2_score(y_score, preds_score)
 }
 
-# === Commit & Push GitHub ===
-os.system(f"cd {CLONE_DIR} && git add model_files && git commit -m '🔁 Update models v3' && git push")
-print("✅ Modèles commités et poussés sur GitHub.")
-
 # === Sauvegarde des MAE pondérations ===
 mae_cat = results["catboost_optuna"]["mae"]
 mae_hgb = results["hist_gradient_boosting"]["mae"]
@@ -389,6 +385,11 @@ mae_info = {
 }
 with open(f"{model_path}/mae_models.pkl", "wb") as f:
     pickle.dump(mae_info, f)
+
+# === Commit & Push GitHub ===
+os.system(f"cd {CLONE_DIR} && git add model_files && git commit -m '🔁 Update models v3' && git push")
+print("✅ Modèles commités et poussés sur GitHub.")
+
 
 # === Email de notification ===
 def send_email(subject, body, to_email):
