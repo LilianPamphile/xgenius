@@ -767,6 +767,9 @@ try:
         
         # Alignement des features selon le fichier sauvegardé
         X_input_heur = pd.DataFrame([[d.get(f, 0.0) for f in features_heur]], columns=features_heur)
+        score_heur = model_heuristique.predict(X_input_heur)[0]
+
+        match["score_heur"] = score_heur
 
         if incertitude > 2.5:
             commentaire = "⚠️ Incertitude élevée"
@@ -777,11 +780,11 @@ try:
         
         # 🔍 Classification automatique
         if pred_total >= 2.5 and prob_over25 >= 0.6 and incertitude < 1.5:
-            matchs_hauts.append((prob_over25, match["match"], pred_total, f"{int(p25)} – {int(p75)}", commentaire))
+            matchs_hauts.append((prob_over25, match["match"], pred_total, f"{int(p25)} – {int(p75)}", commentaire, score_heur))
         if pred_total <= 2.0 and prob_under25 >= 0.7 and incertitude < 1.5:
-            matchs_bas.append((prob_under25, match["match"], pred_total, f"{int(p25)} – {int(p75)}", commentaire))
+            matchs_bas.append((prob_under25, match["match"], pred_total, f"{int(p25)} – {int(p75)}", commentaire, score_heur))
         else:
-            matchs_incertain.append((abs(prob_over25 - 0.5), match["match"], pred_total, f"{int(p25)} – {int(p75)}", commentaire))
+            matchs_incertain.append((abs(prob_over25 - 0.5), match["match"], pred_total, f"{int(p25)} – {int(p75)}", commentaire, score_heur))
             
         match["confiance"] = commentaire
 
@@ -790,20 +793,20 @@ try:
     mail_lines = [f"📅 Prévisions du {today}\n"]
     
     mail_lines.append("🔥 Top Matchs à fort potentiel de buts (≥ 2.5 buts, confiance élevée)\n")
-    for prob, name, pred, intervalle, conf in sorted(matchs_hauts, reverse=True)[:5]:
-        mail_lines.append(f"{name}\t⚽ {pred:.2f}\t🔁 {intervalle}\t📊 {int(prob*100)}%\t{conf}")
+    for prob, name, pred, intervalle, conf, heur in sorted(matchs_hauts, reverse=True)[:5]:
+        mail_lines.append(f"{name}\t⚽ {pred:.2f}\t🔁 {intervalle}\t📊 {int(prob*100)}%\t{conf}\t🧠 Heur: {heur:.2f}")
     if not matchs_hauts:
         mail_lines.append("Aucun match ouvert détecté aujourd’hui ❄️\n")
     
     mail_lines.append("\n❄️ Matchs potentiellement fermés (≤ 2.0 buts prévus)\n")
-    for prob, name, pred, intervalle, conf in sorted(matchs_bas)[:5]:
-        mail_lines.append(f"{name}\t⚽ {pred:.2f}\t🔁 {intervalle}\t🚫 {int(prob*100)}%\t{conf}")
+    for prob, name, pred, intervalle, conf, heur in sorted(matchs_bas)[:5]:
+        mail_lines.append(f"{name}\t⚽ {pred:.2f}\t🔁 {intervalle}\t🚫 {int(prob*100)}%\t{conf}\t🧠 Heur: {heur:.2f}")
     if not matchs_bas:
         mail_lines.append("Aucun match fermé détecté aujourd’hui.\n")
     
     mail_lines.append("\n⚪ Matchs neutres ou incertains\n")
-    for _, name, pred, intervalle, conf in sorted(matchs_incertain):
-        mail_lines.append(f"{name}\t⚽ {pred:.2f}\t🔁 {intervalle}\t📉 {conf}")
+    for _, name, pred, intervalle, conf, heur in sorted(matchs_incertain):
+        mail_lines.append(f"{name}\t⚽ {pred:.2f}\t🔁 {intervalle}\t📉 {conf}\t🧠 Heur: {heur:.2f}")
     if not matchs_incertain:
         mail_lines.append("Aucun match neutre aujourd’hui.\n")
     
@@ -812,6 +815,11 @@ try:
     mail_lines.append("Intervalle = Conformal Prediction [p25 – p75].")
     mail_lines.append("Confiance = Faible si range > 2.0 buts.")
     mail_lines.append("Classement basé sur un nouveau score composite intelligent.")
+    mail_lines.append("\n📊 Score Heuristique (🧠)")
+    mail_lines.append("🔥 ≥ 0.6 : Fort potentiel offensif")
+    mail_lines.append("⚪ 0.4 – 0.6 : Potentiel moyen / incertain")
+    mail_lines.append("🚫 < 0.4 : Faible potentiel de buts")
+
 
     send_email(
         subject="📊 Analyse quotidienne Xgenius (Top matchs ouverts/fermés/neutres)",
@@ -842,6 +850,7 @@ df_today = pd.DataFrame([
         "p25": round(pred_p25[i], 2),
         "p75": round(pred_p75[i], 2),
         "confiance": m["confiance"],
+        "score_heuristique": round(m.get("score_heur", 0), 2),
         "categorie": (
             "Ouvert" if pred_buts[i] >= 2.5 and probas_over25[i] >= 0.6 and (pred_p75[i] - pred_p25[i]) < 1.5
             else "Fermé" if pred_buts[i] <= 2.0 and (1 - probas_over25[i]) >= 0.7 and (pred_p75[i] - pred_p25[i]) < 1.5
