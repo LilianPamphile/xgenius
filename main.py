@@ -496,6 +496,9 @@ try:
     with open("model_files/features_list_score_heuristique.pkl", "rb") as f:
         features_heur = pickle.load(f)
 
+    with open("model_files/model_class_over25.pkl", "rb") as f:
+        model_over25 = pickle.load(f)
+
     # === Récupération historique des anciens matchs ===
     query_hist = """
         SELECT m.date::date AS date_match, m.equipe_domicile AS dom, m.equipe_exterieur AS ext,
@@ -725,10 +728,11 @@ try:
     # Prédiction des bornes conformal
     pred_p25 = model_p25.predict(X_live_scaled)
     pred_p75 = model_p75.predict(X_live_scaled)
+
+    # Prédiction classification over 2.5
+    probas_over25 = model_over25.predict_proba(X_live_scaled)[:, 1]  # probabilité que over 2.5
     
-    matchs_ouverts = []
-    matchs_fermes = []
-    matchs_neutres = []
+    matchs_hauts, matchs_bas, matchs_incertain = [], [], []
 
    # === Pondération dynamique selon MAE inverse ===
     mae_cat = 1.1068
@@ -746,6 +750,8 @@ try:
         p25 = pred_p25[i]
         p75 = pred_p75[i]
         incertitude = p75 - p25
+        prob_over25 = probas_over25[i]
+        prob_under25 = 1 - prob_over25
     
         # Variables heuristiques
         buts_dom, buts_ext = float(features_vec[0]), float(features_vec[1])
@@ -791,14 +797,6 @@ try:
         score_heuristique = model_heuristique.predict(X_input_heur)[0]
 
         gmos_score = compute_gmos(pred_total, p25, p75, score_heuristique)
-    
-        # 🔍 Classification automatique
-        if pred_total >= 3.5 and gmos_score >= 65:
-            type_match = "🔥 Ouvert"
-        elif pred_total <= 2.0 and gmos_score <= 50:
-            type_match = "❄️ Fermé"
-        else:
-            type_match = "⚪ Neutre"
 
         if incertitude > 2.5:
             commentaire = "⚠️ Incertitude élevée"
@@ -806,6 +804,14 @@ try:
             commentaire = "✅ Confiance élevée"
         else:
             commentaire = "ℹ️ Confiance modérée"
+        
+        # 🔍 Classification automatique
+        if pred_total >= 2.5 and prob_over25 >= 0.6 and incertitude < 1.5:
+            matchs_hauts.append((prob_over25, match["match"], pred_total, f"{int(p25)} – {int(p75)}", commentaire))
+        if pred_total <= 2.0 and prob_under25 >= 0.7 and incertitude < 1.5:
+            matchs_bas.append((prob_under25, match["match"], pred_total, f"{int(p25)} – {int(p75)}", commentaire))
+        else:
+            matchs_incertain.append((abs(prob_over25 - 0.5), match["match"], pred_total, f"{int(p25)} – {int(p75)}", commentaire))
     
         match["gmos_score"] = gmos_score
         match["type_match"] = type_match
@@ -826,25 +832,25 @@ try:
         else:
             matchs_neutres.append((gmos_score, match["match"], ligne))
     
-    # === Génération du mail GMOS ===
+    # === Génération du mail ===
     mail_lines = [f"📅 Prévisions du {today}\n"]
-    mail_lines.append("📈 Top 5 Matchs Ouverts (GMOS ≥ 65)\n")
     
-    for idx, (_, name, ligne) in enumerate(sorted(matchs_ouverts, reverse=True)[:5], 1):
-        mail_lines.append(f"{idx}️⃣ {name}\n{ligne}\n")
-    if not matchs_ouverts:
+    mail_lines.append("🔥 Top Matchs à fort potentiel de buts (≥ 2.5 buts, confiance élevée)\n")
+    for prob, name, pred, intervalle, conf in sorted(matchs_hauts, reverse=True)[:5]:
+        mail_lines.append(f"{name}\t⚽ {pred:.2f}\t🔁 {intervalle}\t📊 {int(prob*100)}%\t{conf}")
+    if not matchs_hauts:
         mail_lines.append("Aucun match ouvert détecté aujourd’hui ❄️\n")
     
-    mail_lines.append("🔒 Top 5 Matchs Fermés (GMOS ≤ 50)\n")
-    for idx, (_, name, ligne) in enumerate(sorted(matchs_fermes)[:5], 1):
-        mail_lines.append(f"{idx}️⃣ {name}\n{ligne}\n")
-    if not matchs_fermes:
+    mail_lines.append("\n❄️ Matchs potentiellement fermés (≤ 2.0 buts prévus)\n")
+    for prob, name, pred, intervalle, conf in sorted(matchs_bas)[:5]:
+        mail_lines.append(f"{name}\t⚽ {pred:.2f}\t🔁 {intervalle}\t🚫 {int(prob*100)}%\t{conf}")
+    if not matchs_bas:
         mail_lines.append("Aucun match fermé détecté aujourd’hui.\n")
     
-    mail_lines.append("⚪ Matchs Neutres (GMOS entre 51 et 64)\n")
-    for idx, (_, name, ligne) in enumerate(sorted(matchs_neutres, reverse=True), 1):
-        mail_lines.append(f"{idx}️⃣ {name}\n{ligne}\n")
-    if not matchs_neutres:
+    mail_lines.append("\n⚪ Matchs neutres ou incertains\n")
+    for _, name, pred, intervalle, conf in sorted(matchs_incertain):
+        mail_lines.append(f"{name}\t⚽ {pred:.2f}\t🔁 {intervalle}\t📉 {conf}")
+    if not matchs_incertain:
         mail_lines.append("Aucun match neutre aujourd’hui.\n")
     
     mail_lines.append("🔥 GMOS = le meilleur résumé de tous tes modèles 💡")
