@@ -135,15 +135,6 @@ def telecharger_model_depuis_github():
         else:
             print(f"❌ Échec du téléchargement de {chemin_local} ({response.status_code})")
 
-def compute_gmos(pred_ml, p25, p75, score_heuristique):
-    """Calcule un score GMOS (entre 0 et 100) à partir des éléments clés."""
-
-    variance_range = max(p75 - p25, 0.1)  # éviter division par 0
-    range_score = 1 - (variance_range / 5)  # plus c’est resserré, mieux c’est
-
-    base_score = 0.4 * (min(pred_ml / 5, 1) * 100) + 0.3 * score_heuristique + 0.3 * (range_score * 100)
-    return round(min(max(base_score, 0), 100), 2)
-
 ###################################################################################################
 
 # === 📌 1️⃣ Récupération des Matchs ===
@@ -742,8 +733,6 @@ try:
     weight_hgb = (1 / mae_hgb) / inv_total
     pred_buts = weight_cat * preds_cat + weight_hgb * preds_hgb
     
-    matchs_ouverts, matchs_fermes, matchs_neutres = [], [], []
-    
     for i, match in enumerate(matchs_jour):
         features_vec = match["features"]
         pred_total = pred_buts[i]
@@ -794,10 +783,6 @@ try:
         # Alignement des features selon le fichier sauvegardé
         X_input_heur = pd.DataFrame([[d.get(f, 0.0) for f in features_heur]], columns=features_heur)
 
-        score_heuristique = model_heuristique.predict(X_input_heur)[0]
-
-        gmos_score = compute_gmos(pred_total, p25, p75, score_heuristique)
-
         if incertitude > 2.5:
             commentaire = "⚠️ Incertitude élevée"
         elif incertitude < 1.5:
@@ -812,25 +797,9 @@ try:
             matchs_bas.append((prob_under25, match["match"], pred_total, f"{int(p25)} – {int(p75)}", commentaire))
         else:
             matchs_incertain.append((abs(prob_over25 - 0.5), match["match"], pred_total, f"{int(p25)} – {int(p75)}", commentaire))
-    
-        match["gmos_score"] = gmos_score
-        match["type_match"] = type_match
+            
         match["confiance"] = commentaire
 
-    
-        ligne = (
-            f"🔮 GMOS : {gmos_score}\n"
-            f"📊 Estimé entre {int(p25)} et {int(p75)} buts\n"
-            f"📈 Prédiction finale : {pred_total:.2f} buts\n"
-            f"{match['confiance']}\n"
-        )
-
-        if pred_total >= 3.5 and gmos_score >= 65:
-            matchs_ouverts.append((gmos_score, match["match"], ligne))
-        elif pred_total <= 2.0 and gmos_score <= 50:
-            matchs_fermes.append((gmos_score, match["match"], ligne))
-        else:
-            matchs_neutres.append((gmos_score, match["match"], ligne))
     
     # === Génération du mail ===
     mail_lines = [f"📅 Prévisions du {today}\n"]
@@ -853,12 +822,14 @@ try:
     if not matchs_incertain:
         mail_lines.append("Aucun match neutre aujourd’hui.\n")
     
-    mail_lines.append("🔥 GMOS = le meilleur résumé de tous tes modèles 💡")
-    mail_lines.append("🧠 Cluster = profil historique | GMOS = prédictions + forme actuelle")
-    mail_lines.append("Suivi : https://docs.google.com/forms/d/e/1FAIpQLSdRKd8ui1gy8lNfhMYYsLesglR9JJeAI7VgqrASbr0Ocdl7Tg/viewform?usp=header")
-    
+    mail_lines.append("\n🧠 Note méthodologique")
+    mail_lines.append("Prédiction finale = pondération CatBoost + HGB.")
+    mail_lines.append("Intervalle = Conformal Prediction [p25 – p75].")
+    mail_lines.append("Confiance = Faible si range > 2.0 buts.")
+    mail_lines.append("Classement basé sur un nouveau score composite intelligent.")
+
     send_email(
-        subject="📊 Analyse quotidienne GMOS (Top matchs ouverts/fermés/neutres)",
+        subject="📊 Analyse quotidienne Xgenius (Top matchs ouverts/fermés/neutres)",
         body="\n".join(mail_lines),
         to_email = ["lilian.pamphile.bts@gmail.com"]
     )
@@ -886,9 +857,12 @@ df_today = pd.DataFrame([
         "prediction_buts": round(pred_buts[i], 2),
         "p25": round(pred_p25[i], 2),
         "p75": round(pred_p75[i], 2),
-        "gmos": round(m["gmos_score"], 2),
         "confiance": m["confiance"],
-        "type_match": m["type_match"]
+        "categorie": (
+            "Ouvert" if pred_buts[i] >= 2.5 and probas_over25[i] >= 0.6 and (pred_p75[i] - pred_p25[i]) < 1.5
+            else "Fermé" if pred_buts[i] <= 2.0 and (1 - probas_over25[i]) >= 0.7 and (pred_p75[i] - pred_p25[i]) < 1.5
+            else "Neutre"
+        )
     }
     for i, m in enumerate(matchs_jour)
 ])
