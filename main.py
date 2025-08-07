@@ -489,6 +489,8 @@ try:
         scaler_ml = pickle.load(f)
     with open("model_files/features_list.pkl", "rb") as f:
         features = pickle.load(f)
+    with open("model_files/score_heuristique.pkl", "rb") as f:
+        model_heuristique = pickle.load(f)
 
     # === Récupération historique des anciens matchs ===
     query_hist = """
@@ -761,17 +763,18 @@ try:
         fautes = float(match.get("fautes", 20))
         cartons = float(match.get("cartons", 3))
     
-        score_heuristique = (
-            0.10 * (buts_dom + buts_ext) +
-            0.10 * (over25_dom + over25_ext) +
-            0.08 * (btts_dom + btts_ext) +
-            0.08 * (xg_dom + xg_ext) +
-            0.05 * tirs_cadres_total +
-            0.12 * forme_pond_dom + 0.12 * forme_pond_ext -
-            0.10 * solidite_dom - 0.10 * solidite_ext +
-            0.03 * corners + 0.03 * fautes + 0.02 * cartons + 0.05 * poss
-        )
-    
+        X_input_heur = pd.DataFrame([[
+            buts_dom, buts_ext, over25_dom, over25_ext, btts_dom, btts_ext,
+            xg_dom, xg_ext, tirs_cadres_total, forme_pond_dom, forme_pond_ext,
+            solidite_dom, solidite_ext, corners, fautes, cartons, poss
+        ]], columns=[
+            "buts_dom", "buts_ext", "over25_dom", "over25_ext", "btts_dom", "btts_ext",
+            "xg_dom", "xg_ext", "tirs_cadres_total", "forme_pond_dom", "forme_pond_ext",
+            "solidite_dom", "solidite_ext", "corners", "fautes", "cartons", "poss"
+        ])
+        
+        score_heuristique = model_heuristique.predict(X_input_heur)[0]
+
         gmos_score = compute_gmos(pred_total, p25, p75, score_heuristique)
     
         # 🔍 Classification automatique
