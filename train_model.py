@@ -363,7 +363,9 @@ results["over25_classifier"] = {"accuracy": acc_over25}
 # ⚡ === 2. Calibration dynamique du OFFSET (RMSE-based) ===
 preds_train_q25 = q_models[0.25].predict(X_train)
 preds_train_q75 = q_models[0.75].predict(X_train)
-offset_dynamic = np.mean(preds_train_q75 - preds_train_q25) / 2  # ou autre méthode plus robuste si souhaitée
+intervales = preds_train_q75 - preds_train_q25
+offset_dynamic = np.percentile(intervales, 75) / 2  # ou même np.median(intervales) / 2
+
 
 with open(f"{model_path}/offset_conformal.pkl", "wb") as f:
     pickle.dump(offset_dynamic, f)
