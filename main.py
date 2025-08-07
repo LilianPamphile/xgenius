@@ -851,3 +851,52 @@ except Exception as e:
         body=error_message,
         to_email="lilian.pamphile.bts@gmail.com"
     )
+    
+
+# === Sauvegarde dans un unique fichier historique CSV ===
+from datetime import datetime
+import pandas as pd
+
+today_str = datetime.now().strftime("%Y-%m-%d")
+df_today = pd.DataFrame([
+    {
+        "date": today_str,
+        "match": m["match"],
+        "prediction_buts": round(pred_buts[i], 2),
+        "p25": round(pred_p25[i], 2),
+        "p75": round(pred_p75[i], 2),
+        "gmos": round(m["gmos_score"], 2),
+        "confiance": m["confiance"],
+        "type_match": m["type_match"]
+    }
+    for i, m in enumerate(matchs_jour)
+])
+
+# === Clone du dépôt GitHub ===
+REPO_DIR = "main_push"
+REPO_URL = f"https://{GITHUB_TOKEN}@github.com/LilianPamphile/paris-sportifs.git"
+
+if os.path.exists(REPO_DIR):
+    shutil.rmtree(REPO_DIR)
+os.system(f"git clone {REPO_URL} {REPO_DIR}")
+
+# === Chargement de l'historique s’il existe ===
+suivi_path = os.path.join(REPO_DIR, "suivi_predictions")
+os.makedirs(suivi_path, exist_ok=True)
+csv_path = os.path.join(suivi_path, "historique_predictions.csv")
+
+if os.path.exists(csv_path):
+    df_hist = pd.read_csv(csv_path)
+    df_combined = pd.concat([df_hist, df_today], ignore_index=True)
+else:
+    df_combined = df_today
+
+# === Écriture finale du fichier unique ===
+df_combined.to_csv(csv_path, index=False)
+
+# === Commit & Push sur GitHub ===
+os.system(f"cd {REPO_DIR} && git add suivi_predictions/historique_predictions.csv")
+os.system(f"cd {REPO_DIR} && git commit -m '📊 Ajout des prédictions du {today_str}'")
+os.system(f"cd {REPO_DIR} && git push origin main")
+
+print("✅ Suivi des prédictions mis à jour dans historique_predictions.csv.")
