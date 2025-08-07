@@ -496,10 +496,6 @@ try:
     with open("model_files/features_list_score_heuristique.pkl", "rb") as f:
         features_heur = pickle.load(f)
 
-    X_input_heur = pd.DataFrame([[features_dict.get(f, 0.0) for f in features_heur]], columns=features_heur)
-    score_heuristique = model_heuristique.predict(X_input_heur)[0]
-
-
     # === Récupération historique des anciens matchs ===
     query_hist = """
         SELECT m.date::date AS date_match, m.equipe_domicile AS dom, m.equipe_exterieur AS ext,
