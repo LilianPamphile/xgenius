@@ -721,8 +721,8 @@ try:
     preds_cat = model_cat.predict(X_live_scaled)
     preds_hgb = model_hgb.predict(X_live_scaled)
     # Prédiction des bornes conformal
-    pred_p25 = model_p25.predict(X_scaled) - OFFSET
-    pred_p75 = model_p75.predict(X_scaled) + OFFSET
+    pred_p25 = model_p25.predict(X_live_scaled) - OFFSET
+    pred_p75 = model_p75.predict(X_live_scaled) + OFFSET
 
 
     # Prédiction classification over 2.5
