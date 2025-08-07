@@ -715,9 +715,6 @@ try:
     matchs_jour = get_matchs_jour_for_prediction()
 
     # === Prédictions ===
-    # === Ajout cluster_type (avant scaler)
-    X_live = pd.DataFrame([m["features"] for m in matchs_jour], columns=features)  # 34 colonnes
-
     # ✅ Transformation
     X_live = pd.DataFrame([m["features"] for m in matchs_jour], columns=features)
     X_live_scaled = scaler_ml.transform(X_live)
