@@ -380,6 +380,9 @@ os.system(f"cd {CLONE_DIR} && git add model_files && git commit -m '🔁 Update 
 print("✅ Modèles commités et poussés sur GitHub.")
 
 # === Sauvegarde des MAE pondérations ===
+mae_cat = results["catboost_optuna"]["mae"]
+mae_hgb = results["hist_gradient_boosting"]["mae"]
+
 mae_info = {
     "mae_cat": mae_cat,
     "mae_hgb": mae_hgb
