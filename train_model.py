@@ -330,6 +330,47 @@ os.utime(features_heuristique_path, (time.time(), time.time()))
 
 print("✅ Modèle score_heuristique sauvegardé.")
 
+# 🌟 Ajout d'un modèle Over/Under 2.5 + calibration dynamique du OFFSET
+
+from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.calibration import calibration_curve
+from sklearn.metrics import accuracy_score
+
+# ✅ === 1. Ajout du label binaire over_25 ===
+df["label_over_25"] = (df["total_buts"] > 2.5).astype(int)
+
+# === Entraînement du classifieur ===
+X_class = df[FEATURES_TOTAL_BUTS]
+y_class = df["label_over_25"]
+X_train_class, X_test_class, y_train_class, y_test_class = train_test_split(X_class, y_class, test_size=0.2, random_state=42)
+
+model_over25 = GradientBoostingClassifier(n_estimators=200, learning_rate=0.05, max_depth=4, random_state=42)
+model_over25.fit(X_train_class, y_train_class)
+y_prob = model_over25.predict_proba(X_test_class)[:, 1]
+acc_over25 = accuracy_score(y_test_class, model_over25.predict(X_test_class))
+
+# === Calibration plot optionnel ===
+# prob_true, prob_pred = calibration_curve(y_test_class, y_prob, n_bins=10)
+
+# Sauvegarde
+with open(f"{model_path}/model_over25_classifier.pkl", "wb") as f:
+    pickle.dump(model_over25, f)
+with open(f"{model_path}/features_list_over25.pkl", "wb") as f:
+    pickle.dump(FEATURES_TOTAL_BUTS, f)
+
+results["over25_classifier"] = {"accuracy": acc_over25}
+
+# ⚡ === 2. Calibration dynamique du OFFSET (RMSE-based) ===
+preds_train_q25 = q_models[0.25].predict(X_train)
+preds_train_q75 = q_models[0.75].predict(X_train)
+offset_dynamic = np.mean(preds_train_q75 - preds_train_q25) / 2  # ou autre méthode plus robuste si souhaitée
+
+with open(f"{model_path}/offset_conformal.pkl", "wb") as f:
+    pickle.dump(offset_dynamic, f)
+
+print("✅ Modèle classification + offset dynamique ajoutés avec succès.")
+
+
 preds_score = model_score.predict(X_score)
 mae_score = mean_absolute_error(y_score, preds_score)
 results["score_heuristique"] = {
