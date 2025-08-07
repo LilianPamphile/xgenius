@@ -285,6 +285,39 @@ with open(features_list_path, "wb") as f:
 # 🔧 Force modification de timestamp pour forcer Git à l'inclure
 os.utime(features_list_path, (time.time(), time.time()))
 
+# Ajout dans le même script (train_model.py), à la fin ou dans une section dédiée
+df_heuristique = df.copy()
+
+# === Variables pour score heuristique appris ===
+FEATURES_HEURISTIQUE = [
+    "buts_dom", "buts_ext", "over25_dom", "over25_ext", "btts_dom", "btts_ext",
+    "moyenne_xg_dom", "moyenne_xg_ext", "total_tirs_cadres",
+    "forme_dom_marq", "forme_ext_marq",
+    "solidite_dom", "solidite_ext",
+    "corners", "fautes", "cartons_jaunes", "possession"
+]
+
+X_score = df_heuristique[FEATURES_HEURISTIQUE]
+y_score = df_heuristique["total_buts"]
+
+# Apprentissage du modèle
+from sklearn.linear_model import LinearRegression
+model_score = LinearRegression()
+model_score.fit(X_score, y_score)
+
+# Sauvegarde du modèle
+with open(f"{model_path}/regression_score_heuristique.pkl", "wb") as f:
+    pickle.dump(model_score, f)
+
+print("✅ Modèle score_heuristique sauvegardé.")
+
+preds_score = model_score.predict(X_score)
+mae_score = mean_absolute_error(y_score, preds_score)
+results["score_heuristique"] = {
+    "mae": mae_score,
+    "rmse": np.sqrt(mean_squared_error(y_score, preds_score)),
+    "r2": r2_score(y_score, preds_score)
+}
 
 # === Commit & Push GitHub ===
 os.system(f"cd {CLONE_DIR} && git add model_files && git commit -m '🔁 Update models v3' && git push")
