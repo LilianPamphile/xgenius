@@ -731,8 +731,12 @@ try:
     matchs_hauts, matchs_bas, matchs_incertain = [], [], []
 
    # === Pondération dynamique selon MAE inverse ===
-    mae_cat = 1.1068
-    mae_hgb = 1.1298
+    with open("model_files/mae_models.pkl", "rb") as f:
+        mae_dict = pickle.load(f)
+    
+    mae_cat = mae_dict["mae_cat"]
+    mae_hgb = mae_dict["mae_hgb"]
+
     inv_total = 1 / mae_cat + 1 / mae_hgb
     weight_cat = (1 / mae_cat) / inv_total
     weight_hgb = (1 / mae_hgb) / inv_total
