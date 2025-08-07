@@ -887,6 +887,10 @@ df_today = pd.DataFrame([
     for i, m in enumerate(matchs_jour)
 ])
 
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+if not GITHUB_TOKEN:
+    raise ValueError("❌ Le token GitHub (GITHUB_TOKEN) n'est pas défini.")
+
 # === Clone du dépôt GitHub ===
 REPO_DIR = "main_push"
 REPO_URL = f"https://{GITHUB_TOKEN}@github.com/LilianPamphile/paris-sportifs.git"
