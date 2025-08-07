@@ -42,7 +42,9 @@ FEATURES_TOTAL_BUTS = [
     "sum_btts", "diff_over25", "total_tirs", "total_tirs_cadres",
     "clean_sheets_dom", "clean_sheets_ext", "solidite_dom", "solidite_ext",
     "std_marq_dom", "std_enc_dom", "std_marq_ext", "std_enc_ext",
-    "clean_dom", "clean_ext", "solidite_def_dom", "solidite_def_ext"
+    "clean_dom", "clean_ext", "solidite_def_dom", "solidite_def_ext",
+    "forme_pond_dom", "forme_pond_ext",
+    "cartons", "poss", "tirs_cadres_total"
 ]
 
 # ========== 🗃️ Récupération des données historiques ========== #
@@ -173,6 +175,15 @@ df["clean_sheets_dom"] = 100 - df["btts_dom"]
 df["clean_sheets_ext"] = 100 - df["btts_ext"]
 df["solidite_dom"] = 1 / (df["buts_encaissés_dom"] + 0.1)
 df["solidite_ext"] = 1 / (df["buts_encaissés_ext"] + 0.1)
+
+# === 🆕 Nouvelles features à inclure dans les modèles
+df["forme_pond_dom"] = 0.6 * df["forme_dom_marq"] + 0.4 * df["forme_dom_over25"]
+df["forme_pond_ext"] = 0.6 * df["forme_ext_marq"] + 0.4 * df["forme_ext_over25"]
+
+df["cartons"] = (df["cartons_jaunes"] + df.get("cartons_rouges", 0)).fillna(3)
+df["poss"] = df[["possession", "poss_ext"]].mean(axis=1)
+
+df["tirs_cadres_total"] = df["total_tirs_cadres"]  # Pour cohérence avec main
 
 # --- Clip des outliers ---
 df["total_buts"] = df["total_buts"].clip(upper=5)
