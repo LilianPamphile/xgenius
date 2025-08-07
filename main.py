@@ -101,38 +101,33 @@ def send_email(subject, body, to_email):
 
 # --- Téléchargement des fichiers modèle/scaler depuis GitHub ---
 def telecharger_model_depuis_github():
-    # Infos du repo
     REPO = "LilianPamphile/paris-sportifs"
     BRANCH = "main"
     TOKEN = os.getenv("GITHUB_TOKEN")
-    
-    # Liste des fichiers à télécharger (avec chemin dans le repo GitHub)
+
     fichiers = {
         "model_files/model_total_buts_catboost_optuna.pkl": "model_files/model_total_buts_catboost_optuna.pkl",
         "model_files/model_total_buts_hist_gradient_boosting.pkl": "model_files/model_total_buts_hist_gradient_boosting.pkl",
         "model_files/model_total_buts_conformal_p25.pkl": "model_files/model_total_buts_conformal_p25.pkl",
         "model_files/model_total_buts_conformal_p75.pkl": "model_files/model_total_buts_conformal_p75.pkl",
         "model_files/scaler_total_buts.pkl": "model_files/scaler_total_buts.pkl",
-        "model_files/features_list.pkl": "model_files/features_list.pkl"
+        "model_files/features_list.pkl": "model_files/features_list.pkl",
+        "model_files/regression_score_heuristique.pkl": "model_files/regression_score_heuristique.pkl",
+        "model_files/features_list_score_heuristique.pkl": "model_files/features_list_score_heuristique.pkl",
+        "model_files/model_over25_classifier.pkl": "model_files/model_over25_classifier.pkl",
+        "model_files/offset_conformal.pkl": "model_files/offset_conformal.pkl",
+        "model_files/mae_models.pkl": "model_files/mae_models.pkl",
     }
-
-    for chemin_dist, chemin_local in fichiers.items():
-        url = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/{chemin_dist}"
-        headers = {"Authorization": f"token {TOKEN}"}
-
-        # Crée le dossier local si besoin
-        dossier = os.path.dirname(chemin_local)
-        if not os.path.exists(dossier):
-            os.makedirs(dossier)
-
-        response = requests.get(url, headers=headers)
-        if response.status_code == 200:
-            with open(chemin_local, "wb") as f:
-                f.write(response.content)
-            print(f"✅ Fichier téléchargé : {chemin_local}")
-
+    for dist, local in fichiers.items():
+        url = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/{dist}"
+        headers = {"Authorization": f"token {TOKEN}"} if TOKEN else {}
+        os.makedirs(os.path.dirname(local), exist_ok=True)
+        r = requests.get(url, headers=headers)
+        if r.status_code == 200:
+            with open(local, "wb") as f: f.write(r.content)
+            print(f"✅ {local}")
         else:
-            print(f"❌ Échec du téléchargement de {chemin_local} ({response.status_code})")
+            print(f"❌ {local} ({r.status_code})")
 
 ###################################################################################################
 
@@ -486,8 +481,9 @@ try:
     with open("model_files/features_list_score_heuristique.pkl", "rb") as f:
         features_heur = pickle.load(f)
 
-    with open("model_files/model_class_over25.pkl", "rb") as f:
+    with open("model_files/model_over25_classifier.pkl", "rb") as f:
         model_over25 = pickle.load(f)
+
     # Charger le OFFSET dynamique
     with open("model_files/offset_conformal.pkl", "rb") as f:
         OFFSET = pickle.load(f)
