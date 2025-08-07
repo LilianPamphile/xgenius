@@ -275,8 +275,15 @@ with open(f"{model_path}/model_total_buts_conformal_p75.pkl", "wb") as f:
 # Scaler & features
 with open(f"{model_path}/scaler_total_buts.pkl", "wb") as f:
     pickle.dump(scaler, f)
-with open(f"{model_path}/features_list.pkl", "wb") as f:
+
+import time
+
+features_list_path = f"{model_path}/features_list.pkl"
+with open(features_list_path, "wb") as f:
     pickle.dump(FEATURES_TOTAL_BUTS, f)
+
+# 🔧 Force modification de timestamp pour forcer Git à l'inclure
+os.utime(features_list_path, (time.time(), time.time()))
 
 
 # === Commit & Push GitHub ===
