@@ -333,7 +333,6 @@ print("✅ Modèle score_heuristique sauvegardé.")
 # 🌟 Ajout d'un modèle Over/Under 2.5 + calibration dynamique du OFFSET
 
 from sklearn.ensemble import GradientBoostingClassifier
-from sklearn.calibration import calibration_curve
 from sklearn.metrics import accuracy_score
 
 # ✅ === 1. Ajout du label binaire over_25 ===
@@ -348,9 +347,6 @@ model_over25 = GradientBoostingClassifier(n_estimators=200, learning_rate=0.05, 
 model_over25.fit(X_train_class, y_train_class)
 y_prob = model_over25.predict_proba(X_test_class)[:, 1]
 acc_over25 = accuracy_score(y_test_class, model_over25.predict(X_test_class))
-
-# === Calibration plot optionnel ===
-# prob_true, prob_pred = calibration_curve(y_test_class, y_prob, n_bins=10)
 
 # Sauvegarde
 with open(f"{model_path}/model_over25_classifier.pkl", "wb") as f:
