@@ -308,6 +308,14 @@ model_score.fit(X_score, y_score)
 # Sauvegarde du modèle
 with open(f"{model_path}/regression_score_heuristique.pkl", "wb") as f:
     pickle.dump(model_score, f)
+    
+# === Sauvegarde des features du modèle heuristique ===
+features_heuristique_path = f"{model_path}/features_list_score_heuristique.pkl"
+with open(features_heuristique_path, "wb") as f:
+    pickle.dump(FEATURES_HEURISTIQUE, f)
+
+# Forcer l’inclusion Git
+os.utime(features_heuristique_path, (time.time(), time.time()))
 
 print("✅ Modèle score_heuristique sauvegardé.")
 
