@@ -2,15 +2,14 @@
 import requests
 import psycopg2
 # Fonction de conversion sécurisée
-import math
 from datetime import datetime, timedelta
 import smtplib
 from email.mime.text import MIMEText
 import os
-import requests
 import pickle
 import pandas as pd
 import numpy as np
+import shutil
 
 # 🔑 Clé API SportsData.io
 API_KEY = "b63f99b8e4mshb5383731d310a85p103ea1jsn47e34368f5df"
@@ -507,29 +506,6 @@ try:
     rows_hist = cursor.fetchall()
     df_all = pd.DataFrame(rows_hist, columns=["date", "dom", "ext", "buts_dom", "buts_ext"])
 
-    def get_forme(df_hist, equipe, date_ref):
-        matchs = df_hist[
-            ((df_hist["dom"] == equipe) | (df_hist["ext"] == equipe)) &
-            (df_hist["date"] < date_ref)
-        ].sort_values("date", ascending=False).head(5)
-
-        if matchs.empty:
-            return 0.0, 0.0, 0.0
-
-        buts_marques, buts_encaissés, over25 = [], [], []
-        for _, row in matchs.iterrows():
-            est_dom = (equipe == row["dom"])
-            buts_marques.append(row["buts_dom"] if est_dom else row["buts_ext"])
-            buts_encaissés.append(row["buts_ext"] if est_dom else row["buts_dom"])
-            over25.append(int(row["buts_dom"] + row["buts_ext"] > 2.5))
-
-        return (
-            sum(buts_marques)/len(buts_marques),
-            sum(buts_encaissés)/len(buts_encaissés),
-            sum(over25)/len(over25)
-        )
-
-    #test
     def get_matchs_jour_for_prediction():
         cursor = conn.cursor()
 
@@ -855,7 +831,6 @@ except Exception as e:
     
 
 # === Sauvegarde dans un unique fichier historique CSV ===
-from datetime import datetime
 import pandas as pd
 
 today_str = datetime.now().strftime("%Y-%m-%d")
