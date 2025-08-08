@@ -872,9 +872,24 @@ try:
             "cartons": cartons_total, "poss": poss_moy,
         }
     
-        X_input_heur = pd.DataFrame([[d[f] for f in features_heur]], columns=features_heur)
-        score_heur = model_heuristique.predict(X_input_heur)[0]
-        score_heur = max(0, min(score_heur, 1.5))  # garde-fou
+        # Vérif que toutes les features attendues sont présentes
+        missing_feats = [f for f in features_heur if f not in d]
+        if missing_feats:
+            print(f"[WARN] Features manquantes pour score_heur: {missing_feats}")
+        
+        # Construction dans le bon ordre
+        X_input_heur = pd.DataFrame([[d.get(f, 0.0) for f in features_heur]], columns=features_heur)
+        
+        # Prédiction
+        score_heur = float(model_heuristique.predict(X_input_heur)[0])
+        
+        # Contrôle des bornes
+        if score_heur < -0.05 or score_heur > 2:
+            print(f"[WARN] score_heur aberrant ({score_heur:.2f}) pour {match.get('match', 'inconnu')}")
+        
+        # Clamp pour rester dans la plage exploitable
+        score_heur = max(0.0, min(score_heur, 1.5))
+
         match["score_heur"] = score_heur
     
         # commentaire confiance simple
