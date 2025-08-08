@@ -91,9 +91,6 @@ for col in df.columns:
     if df[col].dtype == 'object' and not df[col].dropna().empty and isinstance(df[col].dropna().iloc[0], Decimal):
         df[col] = df[col].astype(float)
 
-# ============================================================
-# 🔧 FEATURES ALIGNÉES AVEC LE MAIN (à placer avant X = df[...])
-# ============================================================
 
 # 1) Historique pour la forme split (exactement comme le main)
 df_hist = df.rename(columns={
