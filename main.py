@@ -888,34 +888,23 @@ try:
     
     matchs_over, matchs_under, matchs_opps = [], [], []
 
-    def coherence_count(pred_total, prob_over25, incertitude, score_heur):
-        """Compte combien de signaux vont dans la même direction (Over vs Under)."""
-        votes_over = 0
-        votes_under = 0
+    def clip01(x):
+    return max(0.0, min(1.0, float(x)))
+
+    def score_over(pred_total, prob_over25, score_heur, incertitude):
+        pred_part = clip01(pred_total / 4.0)
+        prob_part = clip01(prob_over25)
+        heur_part = clip01(min(1.0, score_heur))   # ton heuristique est ~[0,1.5]
+        pen = max(0.0, incertitude - 1.0)          # pénalité si intervalle large
+        return 0.45*pred_part + 0.40*prob_part + 0.15*heur_part - 0.10*pen
     
-        # ML (régression)
-        votes_over += int(pred_total >= 2.5)
-        votes_under += int(pred_total <= 2.0)
-    
-        # Classif Over25
-        votes_over += int(prob_over25 >= 0.65)
-        votes_under += int(prob_over25 <= 0.35)
-    
-        # Conformal (confiance)
-        votes_over += int(incertitude < 1.5)   # bonus confiance pour les deux sens
-        votes_under += int(incertitude < 1.5)
-    
-        # Heuristique
-        votes_over += int(score_heur >= 0.60)
-        votes_under += int(score_heur <= 0.40)
-    
-        return votes_over, votes_under
-    
-    def score_final(pred_total, prob_over25, score_heur, incertitude):
-        """Score de tri interne pour l'affichage (plus haut = mieux)."""
-        base = 0.4 * (pred_total / 4.0) + 0.3 * prob_over25 + 0.3 * (score_heur / 1.0)
-        conf_bonus = max(0.0, 0.2 - 0.1 * max(0.0, incertitude - 1.0))  # petit bonus si intervalle serré
-        return base + conf_bonus
+    def score_under(pred_total, prob_over25, score_heur, incertitude):
+        low_goals = clip01((2.0 - pred_total) / 2.0)  # 2.0→0 ; 0.0→1
+        prob_under = clip01(1.0 - prob_over25)
+        heur_low = clip01(1.0 - min(1.0, score_heur)) # “faible potentiel”
+        pen = max(0.0, incertitude - 1.0)
+        return 0.45*low_goals + 0.40*prob_under + 0.15*heur_low - 0.10*pen
+
 
 
     for i, match in enumerate(matchs_jour):
@@ -986,27 +975,23 @@ try:
             commentaire = "ℹ️ Confiance modérée"
         match["confiance"] = commentaire
     
-        # --- COHÉRENCE ---
-        votes_over, votes_under = coherence_count(pred_total, prob_over25, incertitude, score_heur)
-    
-        # --- RÈGLES OPTION 2 ---
-        is_over = (pred_total >= 2.5) and (prob_over25 >= 0.65) and (incertitude < 1.5) and (score_heur >= 0.60) and (votes_over >= 3)
-        is_under = (pred_total <= 2.0) and (prob_under25 >= 0.70) and (incertitude < 1.5) and (score_heur <= 0.40) and (votes_under >= 3)
-    
-        # opportunités cachées : zone 50–65% (ou proche seuils) + cohérence ≥3
-        near_over_cut = (2.3 <= pred_total < 2.5) and (prob_over25 >= 0.55) and (votes_over >= 3)
-        mid_prob = (0.50 <= prob_over25 <= 0.65) and (votes_over >= 3 or votes_under >= 3)
-    
-        # score de tri pour affichage
-        s_final = score_final(pred_total, prob_over25, score_heur, incertitude)
-    
-        if is_over:
-            matchs_over.append((prob_over25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}", commentaire, score_heur, s_final))
-        elif is_under:
-            matchs_under.append((prob_under25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}", commentaire, score_heur, s_final))
-        elif near_over_cut or mid_prob:
-            # stocke la proba Over pour l'affichage (plus parlant)
+        # === CLASSEMENT SOUPLE (aucune exclusion) ===
+        s_over = score_over(pred_total, prob_over25, score_heur, incertitude)
+        s_under = score_under(pred_total, prob_over25, score_heur, incertitude)
+        
+        # étiquette soft: on prend le score dominant, sinon “Opps/Neutre”
+        if s_over - s_under > 0.05:
+            # pour Over, on affiche la proba over
+            matchs_over.append((prob_over25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}", commentaire, score_heur, s_over))
+        elif s_under - s_over > 0.05:
+            # pour Under, on affiche la proba under
+            prob_under25 = 1.0 - prob_over25
+            matchs_under.append((prob_under25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}", commentaire, score_heur, s_under))
+        else:
+            # borderline → on conserve aussi (classe “opportunités/neutre”), proba over par cohérence d'affichage
+            s_final = max(s_over, s_under)
             matchs_opps.append((prob_over25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}", commentaire, score_heur, s_final))
+
                 
         match["confiance"] = commentaire
 
@@ -1014,26 +999,27 @@ try:
     # === Génération du mail ===
     mail_lines = [f"📅 Prévisions du {today}\n"]
 
-    # Over
-    mail_lines.append("🔥 TOP CONFIANCE OVER (≥ 2.5, score🧠 ≥ 0.6, intervalle < 1.5)\n")
-    for prob, name, pred, intervalle, conf, heur, s in sorted(matchs_over, key=lambda x: x[-1], reverse=True)[:6]:
+    # Over (tous)
+    mail_lines.append("🔥 CLASSEMENT OVER (tous les matchs)\n")
+    for prob, name, pred, intervalle, conf, heur, s in sorted(matchs_over, key=lambda x: x[-1], reverse=True):
         mail_lines.append(f"{name}\t⚽ {pred:.2f}\t🔁 {intervalle}\t📊 {int(prob*100)}%\t{conf}\t🧠 {heur:.2f}")
     if not matchs_over:
-        mail_lines.append("Aucun match Over hautement fiable.\n")
+        mail_lines.append("Aucun match taggué Over.\n")
     
-    # Under
-    mail_lines.append("\n❄️ TOP CONFIANCE UNDER (≤ 2.0, score🧠 ≤ 0.4, intervalle < 1.5)\n")
-    for probU, name, pred, intervalle, conf, heur, s in sorted(matchs_under, key=lambda x: x[-1], reverse=True)[:6]:
+    # Under (tous)
+    mail_lines.append("\n❄️ CLASSEMENT UNDER (tous les matchs)\n")
+    for probU, name, pred, intervalle, conf, heur, s in sorted(matchs_under, key=lambda x: x[-1], reverse=True):
         mail_lines.append(f"{name}\t⚽ {pred:.2f}\t🔁 {intervalle}\t🚫 {int(probU*100)}%\t{conf}\t🧠 {heur:.2f}")
     if not matchs_under:
-        mail_lines.append("Aucun match Under hautement fiable.\n")
+        mail_lines.append("Aucun match taggué Under.\n")
     
-    # Opportunités cachées
-    mail_lines.append("\n🎯 OPPORTUNITÉS CACHÉES (proba 50–65% mais signaux cohérents)\n")
-    for probO, name, pred, intervalle, conf, heur, s in sorted(matchs_opps, key=lambda x: x[-1], reverse=True)[:8]:
+    # Opps/Neutres (tous)
+    mail_lines.append("\n🎯 OPPORTUNITÉS / NEUTRES (tous les matchs)\n")
+    for probO, name, pred, intervalle, conf, heur, s in sorted(matchs_opps, key=lambda x: x[-1], reverse=True):
         mail_lines.append(f"{name}\t⚽ {pred:.2f}\t🔁 {intervalle}\t📊 {int(probO*100)}%\t{conf}\t🧠 {heur:.2f}")
     if not matchs_opps:
-        mail_lines.append("Aucune opportunité intermédiaire détectée.\n")
+        mail_lines.append("Aucun match borderline/neutre.\n")
+
     
     mail_lines += [
         "\n🧠 Note méthodologique",
@@ -1090,7 +1076,7 @@ try:
 
     
     send_email_html(
-        subject="📊 Analyse quotidienne Xgenius (HTML)",
+        subject="📊 Analyse quotidienne Xgenius",
         html_body=html_body,
         to_email=["lilian.pamphile.bts@gmail.com"]
     )
