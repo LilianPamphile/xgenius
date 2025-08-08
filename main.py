@@ -789,53 +789,49 @@ try:
         incertitude = p75 - p25
         prob_over25 = probas_over25[i]
         prob_under25 = 1 - prob_over25
-    
-        # Variables heuristiques
-        buts_dom, buts_ext = float(features_vec[0]), float(features_vec[1])
-        over25_dom, over25_ext = float(features_vec[4]), float(features_vec[5])
-        btts_dom, btts_ext = float(features_vec[6]), float(features_vec[7])
-        xg_dom, xg_ext = float(features_vec[8]), float(features_vec[9])
-        tirs_cadres_total = float(features_vec[21])
-        fdm, fdo25 = float(features_vec[12]), float(features_vec[14])
-        fem, feo25 = float(features_vec[15]), float(features_vec[17])
-        forme_pond_dom = 0.6 * fdm + 0.4 * fdo25
-        forme_pond_ext = 0.6 * fem + 0.4 * feo25
         
-        clean_dom = match.get("clean_sheets_dom", 0.0)  # nb sur 5
-        clean_ext = match.get("clean_sheets_ext", 0.0)
+        # On prend la ligne imputée (non-scalée) pour rester dans le même espace que le training
+        row = X_live.iloc[i]
+
+        # Ce qui alimente le modèle heuristique (mêmes clés que dans FEATURES_HEURISTIQUE du train)
+        poss = float(match.get("poss", row.get("poss_moyenne", 50.0)))
+        corners = float(match.get("corners", row.get("corners_dom", 0.0) + row.get("corners_ext", 0.0)))
+        fautes = float(match.get("fautes", np.nan))  # pas utilisé dans X_live actuel (ok si NaN -> 0 dans get)
+        cartons = float(match.get("cartons", row.get("cartons_total", 0.0)))
+
+        # Solide: dans le main, clean_* = nb sur 5, on normalise sur [0,1]
+        clean_dom = float(match.get("clean_sheets_dom", 0.0))
+        clean_ext = float(match.get("clean_sheets_ext", 0.0))
         solidite_dom = clean_dom / 5.0
         solidite_ext = clean_ext / 5.0
 
-        poss = float(match.get("poss", 50))
-        corners = float(match.get("corners", 8))
-        fautes = float(match.get("fautes", 20))
-        cartons = float(match.get("cartons", 3))
-    
-        # Construction dynamique des features heuristiques
+        # Pour conserver ta logique heuristique d’avant, on récupère par noms si dispo
+        def getf(name, default=0.0):
+            return float(row[name]) if name in row and pd.notna(row[name]) else float(default)
+
         d = {
-            "buts_dom": buts_dom,
-            "buts_ext": buts_ext,
-            "over25_dom": over25_dom,
-            "over25_ext": over25_ext,
-            "btts_dom": btts_dom,
-            "btts_ext": btts_ext,
-            "xg_dom": xg_dom,
-            "xg_ext": xg_ext,
-            "tirs_cadres_total": tirs_cadres_total,
-            "forme_pond_dom": forme_pond_dom,
-            "forme_pond_ext": forme_pond_ext,
+            "buts_dom": getf("forme_home_buts_marques"),
+            "buts_ext": getf("forme_away_buts_marques"),
+            "over25_dom": getf("forme_home_over25"),
+            "over25_ext": getf("forme_away_over25"),
+            "btts_dom": 0.0,   # pas dans X_live actuel -> laisse 0.0 (ou ajoute la feature côté train+main si tu veux)
+            "btts_ext": 0.0,   # idem
+            "xg_dom": getf("moyenne_xg_dom"),
+            "xg_ext": getf("moyenne_xg_ext"),
+            "tirs_cadres_total": getf("tirs_cadres_dom") + getf("tirs_cadres_ext"),
+            "forme_pond_dom": 0.6 * getf("forme_home_buts_marques") + 0.4 * getf("forme_home_over25"),
+            "forme_pond_ext": 0.6 * getf("forme_away_buts_marques") + 0.4 * getf("forme_away_over25"),
             "solidite_dom": solidite_dom,
             "solidite_ext": solidite_ext,
             "corners": corners,
-            "fautes": fautes,
+            "fautes": 0.0 if np.isnan(fautes) else fautes,
             "cartons": cartons,
-            "poss": poss
+            "poss": poss,
         }
-        
-        # Alignement des features selon le fichier sauvegardé
+
+        # Aligne exactement sur features_heur (chargé depuis pickle)
         X_input_heur = pd.DataFrame([[d.get(f, 0.0) for f in features_heur]], columns=features_heur)
         score_heur = model_heuristique.predict(X_input_heur)[0]
-
         match["score_heur"] = score_heur
 
         if incertitude > 2.5:
