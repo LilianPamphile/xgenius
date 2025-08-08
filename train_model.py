@@ -34,17 +34,25 @@ cursor = conn.cursor()
 
 # === Constantes ===
 FEATURES_TOTAL_BUTS = [
-    "buts_dom", "buts_ext", "buts_encaissés_dom", "buts_encaissés_ext",
-    "over25_dom", "over25_ext", "btts_dom", "btts_ext",
-    "moyenne_xg_dom", "moyenne_xg_ext", "diff_xg", "sum_xg",
-    "forme_dom_marq", "forme_dom_enc", "forme_dom_over25",
-    "forme_ext_marq", "forme_ext_enc", "forme_ext_over25",
-    "sum_btts", "diff_over25", "total_tirs", "total_tirs_cadres",
-    "clean_sheets_dom", "clean_sheets_ext", "solidite_dom", "solidite_ext",
+    # Forme split
+    "forme_home_buts_marques", "forme_home_buts_encaisses", "forme_home_over25",
+    "forme_away_buts_marques", "forme_away_buts_encaisses", "forme_away_over25",
+
+    # Variabilité
     "std_marq_dom", "std_enc_dom", "std_marq_ext", "std_enc_ext",
-    "clean_dom", "clean_ext", "solidite_def_dom", "solidite_def_ext",
-    "forme_pond_dom", "forme_pond_ext",
-    "cartons", "poss", "tirs_cadres_total"
+
+    # Clean sheets réels (compte sur 5)
+    "clean_dom", "clean_ext",
+
+    # xG & buts encaissés bruts
+    "moyenne_xg_dom", "moyenne_xg_ext",
+    "buts_encaissés_dom", "buts_encaissés_ext",
+
+    # Possession et tirs
+    "poss_moyenne", "tirs_dom", "tirs_ext", "tirs_cadres_dom", "tirs_cadres_ext",
+
+    # Discipline & corners
+    "corners_dom", "corners_ext", "cartons_total"
 ]
 
 # ========== 🗃️ Récupération des données historiques ========== #
@@ -83,112 +91,133 @@ for col in df.columns:
     if df[col].dtype == 'object' and not df[col].dropna().empty and isinstance(df[col].dropna().iloc[0], Decimal):
         df[col] = df[col].astype(float)
 
-# Nouvelle fonction : forme pondérée + std + clean_sheets
-def enrichir_forme(df_hist, equipe, date_ref):
-    matchs = df_hist[((df_hist["equipe_domicile"] == equipe) | (df_hist["equipe_exterieur"] == equipe)) &
-                     (df_hist["date_match"] < date_ref)].sort_values("date_match", ascending=False).head(5)
+# ============================================================
+# 🔧 FEATURES ALIGNÉES AVEC LE MAIN (à placer avant X = df[...])
+# ============================================================
 
-    if matchs.empty:
+# 1) Historique pour la forme split (exactement comme le main)
+df_hist = df.rename(columns={
+    "date_match": "date_match",
+    "equipe_domicile": "equipe_domicile",
+    "equipe_exterieur": "equipe_exterieur",
+    "buts_m_dom": "buts_m_dom",
+    "buts_m_ext": "buts_m_ext",
+})
+# df doit déjà contenir total_buts (= s.buts_dom + s.buts_ext)
+
+def calculer_forme_train(df_hist, equipe, date_ref, n=5, role=None, decay=0.85):
+    q = (df_hist["date_match"] < date_ref)
+    if role is None:
+        q &= ((df_hist["equipe_domicile"] == equipe) | (df_hist["equipe_exterieur"] == equipe))
+    elif role is True:
+        q &= (df_hist["equipe_domicile"] == equipe)
+    else:
+        q &= (df_hist["equipe_exterieur"] == equipe)
+
+    m = df_hist.loc[q].sort_values("date_match", ascending=False).head(n)
+    if m.empty:
+        return 0.0, 0.0, 0.0
+
+    est_dom = (m["equipe_domicile"].values == equipe)
+    bm = np.where(est_dom, m["buts_m_dom"].values, m["buts_m_ext"].values)
+    be = np.where(est_dom, m["buts_m_ext"].values, m["buts_m_dom"].values)
+    tb = m["total_buts"].values
+
+    w = decay ** np.arange(len(m))
+    w /= w.sum()
+
+    return (
+        float(np.average(bm, weights=w)),
+        float(np.average(be, weights=w)),
+        float(np.average((tb > 2.5).astype(float), weights=w)),
+    )
+
+def enrichir_forme_complet_train(df_hist, equipe, date_ref, n=5):
+    m = df_hist[
+        ((df_hist["equipe_domicile"] == equipe) | (df_hist["equipe_exterieur"] == equipe)) &
+        (df_hist["date_match"] < date_ref)
+    ].sort_values("date_match", ascending=False).head(n)
+    if m.empty:
         return (0, 0, 0, 0, 0, 0)
 
-    weights = np.linspace(1.0, 2.0, len(matchs))
-    buts_marques = []
-    buts_encaisses = []
-    over25 = []
-    clean_sheets = []
+    w = np.linspace(1.0, 2.0, len(m))
+    est_dom = (m["equipe_domicile"].values == equipe)
+    bm = np.where(est_dom, m["buts_m_dom"].values, m["buts_m_ext"].values)
+    be = np.where(est_dom, m["buts_m_ext"].values, m["buts_m_dom"].values)
+    o25 = (m["total_buts"].values > 2.5).astype(int)
 
-    for _, row in matchs.iterrows():
-        est_dom = (row["equipe_domicile"] == equipe)
-        bm = row["buts_m_dom"] if est_dom else row["buts_m_ext"]
-        be = row["buts_m_ext"] if est_dom else row["buts_m_dom"]
+    return (
+        float(np.average(bm, weights=w)),
+        float(np.average(be, weights=w)),
+        float(np.average(o25, weights=w)),
+        float(np.std(bm)),
+        float(np.std(be)),
+        int(np.sum(be == 0)),
+    )
 
-        buts_marques.append(bm)
-        buts_encaisses.append(be)
-        over25.append(int(row["total_buts"] > 2.5))
-        clean_sheets.append(int(be == 0))
+# 2) Construction des nouvelles colonnes attendues dans FEATURES_TOTAL_BUTS
+cols_new = {k: [] for k in FEATURES_TOTAL_BUTS}
 
-    # Moyenne pondérée
-    marq = np.average(buts_marques, weights=weights)
-    enc = np.average(buts_encaisses, weights=weights)
-    over = np.average(over25, weights=weights)
-    std_marq = np.std(buts_marques)
-    std_enc = np.std(buts_encaisses)
-    clean = np.sum(clean_sheets)
+for _, r in df.iterrows():
+    dom, ext, dref = r["equipe_domicile"], r["equipe_exterieur"], r["date_match"]
 
-    return marq, enc, over, std_marq, std_enc, clean
+    # --- forme split domicile / extérieur (5 derniers) ---
+    bm_home, be_home, o25_home = calculer_forme_train(df_hist, dom, dref, role=True)
+    bm_away, be_away, o25_away = calculer_forme_train(df_hist, ext, dref, role=False)
 
-# Application
-forme_dom_marq, forme_dom_enc, forme_dom_over25 = [], [], []
-forme_ext_marq, forme_ext_enc, forme_ext_over25 = [], [], []
-std_marq_dom, std_enc_dom, std_marq_ext, std_enc_ext = [], [], [], []
-clean_dom, clean_ext = [], []
+    # --- variabilité + clean sheets réels (sur 5) ---
+    _, _, _, std_marq_dom, std_enc_dom, clean_dom = enrichir_forme_complet_train(df_hist, dom, dref)
+    _, _, _, std_marq_ext, std_enc_ext, clean_ext = enrichir_forme_complet_train(df_hist, ext, dref)
 
-df_hist = df.copy()
+    # --- possession moyenne du match (dom + ext) ---
+    poss_moy = np.nanmean([r.get("possession", np.nan), r.get("poss_ext", np.nan)])
 
+    # --- corners dom/ext : on renomme proprement ce que renvoie la requête ---
+    corners_dom = r.get("corners", np.nan)      # sg1.corners -> "corners"
+    corners_ext = r.get("corners_ext", np.nan)  # sg2.corners -> "corners_ext"
 
-for _, row in df.iterrows():
-    fdm, fde, fdo25, stdm, stde, cldm = enrichir_forme(df_hist, row["equipe_domicile"], row["date_match"])
-    fem, fee, feo25, stde2, stee2, clext = enrichir_forme(df_hist, row["equipe_exterieur"], row["date_match"])
+    # --- cartons total des deux équipes sur la ligne ---
+    cj_dom = r.get("cartons_jaunes", 0.0)
+    cr_dom = r.get("cartons_rouges", 0.0)
+    cj_ext = r.get("cj_ext", 0.0)
+    cr_ext = r.get("cr_ext", 0.0)
+    cartons_total = float((cj_dom + cr_dom) + (cj_ext + cr_ext))
 
-    forme_dom_marq.append(fdm)
-    forme_dom_enc.append(fde)
-    forme_dom_over25.append(fdo25)
-    std_marq_dom.append(stdm)
-    std_enc_dom.append(stde)
-    clean_dom.append(cldm)
+    # Remplissage
+    cols_new["forme_home_buts_marques"].append(bm_home)
+    cols_new["forme_home_buts_encaisses"].append(be_home)
+    cols_new["forme_home_over25"].append(o25_home)
+    cols_new["forme_away_buts_marques"].append(bm_away)
+    cols_new["forme_away_buts_encaisses"].append(be_away)
+    cols_new["forme_away_over25"].append(o25_away)
 
-    forme_ext_marq.append(fem)
-    forme_ext_enc.append(fee)
-    forme_ext_over25.append(feo25)
-    std_marq_ext.append(stde2)
-    std_enc_ext.append(stee2)
-    clean_ext.append(clext)
+    cols_new["std_marq_dom"].append(std_marq_dom)
+    cols_new["std_enc_dom"].append(std_enc_dom)
+    cols_new["std_marq_ext"].append(std_marq_ext)
+    cols_new["std_enc_ext"].append(std_enc_ext)
 
-df["forme_dom_marq"] = forme_dom_marq
-df["forme_dom_enc"] = forme_dom_enc
-df["forme_dom_over25"] = forme_dom_over25
-df["forme_ext_marq"] = forme_ext_marq
-df["forme_ext_enc"] = forme_ext_enc
-df["forme_ext_over25"] = forme_ext_over25
-df["std_marq_dom"] = std_marq_dom
-df["std_enc_dom"] = std_enc_dom
-df["std_marq_ext"] = std_marq_ext
-df["std_enc_ext"] = std_enc_ext
-df["clean_dom"] = clean_dom
-df["clean_ext"] = clean_ext
+    cols_new["clean_dom"].append(clean_dom)
+    cols_new["clean_ext"].append(clean_ext)
 
-# Solidité
-df["solidite_def_dom"] = df["clean_dom"] / (df["forme_dom_enc"] + 1)
-df["solidite_def_ext"] = df["clean_ext"] / (df["forme_ext_enc"] + 1)
+    cols_new["moyenne_xg_dom"].append(float(r["moyenne_xg_dom"]))
+    cols_new["moyenne_xg_ext"].append(float(r["moyenne_xg_ext"]))
+    cols_new["buts_encaissés_dom"].append(float(r["buts_encaissés_dom"]))
+    cols_new["buts_encaissés_ext"].append(float(r["buts_encaissés_ext"]))
 
+    cols_new["poss_moyenne"].append(float(poss_moy) if not np.isnan(poss_moy) else 50.0)
+    cols_new["tirs_dom"].append(float(r["tirs_dom"]))
+    cols_new["tirs_ext"].append(float(r["tirs_ext"]))
+    cols_new["tirs_cadres_dom"].append(float(r["tirs_cadres_dom"]))
+    cols_new["tirs_cadres_ext"].append(float(r["tirs_cadres_ext"]))
 
-# --- Variables croisées enrichies ---
-df["diff_xg"] = df["moyenne_xg_dom"] - df["moyenne_xg_ext"]
-df["sum_xg"] = df["moyenne_xg_dom"] + df["moyenne_xg_ext"]
-df["sum_btts"] = df["btts_dom"] + df["btts_ext"]
-df["diff_over25"] = df["over25_dom"] - df["over25_ext"]
-df["total_tirs"] = df["tirs_dom"] + df["tirs_ext"]
-df["total_tirs_cadres"] = df["tirs_cadres_dom"] + df["tirs_cadres_ext"]
+    cols_new["corners_dom"].append(float(corners_dom) if not np.isnan(corners_dom) else 0.0)
+    cols_new["corners_ext"].append(float(corners_ext) if not np.isnan(corners_ext) else 0.0)
+    cols_new["cartons_total"].append(cartons_total)
 
-# --- Nouvelles features défensives ---
-df["clean_sheets_dom"] = 100 - df["btts_dom"]
-df["clean_sheets_ext"] = 100 - df["btts_ext"]
-df["solidite_dom"] = 1 / (df["buts_encaissés_dom"] + 0.1)
-df["solidite_ext"] = 1 / (df["buts_encaissés_ext"] + 0.1)
+# Injection dans df
+for k, v in cols_new.items():
+    df[k] = v
 
-# === 🆕 Nouvelles features à inclure dans les modèles
-df["forme_pond_dom"] = 0.6 * df["forme_dom_marq"] + 0.4 * df["forme_dom_over25"]
-df["forme_pond_ext"] = 0.6 * df["forme_ext_marq"] + 0.4 * df["forme_ext_over25"]
-
-df["cartons"] = (df["cartons_jaunes"] + df.get("cartons_rouges", 0)).fillna(3)
-df["poss"] = df[["possession", "poss_ext"]].mean(axis=1)
-
-df["tirs_cadres_total"] = df["total_tirs_cadres"]  # Pour cohérence avec main
-
-# --- Clip des outliers ---
-df["total_buts"] = df["total_buts"].clip(upper=5)
-
-# Enrichissements features + dérivées (inchangé)
 
 # Dataset final
 X = df[FEATURES_TOTAL_BUTS]
@@ -301,13 +330,19 @@ df_heuristique = df.copy()
 
 # === Variables pour score heuristique appris ===
 FEATURES_HEURISTIQUE = [
-    "buts_dom", "buts_ext", "over25_dom", "over25_ext", "btts_dom", "btts_ext",
-    "moyenne_xg_dom", "moyenne_xg_ext", "total_tirs_cadres",
+    "buts_dom", "buts_ext",
+    "over25_dom", "over25_ext",
+    "btts_dom", "btts_ext",
+    "moyenne_xg_dom", "moyenne_xg_ext",
+    "tirs_cadres_total",        
     "forme_dom_marq", "forme_ext_marq",
     "solidite_dom", "solidite_ext",
-    "corners", "fautes", "cartons_jaunes", "possession"
+    "corners", "fautes",
+    "cartons",                   
+    "poss"                        
 ]
 
+# Assure-toi d'avoir créé df["cartons"] et df["poss"] (tu l'as fait 👍)
 X_score = df_heuristique[FEATURES_HEURISTIQUE]
 y_score = df_heuristique["total_buts"]
 
@@ -339,13 +374,18 @@ from sklearn.metrics import accuracy_score
 df["label_over_25"] = (df["total_buts"] > 2.5).astype(int)
 
 # === Entraînement du classifieur ===
-X_class = df[FEATURES_TOTAL_BUTS]
+X_class = X  # mêmes features que la régression
 y_class = df["label_over_25"]
-X_train_class, X_test_class, y_train_class, y_test_class = train_test_split(X_class, y_class, test_size=0.2, random_state=42)
+
+X_class_scaled = scaler.transform(X_class)  # << on réutilise le même scaler
+X_train_class, X_test_class, y_train_class, y_test_class = train_test_split(
+    X_class_scaled, y_class, test_size=0.2, random_state=42
+)
 
 model_over25 = GradientBoostingClassifier(n_estimators=200, learning_rate=0.05, max_depth=4, random_state=42)
 model_over25.fit(X_train_class, y_train_class)
 y_prob = model_over25.predict_proba(X_test_class)[:, 1]
+
 acc_over25 = accuracy_score(y_test_class, model_over25.predict(X_test_class))
 
 # Sauvegarde
