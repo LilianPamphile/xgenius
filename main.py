@@ -18,8 +18,8 @@ API_KEY = "b63f99b8e4mshb5383731d310a85p103ea1jsn47e34368f5df"
 today = datetime.today().date()
 yesterday = today - timedelta(days=1)
 annee = datetime.now().year
-saison1 = annee - 1 
-saison2 = annee - 2 
+saison1 = annee
+saison2 = annee - 1
 
 # 🏆 Liste des compétitions à récupérer
 COMPETITIONS = {
@@ -191,7 +191,7 @@ def recuperer_matchs(date, API_KEY):
         "x-rapidapi-host": "api-football-v1.p.rapidapi.com"
     }
 
-    saison_api = 2025
+    saison_api = saison1
     total_matchs = 0
 
     print(f"📅 Récupération des matchs pour le {date}")
@@ -253,7 +253,7 @@ def recuperer_stats_matchs(date, API_KEY):
     for competition_name, competition_id in COMPETITIONS.items():
         params = {
             "league": competition_id,
-            "season": 2025,
+            "season": saison1,
             "date": date,
             "timezone": "Europe/Paris"
         }
@@ -565,38 +565,123 @@ try:
 
         # 1. Récupère les stats globales nécessaires
         query = """
-            SELECT
-                m.game_id,
-                m.date::date AS date_match,
-                m.equipe_domicile, m.equipe_exterieur,
-            
-                sg1.moyenne_buts, sg1.buts_encaisse::FLOAT / NULLIF(sg1.matchs_joues, 0), sg1.pourcentage_over_2_5,
-                sg1.pourcentage_over_1_5, sg1.pourcentage_BTTS, sg1.passes_pourcent, sg1.passes_reussies,
-                sg1.possession, sg1.corners, sg1.fautes, sg1.cartons_jaunes, sg1.cartons_rouges,
-                sg1.moyenne_xg_dom, sg1.tirs, sg1.tirs_cadres,
-                sg1.pourcentage_clean_sheets, sg2.pourcentage_clean_sheets,
-                sg2.moyenne_buts, sg2.buts_encaisse::FLOAT / NULLIF(sg2.matchs_joues, 0), sg2.pourcentage_over_2_5,
-                sg2.pourcentage_over_1_5, sg2.pourcentage_BTTS, sg2.passes_pourcent,
-                sg2.passes_reussies, sg2.possession, sg2.corners, sg2.fautes,
-                sg2.cartons_jaunes, sg2.cartons_rouges, sg2.moyenne_xg_ext, sg2.tirs, sg2.tirs_cadres
-            
-            FROM matchs_v2 m
-            
-            JOIN LATERAL (
-                SELECT * FROM stats_globales_v2 s1
-                WHERE s1.equipe = m.equipe_domicile
-                  AND s1.saison IN (%s, %s)
-            ) sg1 ON TRUE
-            
-            JOIN LATERAL (
-                SELECT * FROM stats_globales_v2 s2
-                WHERE s2.equipe = m.equipe_exterieur
-                  AND s2.saison IN (%s, %s)
-            ) sg2 ON TRUE
-            
-            WHERE DATE(m.date) = %s
+        SELECT
+          m.game_id,
+          m.date::date AS date_match,
+          m.equipe_domicile, m.equipe_exterieur,
+        
+          /* ======= ÉQUIPE DOMICILE : agrégée 2 saisons (poids: saison1=2, saison2=1) ======= */
+          sg1.moyenne_buts,
+          sg1.encaisse_pm,
+          sg1.pourcentage_over_2_5,
+          sg1.pourcentage_over_1_5,
+          sg1.pourcentage_btts,
+          sg1.passes_pourcent,
+          sg1.passes_reussies,
+          sg1.possession,
+          sg1.corners,
+          sg1.fautes,
+          sg1.cartons_jaunes,
+          sg1.cartons_rouges,
+          sg1.moyenne_xg_dom,
+          sg1.tirs,
+          sg1.tirs_cadres,
+          sg1.pourcentage_clean_sheets,
+          sg2.pourcentage_clean_sheets,
+        
+          /* ======= ÉQUIPE EXTÉRIEUR : agrégée 2 saisons (poids: saison1=2, saison2=1) ======= */
+          sg2.moyenne_buts,
+          sg2.encaisse_pm,
+          sg2.pourcentage_over_2_5,
+          sg2.pourcentage_over_1_5,
+          sg2.pourcentage_btts,
+          sg2.passes_pourcent,
+          sg2.passes_reussies,
+          sg2.possession,
+          sg2.corners,
+          sg2.fautes,
+          sg2.cartons_jaunes,
+          sg2.cartons_rouges,
+          sg2.moyenne_xg_ext,
+          sg2.tirs,
+          sg2.tirs_cadres
+        
+        FROM matchs_v2 m
+        
+        /* ---------- Agrégat pondéré pour l'équipe domicile ---------- */
+        LEFT JOIN LATERAL (
+          SELECT
+            SUM(w * s.moyenne_buts) / NULLIF(SUM(w), 0)                               AS moyenne_buts,
+            SUM(w * s.buts_encaisse)::float / NULLIF(SUM(w * s.matchs_joues), 0)      AS encaisse_pm,
+            SUM(w * s.pourcentage_over_2_5) / NULLIF(SUM(w), 0)                        AS pourcentage_over_2_5,
+            SUM(w * s.pourcentage_over_1_5) / NULLIF(SUM(w), 0)                        AS pourcentage_over_1_5,
+            SUM(w * s.pourcentage_btts)   / NULLIF(SUM(w), 0)                          AS pourcentage_btts,
+            SUM(w * s.passes_pourcent)    / NULLIF(SUM(w), 0)                          AS passes_pourcent,
+            SUM(w * s.passes_reussies)    / NULLIF(SUM(w), 0)                          AS passes_reussies,
+            SUM(w * s.possession)         / NULLIF(SUM(w), 0)                          AS possession,
+            SUM(w * s.corners)            / NULLIF(SUM(w), 0)                          AS corners,
+            SUM(w * s.fautes)             / NULLIF(SUM(w), 0)                          AS fautes,
+            SUM(w * s.cartons_jaunes)     / NULLIF(SUM(w), 0)                          AS cartons_jaunes,
+            SUM(w * s.cartons_rouges)     / NULLIF(SUM(w), 0)                          AS cartons_rouges,
+            SUM(w * s.moyenne_xg_dom)     / NULLIF(SUM(w), 0)                          AS moyenne_xg_dom,
+            SUM(w * s.tirs)               / NULLIF(SUM(w), 0)                          AS tirs,
+            SUM(w * s.tirs_cadres)        / NULLIF(SUM(w), 0)                          AS tirs_cadres,
+            SUM(w * s.pourcentage_clean_sheets) / NULLIF(SUM(w), 0)                    AS pourcentage_clean_sheets
+          FROM (
+            SELECT g.*,
+                   CASE WHEN g.saison = %s THEN 2.0
+                        WHEN g.saison = %s THEN 1.0
+                        ELSE 0.0 END AS w
+            FROM stats_globales_v2 g
+            WHERE g.equipe = m.equipe_domicile
+              AND g.saison IN (%s, %s)
+          ) s
+        ) sg1 ON TRUE
+        
+        /* ---------- Agrégat pondéré pour l'équipe extérieur ---------- */
+        LEFT JOIN LATERAL (
+          SELECT
+            SUM(w * s.moyenne_buts) / NULLIF(SUM(w), 0)                               AS moyenne_buts,
+            SUM(w * s.buts_encaisse)::float / NULLIF(SUM(w * s.matchs_joues), 0)      AS encaisse_pm,
+            SUM(w * s.pourcentage_over_2_5) / NULLIF(SUM(w), 0)                        AS pourcentage_over_2_5,
+            SUM(w * s.pourcentage_over_1_5) / NULLIF(SUM(w), 0)                        AS pourcentage_over_1_5,
+            SUM(w * s.pourcentage_btts)   / NULLIF(SUM(w), 0)                          AS pourcentage_btts,
+            SUM(w * s.passes_pourcent)    / NULLIF(SUM(w), 0)                          AS passes_pourcent,
+            SUM(w * s.passes_reussies)    / NULLIF(SUM(w), 0)                          AS passes_reussies,
+            SUM(w * s.possession)         / NULLIF(SUM(w), 0)                          AS possession,
+            SUM(w * s.corners)            / NULLIF(SUM(w), 0)                          AS corners,
+            SUM(w * s.fautes)             / NULLIF(SUM(w), 0)                          AS fautes,
+            SUM(w * s.cartons_jaunes)     / NULLIF(SUM(w), 0)                          AS cartons_jaunes,
+            SUM(w * s.cartons_rouges)     / NULLIF(SUM(w), 0)                          AS cartons_rouges,
+            SUM(w * s.moyenne_xg_ext)     / NULLIF(SUM(w), 0)                          AS moyenne_xg_ext,
+            SUM(w * s.tirs)               / NULLIF(SUM(w), 0)                          AS tirs,
+            SUM(w * s.tirs_cadres)        / NULLIF(SUM(w), 0)                          AS tirs_cadres,
+            SUM(w * s.pourcentage_clean_sheets) / NULLIF(SUM(w), 0)                    AS pourcentage_clean_sheets
+          FROM (
+            SELECT g.*,
+                   CASE WHEN g.saison = %s THEN 2.0
+                        WHEN g.saison = %s THEN 1.0
+                        ELSE 0.0 END AS w
+            FROM stats_globales_v2 g
+            WHERE g.equipe = m.equipe_exterieur
+              AND g.saison IN (%s, %s)
+          ) s
+        ) sg2 ON TRUE
+        
+        WHERE DATE(m.date) = %s
         """
-        cursor.execute(query, (saison1, saison2, saison1, saison2, today,))
+
+        cursor.execute(
+            query,
+            (
+                # sg1 (domicile)
+                saison1, saison2, saison1, saison2,
+                # sg2 (extérieur)
+                saison1, saison2, saison1, saison2,
+                # filtre de date
+                today,
+            ),
+        )
         rows = cursor.fetchall()
 
         # 2. Récupère l'historique pour forme récente
