@@ -238,7 +238,7 @@ param_distributions = {
 catboost_search = OptunaSearchCV(
     estimator=CatBoostRegressor(verbose=0, random_seed=42),
     param_distributions=param_distributions,
-    n_trials=7,
+    n_trials=10,
     cv=KFold(n_splits=3, shuffle=True, random_state=42),
     scoring="neg_mean_absolute_error",
     n_jobs=-1
@@ -324,6 +324,34 @@ with open(features_list_path, "wb") as f:
 
 # 🔧 Force modification de timestamp pour forcer Git à l'inclure
 os.utime(features_list_path, (time.time(), time.time()))
+
+# === Features heuristiques alignées avec main.py ===
+# Tirs cadrés total
+df["tirs_cadres_total"] = df["tirs_cadres_dom"] + df["tirs_cadres_ext"]
+
+# Forme brute marqués
+df["forme_dom_marq"] = df["forme_home_buts_marques"]
+df["forme_ext_marq"] = df["forme_away_buts_marques"]
+
+# Solidité défensive
+df["solidite_dom"] = 1 / (df["buts_encaissés_dom"] + 0.1)
+df["solidite_ext"] = 1 / (df["buts_encaissés_ext"] + 0.1)
+
+# Corners (total match)
+df["corners"] = df["corners_dom"] + df["corners_ext"]
+
+# Fautes (total match)
+df["fautes"] = df["fautes"].fillna(0)
+if "fautes_ext" in df.columns:
+    df["fautes"] += df["fautes_ext"].fillna(0)
+
+# Cartons totaux
+df["cartons"] = (df["cartons_jaunes"] + df.get("cartons_rouges", 0)).fillna(0)
+if "cj_ext" in df.columns and "cr_ext" in df.columns:
+    df["cartons"] = df["cartons"] + df["cj_ext"].fillna(0) + df["cr_ext"].fillna(0)
+
+# Possession moyenne
+df["poss"] = df[["possession", "poss_ext"]].mean(axis=1)
 
 # Ajout dans le même script (train_model.py), à la fin ou dans une section dédiée
 df_heuristique = df.copy()
