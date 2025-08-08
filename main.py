@@ -295,7 +295,8 @@ def recuperer_stats_matchs(date, API_KEY):
                 extract_stat(stats_dom, 'Fouls'), extract_stat(stats_ext, 'Fouls'),
                 extract_stat(stats_dom, 'Offsides'), extract_stat(stats_ext, 'Offsides'),
                 extract_stat(stats_dom, 'Yellow Cards'), extract_stat(stats_ext, 'Yellow Cards'),
-                extract_stat(stats_dom, 'Red Cards'), extract_stat(stats_ext, 'Red Cards')
+                extract_stat(stats_dom, 'Red Cards'), extract_stat(stats_ext, 'Red Cards'), 
+                xg_dom, xg_ext
             )
 
             query = (
@@ -307,12 +308,12 @@ def recuperer_stats_matchs(date, API_KEY):
                 "buts_dom, buts_ext, passes_dom, passes_ext, passes_reussies_dom, passes_reussies_ext, "
                 "passes_pourcent_dom, passes_pourcent_ext, corners_dom, corners_ext, "
                 "fautes_dom, fautes_ext, hors_jeu_dom, hors_jeu_ext, "
-                "cartons_jaunes_dom, cartons_jaunes_ext, cartons_rouges_dom, cartons_rouges_ext"
+                "cartons_jaunes_dom, cartons_jaunes_ext, cartons_rouges_dom, cartons_rouges_ext,"
+                "xg_dom, xg_ext"
                 ") VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, "
-                "%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                "%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
                 " ON CONFLICT (game_id) DO NOTHING"
             )
-
 
             cursor.execute(query, values)
 
@@ -412,11 +413,11 @@ def mettre_a_jour_stats_globales(date_reference):
             total.setdefault("xg_for", 0);       total["xg_for"] += xg_for
             total.setdefault("xg_against", 0);   total["xg_against"] += xg_against
 
-            avg_xg_for = avg(total["xg_for"]),
-            avg_xg_against = avg(total["xg_against"])
-
-        def avg(val):
-            return round(val / total["matchs_joues"], 2) if total["matchs_joues"] else 0.0
+            def avg(val):
+                return round(val / total["matchs_joues"], 2) if total["matchs_joues"] else 0.0
+            
+            avg_xg_for = avg(total.get("xg_for", 0))
+            avg_xg_against = avg(total.get("xg_against", 0))
 
         values = (
             equipe, competition, saison,
@@ -750,9 +751,7 @@ try:
     for col in list(X_live.columns):
         miss = X_live[col].isna()
         if miss.any():
-            X_live[f"{col}_missing"] = miss.astype(int)  # flag AVANT
             X_live[col].fillna(X_live[col].median(), inplace=True)
-
     
     X_live_scaled = scaler_ml.transform(X_live)
     
@@ -792,45 +791,44 @@ try:
         
         # On prend la ligne imputée (non-scalée) pour rester dans le même espace que le training
         row = X_live.iloc[i]
-
-        # Ce qui alimente le modèle heuristique (mêmes clés que dans FEATURES_HEURISTIQUE du train)
-        poss = float(match.get("poss", row.get("poss_moyenne", 50.0)))
-        corners = float(match.get("corners", row.get("corners_dom", 0.0) + row.get("corners_ext", 0.0)))
-        fautes = float(match.get("fautes", np.nan))  # pas utilisé dans X_live actuel (ok si NaN -> 0 dans get)
-        cartons = float(match.get("cartons", row.get("cartons_total", 0.0)))
-
-        # Solide: dans le main, clean_* = nb sur 5, on normalise sur [0,1]
-        clean_dom = float(match.get("clean_sheets_dom", 0.0))
-        clean_ext = float(match.get("clean_sheets_ext", 0.0))
-        solidite_dom = clean_dom / 5.0
-        solidite_ext = clean_ext / 5.0
-
-        # Pour conserver ta logique heuristique d’avant, on récupère par noms si dispo
+        
+        enc_dom_val = float(row.get("buts_encaissés_dom", 0.0))
+        enc_ext_val = float(row.get("buts_encaissés_ext", 0.0))
+        solidite_dom = 1.0 / (enc_dom_val + 0.1)
+        solidite_ext = 1.0 / (enc_ext_val + 0.1)
+        
+        corners_total = float(match.get("corners", (row.get("corners_dom", 0.0) + row.get("corners_ext", 0.0))))
+        fautes_total  = float(match.get("fautes", 0.0))
+        cartons_total = float(match.get("cartons", row.get("cartons_total", 0.0)))
+        poss_moy      = float(match.get("poss", row.get("poss_moyenne", 50.0)))
+        
         def getf(name, default=0.0):
-            return float(row[name]) if name in row and pd.notna(row[name]) else float(default)
-
+            v = row.get(name, default)
+            return float(v if pd.notna(v) else default)
+        
         d = {
             "buts_dom": getf("forme_home_buts_marques"),
             "buts_ext": getf("forme_away_buts_marques"),
             "over25_dom": getf("forme_home_over25"),
             "over25_ext": getf("forme_away_over25"),
-            "btts_dom": 0.0,   # pas dans X_live actuel -> laisse 0.0 (ou ajoute la feature côté train+main si tu veux)
-            "btts_ext": 0.0,   # idem
-            "xg_dom": getf("moyenne_xg_dom"),
-            "xg_ext": getf("moyenne_xg_ext"),
+            "btts_dom": 0.0,
+            "btts_ext": 0.0,
+            "moyenne_xg_dom": getf("moyenne_xg_dom"),
+            "moyenne_xg_ext": getf("moyenne_xg_ext"),
             "tirs_cadres_total": getf("tirs_cadres_dom") + getf("tirs_cadres_ext"),
-            "forme_pond_dom": 0.6 * getf("forme_home_buts_marques") + 0.4 * getf("forme_home_over25"),
-            "forme_pond_ext": 0.6 * getf("forme_away_buts_marques") + 0.4 * getf("forme_away_over25"),
+            "forme_dom_marq": getf("forme_home_buts_marques"),
+            "forme_ext_marq": getf("forme_away_buts_marques"),
             "solidite_dom": solidite_dom,
             "solidite_ext": solidite_ext,
-            "corners": corners,
-            "fautes": 0.0 if np.isnan(fautes) else fautes,
-            "cartons": cartons,
-            "poss": poss,
+            "corners": corners_total,
+            "fautes": fautes_total,
+            "cartons": cartons_total,
+            "poss": poss_moy,
         }
 
-        # Aligne exactement sur features_heur (chargé depuis pickle)
-        X_input_heur = pd.DataFrame([[d.get(f, 0.0) for f in features_heur]], columns=features_heur)
+
+        
+        X_input_heur = pd.DataFrame([[d[f] for f in features_heur]], columns=features_heur)
         score_heur = model_heuristique.predict(X_input_heur)[0]
         match["score_heur"] = score_heur
 
@@ -939,8 +937,9 @@ except Exception as e:
     send_email_html(
         subject="❌ Échec - Script Main",
         html_body=f"<pre>{error_message}</pre>",
-        to_email="lilian.pamphile.bts@gmail.com"
+        to_email=["lilian.pamphile.bts@gmail.com"]  # liste, pas string
     )
+
     
 
 # === Sauvegarde dans un unique fichier historique CSV ===
