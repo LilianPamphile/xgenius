@@ -105,26 +105,49 @@ def send_email_html(subject, html_body, to_email):
         print("❌ Erreur lors de l'envoi de l'email HTML :", e)
 
 
-def gen_table(matchs, type_):
+def gen_table(matchs, segment):
+    """
+    matchs: liste de tuples (prob, name, pred, intervalle, conf, heur, s_final)
+    segment: "Over" | "Under" | "Opps"
+    """
     if not matchs:
         return "<p>Aucun match détecté.</p>"
 
-    rows = ""
-    for prob, name, pred, intervalle, conf, heur in sorted(matchs, reverse=True if type_ == "Over" else False):
-        rows += f"""
+    # tri par score final décroissant
+    matchs_sorted = sorted(matchs, key=lambda x: x[-1], reverse=True)
+
+    # libellé proba selon segment
+    proba_col = "📊 Proba O≥2.5" if segment in ("Over", "Opps") else "🚫 Proba U≤2.0"
+
+    rows = []
+    for prob, name, pred, intervalle, conf, heur, _ in matchs_sorted:
+        rows.append(f"""
         <tr>
             <td>{name}</td>
             <td>{pred:.2f}</td>
             <td>{intervalle}</td>
-            <td>{conf}</td>
+            <td>{int(prob*100)}%</td>
             <td>{heur:.2f}</td>
-        </tr>"""
+            <td>{conf}</td>
+        </tr>""")
 
     return f"""
     <table>
-        <tr><th>Match</th><th>Prédiction</th><th>Intervalle</th><th>Confiance</th><th>Score 🧠</th></tr>
-        {rows}
+        <thead>
+            <tr>
+                <th>Match</th>
+                <th>⚽ Prédiction</th>
+                <th>🔁 Intervalle</th>
+                <th>{proba_col}</th>
+                <th>🧠 Score</th>
+                <th>Confiance</th>
+            </tr>
+        </thead>
+        <tbody>
+            {''.join(rows)}
+        </tbody>
     </table>"""
+
 
 
 # --- Téléchargement des fichiers modèle/scaler depuis GitHub ---
@@ -765,8 +788,6 @@ try:
 
     # Prédiction classification over 2.5
     probas_over25 = model_over25.predict_proba(X_live_scaled)[:, 1]  # probabilité que over 2.5
-    
-    matchs_hauts, matchs_bas, matchs_incertain = [], [], []
 
    # === Pondération dynamique selon MAE inverse ===
     with open("model_files/mae_models.pkl", "rb") as f:
@@ -780,144 +801,188 @@ try:
     weight_hgb = (1 / mae_hgb) / inv_total
     pred_buts = weight_cat * preds_cat + weight_hgb * preds_hgb
     
+    matchs_over, matchs_under, matchs_opps = [], [], []
+
+    def coherence_count(pred_total, prob_over25, incertitude, score_heur):
+        """Compte combien de signaux vont dans la même direction (Over vs Under)."""
+        votes_over = 0
+        votes_under = 0
+    
+        # ML (régression)
+        votes_over += int(pred_total >= 2.5)
+        votes_under += int(pred_total <= 2.0)
+    
+        # Classif Over25
+        votes_over += int(prob_over25 >= 0.65)
+        votes_under += int(prob_over25 <= 0.35)
+    
+        # Conformal (confiance)
+        votes_over += int(incertitude < 1.5)   # bonus confiance pour les deux sens
+        votes_under += int(incertitude < 1.5)
+    
+        # Heuristique
+        votes_over += int(score_heur >= 0.60)
+        votes_under += int(score_heur <= 0.40)
+    
+        return votes_over, votes_under
+    
+    def score_final(pred_total, prob_over25, score_heur, incertitude):
+        """Score de tri interne pour l'affichage (plus haut = mieux)."""
+        base = 0.4 * (pred_total / 4.0) + 0.3 * prob_over25 + 0.3 * (score_heur / 1.0)
+        conf_bonus = max(0.0, 0.2 - 0.1 * max(0.0, incertitude - 1.0))  # petit bonus si intervalle serré
+        return base + conf_bonus
+
+
     for i, match in enumerate(matchs_jour):
-        features_vec = match["features"]
-        pred_total = pred_buts[i]
-        p25 = pred_p25[i]
-        p75 = pred_p75[i]
+        pred_total = float(pred_buts[i])
+        p25, p75 = float(pred_p25[i]), float(pred_p75[i])
         incertitude = p75 - p25
-        prob_over25 = probas_over25[i]
-        prob_under25 = 1 - prob_over25
-        
-        # On prend la ligne imputée (non-scalée) pour rester dans le même espace que le training
+        prob_over25 = float(probas_over25[i])
+        prob_under25 = 1.0 - prob_over25
+    
+        # ligne propre (non-scalée) pour features heuristiques déjà construite au-dessus
         row = X_live.iloc[i]
-        
         enc_dom_val = float(row.get("buts_encaissés_dom", 0.0))
         enc_ext_val = float(row.get("buts_encaissés_ext", 0.0))
         solidite_dom = 1.0 / (enc_dom_val + 0.1)
         solidite_ext = 1.0 / (enc_ext_val + 0.1)
-        
+    
         corners_total = float(match.get("corners", (row.get("corners_dom", 0.0) + row.get("corners_ext", 0.0))))
         fautes_total  = float(match.get("fautes", 0.0))
         cartons_total = float(match.get("cartons", row.get("cartons_total", 0.0)))
         poss_moy      = float(match.get("poss", row.get("poss_moyenne", 50.0)))
-        
+    
         def getf(name, default=0.0):
             v = row.get(name, default)
             return float(v if pd.notna(v) else default)
-        
+    
         d = {
             "buts_dom": getf("forme_home_buts_marques"),
             "buts_ext": getf("forme_away_buts_marques"),
             "over25_dom": getf("forme_home_over25"),
             "over25_ext": getf("forme_away_over25"),
-            "btts_dom": 0.0,
-            "btts_ext": 0.0,
+            "btts_dom": 0.0, "btts_ext": 0.0,
             "moyenne_xg_dom": getf("moyenne_xg_dom"),
             "moyenne_xg_ext": getf("moyenne_xg_ext"),
             "tirs_cadres_total": getf("tirs_cadres_dom") + getf("tirs_cadres_ext"),
             "forme_dom_marq": getf("forme_home_buts_marques"),
             "forme_ext_marq": getf("forme_away_buts_marques"),
-            "solidite_dom": solidite_dom,
-            "solidite_ext": solidite_ext,
-            "corners": corners_total,
-            "fautes": fautes_total,
-            "cartons": cartons_total,
-            "poss": poss_moy,
+            "solidite_dom": solidite_dom, "solidite_ext": solidite_ext,
+            "corners": corners_total, "fautes": fautes_total,
+            "cartons": cartons_total, "poss": poss_moy,
         }
-
-
-        
+    
         X_input_heur = pd.DataFrame([[d[f] for f in features_heur]], columns=features_heur)
         score_heur = model_heuristique.predict(X_input_heur)[0]
+        score_heur = max(0, min(score_heur, 1.5))  # garde-fou
         match["score_heur"] = score_heur
-
+    
+        # commentaire confiance simple
         if incertitude > 2.5:
             commentaire = "⚠️ Incertitude élevée"
         elif incertitude < 1.5:
             commentaire = "✅ Confiance élevée"
         else:
             commentaire = "ℹ️ Confiance modérée"
-        
-        # 🔍 Classification automatique
-        if pred_total >= 2.5 and prob_over25 >= 0.6 and incertitude < 1.5:
-            matchs_hauts.append((prob_over25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}", commentaire, score_heur))
-        if pred_total <= 2.0 and prob_under25 >= 0.7 and incertitude < 1.5:
-            matchs_bas.append((prob_under25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}", commentaire, score_heur))
-        else:
-            matchs_incertain.append((abs(prob_over25 - 0.5), match["match"], pred_total, f"{p25:.2f} – {p75:.2f}", commentaire, score_heur))
-            
+        match["confiance"] = commentaire
+    
+        # --- COHÉRENCE ---
+        votes_over, votes_under = coherence_count(pred_total, prob_over25, incertitude, score_heur)
+    
+        # --- RÈGLES OPTION 2 ---
+        is_over = (pred_total >= 2.5) and (prob_over25 >= 0.65) and (incertitude < 1.5) and (score_heur >= 0.60) and (votes_over >= 3)
+        is_under = (pred_total <= 2.0) and (prob_under25 >= 0.70) and (incertitude < 1.5) and (score_heur <= 0.40) and (votes_under >= 3)
+    
+        # opportunités cachées : zone 50–65% (ou proche seuils) + cohérence ≥3
+        near_over_cut = (2.3 <= pred_total < 2.5) and (prob_over25 >= 0.55) and (votes_over >= 3)
+        mid_prob = (0.50 <= prob_over25 <= 0.65) and (votes_over >= 3 or votes_under >= 3)
+    
+        # score de tri pour affichage
+        s_final = score_final(pred_total, prob_over25, score_heur, incertitude)
+    
+        if is_over:
+            matchs_over.append((prob_over25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}", commentaire, score_heur, s_final))
+        elif is_under:
+            matchs_under.append((prob_under25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}", commentaire, score_heur, s_final))
+        elif near_over_cut or mid_prob:
+            # stocke la proba Over pour l'affichage (plus parlant)
+            matchs_opps.append((prob_over25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}", commentaire, score_heur, s_final))
+                
         match["confiance"] = commentaire
 
     
     # === Génération du mail ===
     mail_lines = [f"📅 Prévisions du {today}\n"]
-    
-    mail_lines.append("🔥 Top Matchs à fort potentiel de buts (≥ 2.5 buts, confiance élevée)\n")
-    for prob, name, pred, intervalle, conf, heur in sorted(matchs_hauts, reverse=True)[:5]:
-        mail_lines.append(f"{name}\t⚽ {pred:.2f}\t🔁 {intervalle}\t📊 {int(prob*100)}%\t{conf}\t🧠 Heur: {heur:.2f}")
-    if not matchs_hauts:
-        mail_lines.append("Aucun match ouvert détecté aujourd’hui ❄️\n")
-    
-    mail_lines.append("\n❄️ Matchs potentiellement fermés (≤ 2.0 buts prévus)\n")
-    for prob, name, pred, intervalle, conf, heur in sorted(matchs_bas)[:5]:
-        mail_lines.append(f"{name}\t⚽ {pred:.2f}\t🔁 {intervalle}\t🚫 {int(prob*100)}%\t{conf}\t🧠 Heur: {heur:.2f}")
-    if not matchs_bas:
-        mail_lines.append("Aucun match fermé détecté aujourd’hui.\n")
-    
-    mail_lines.append("\n⚪ Matchs neutres ou incertains\n")
-    for _, name, pred, intervalle, conf, heur in sorted(matchs_incertain):
-        mail_lines.append(f"{name}\t⚽ {pred:.2f}\t🔁 {intervalle}\t📉 {conf}\t🧠 Heur: {heur:.2f}")
-    if not matchs_incertain:
-        mail_lines.append("Aucun match neutre aujourd’hui.\n")
-    
-    mail_lines.append("\n🧠 Note méthodologique")
-    mail_lines.append("Prédiction finale = pondération CatBoost + HGB.")
-    mail_lines.append("Intervalle = Conformal Prediction [p25 – p75].")
-    mail_lines.append("Confiance = Faible si range > 2.0 buts.")
-    mail_lines.append("Classement basé sur un nouveau score composite intelligent.")
-    mail_lines.append("\n📊 Score Heuristique (🧠)")
-    mail_lines.append("🔥 ≥ 0.6 : Fort potentiel offensif")
-    mail_lines.append("⚪ 0.4 – 0.6 : Potentiel moyen / incertain")
-    mail_lines.append("🚫 < 0.4 : Faible potentiel de buts")
 
+    # Over
+    mail_lines.append("🔥 TOP CONFIANCE OVER (≥ 2.5, score🧠 ≥ 0.6, intervalle < 1.5)\n")
+    for prob, name, pred, intervalle, conf, heur, s in sorted(matchs_over, key=lambda x: x[-1], reverse=True)[:6]:
+        mail_lines.append(f"{name}\t⚽ {pred:.2f}\t🔁 {intervalle}\t📊 {int(prob*100)}%\t{conf}\t🧠 {heur:.2f}")
+    if not matchs_over:
+        mail_lines.append("Aucun match Over hautement fiable.\n")
+    
+    # Under
+    mail_lines.append("\n❄️ TOP CONFIANCE UNDER (≤ 2.0, score🧠 ≤ 0.4, intervalle < 1.5)\n")
+    for probU, name, pred, intervalle, conf, heur, s in sorted(matchs_under, key=lambda x: x[-1], reverse=True)[:6]:
+        mail_lines.append(f"{name}\t⚽ {pred:.2f}\t🔁 {intervalle}\t🚫 {int(probU*100)}%\t{conf}\t🧠 {heur:.2f}")
+    if not matchs_under:
+        mail_lines.append("Aucun match Under hautement fiable.\n")
+    
+    # Opportunités cachées
+    mail_lines.append("\n🎯 OPPORTUNITÉS CACHÉES (proba 50–65% mais signaux cohérents)\n")
+    for probO, name, pred, intervalle, conf, heur, s in sorted(matchs_opps, key=lambda x: x[-1], reverse=True)[:8]:
+        mail_lines.append(f"{name}\t⚽ {pred:.2f}\t🔁 {intervalle}\t📊 {int(probO*100)}%\t{conf}\t🧠 {heur:.2f}")
+    if not matchs_opps:
+        mail_lines.append("Aucune opportunité intermédiaire détectée.\n")
+    
+    mail_lines += [
+        "\n🧠 Note méthodologique",
+        "Sélection = ≥3 signaux alignés (ML, classif over/under, heuristique, intervalle).",
+        "Intervalle = Conformal [p25 – p75] ; Confiance élevée si largeur < 1.5.",
+        "Score🧠: ≥0.6 fort potentiel offensif ; ≤0.4 faible potentiel.",
+    ]
+
+    
     html_body = f"""
     <html>
     <head>
     <style>
         body {{ font-family: Arial, sans-serif; color: #333; }}
-        h2 {{ color: #d9534f; }}
-        .match-section {{ margin-bottom: 20px; }}
-        table {{ width: 100%; border-collapse: collapse; }}
-        th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
-        th {{ background-color: #f2f2f2; }}
-        .note {{ font-size: 0.9em; color: #555; margin-top: 20px; }}
+        h2 {{ color: #d9534f; margin-bottom: 6px; }}
+        h3 {{ margin-top: 18px; }}
+        .pill {{ display:inline-block; background:#eef; border-radius:12px; padding:2px 8px; font-size:12px; color:#445; margin-left:8px; }}
+        table {{ width: 100%; border-collapse: collapse; margin-top: 6px; }}
+        th, td {{ border: 1px solid #ddd; padding: 6px 8px; text-align: left; }}
+        th {{ background-color: #f7f7f7; }}
+        .note {{ font-size: 12px; color: #555; margin-top: 16px; line-height: 1.4; }}
     </style>
     </head>
     <body>
     <h2>📅 Prévisions du {today}</h2>
+    <div class="pill">Over: {len(matchs_over)}</div>
+    <div class="pill">Under: {len(matchs_under)}</div>
+    <div class="pill">Opps: {len(matchs_opps)}</div>
     
     <div class="match-section">
-    <h3>🔥 Matchs à fort potentiel de buts (≥ 2.5)</h3>
-    {gen_table(matchs_hauts, "Over")}
+        <h3>🔥 TOP CONFIANCE OVER (≥ 2.5, score🧠 ≥ 0.6, intervalle &lt; 1.5)</h3>
+        {gen_table(matchs_over, "Over")}
     </div>
     
     <div class="match-section">
-    <h3>❄️ Matchs potentiellement fermés (≤ 2.0)</h3>
-    {gen_table(matchs_bas, "Under")}
+        <h3>❄️ TOP CONFIANCE UNDER (≤ 2.0, score🧠 ≤ 0.4, intervalle &lt; 1.5)</h3>
+        {gen_table(matchs_under, "Under")}
     </div>
     
     <div class="match-section">
-    <h3>⚪ Matchs neutres ou incertains</h3>
-    {gen_table(matchs_incertain, "Incertains")}
+        <h3>🎯 OPPORTUNITÉS CACHÉES (proba 50–65% mais signaux cohérents)</h3>
+        {gen_table(matchs_opps, "Opps")}
     </div>
     
     <div class="note">
-        <strong>🧠 Note méthodologique :</strong><br>
-        Prédiction finale = pondération CatBoost + HGB.<br>
-        Intervalle = Conformal Prediction [p25 – p75].<br>
-        Confiance = Faible si range > 2.0 buts.<br>
-        Classement basé sur un score composite (heuristique + ML).
+        <strong>🧠 Méthodo.</strong><br>
+        Sélection = ≥3 signaux alignés (régression ML, classif Over/Under, heuristique, intervalle).<br>
+        Intervalle = Conformal [p25–p75]; Confiance élevée si largeur &lt; 1.5.<br>
+        Pondération ML: moyenne CatBoost/HGB pondérée à l’inverse des MAE.
     </div>
     </body>
     </html>
