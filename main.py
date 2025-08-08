@@ -47,9 +47,10 @@ print("Fin de la défintion de variables")
 
 def to_float(x):
     try:
-        return float(x)
+        v = float(x)
+        return v
     except:
-        return 0.0
+        return np.nan
 
 def convert_to_int(value):
     try:
@@ -406,8 +407,13 @@ def mettre_a_jour_stats_globales(date_reference):
             if buts_encaisse == 0:
                 total["clean_sheets"] += 1
 
-            total["xg_dom"] += data.get("xg_dom") or 0 if est_domicile else 0
-            total["xg_ext"] += data.get("xg_ext") or 0 if not est_domicile else 0
+            xg_for = (data.get("xg_dom") or 0) if est_domicile else (data.get("xg_ext") or 0)
+            xg_against = (data.get("xg_ext") or 0) if est_domicile else (data.get("xg_dom") or 0)
+            total.setdefault("xg_for", 0);       total["xg_for"] += xg_for
+            total.setdefault("xg_against", 0);   total["xg_against"] += xg_against
+
+            avg_xg_for = avg(total["xg_for"]),
+            avg_xg_against = avg(total["xg_against"])
 
         def avg(val):
             return round(val / total["matchs_joues"], 2) if total["matchs_joues"] else 0.0
@@ -425,7 +431,8 @@ def mettre_a_jour_stats_globales(date_reference):
             round(100 * total["over_2_5"] / total["matchs_joues"], 2),
             round(100 * total["over_1_5"] / total["matchs_joues"], 2),
             round(100 * total["clean_sheets"] / total["matchs_joues"], 2),
-            avg(total["xg_dom"]), avg(total["xg_ext"])
+            avg_xg_for, avg_xg_against
+
         )
 
         cursor.execute("""
@@ -579,48 +586,71 @@ try:
         """)
         df_hist = pd.DataFrame(cursor.fetchall(), columns=["date_match", "equipe_domicile", "equipe_exterieur", "buts_m_dom", "buts_m_ext", "total_buts"])
         
-        def calculer_forme(equipe, date_ref):
-            matchs = []
-            matchs = df_hist[((df_hist["equipe_domicile"] == equipe) | (df_hist["equipe_exterieur"] == equipe)) & (df_hist["date_match"] < date_ref)].sort_values("date_match", ascending=False).head(5)
-            if matchs.empty:
+        def calculer_forme(equipe, date_ref, n=5, role=None, decay=0.85):
+            q = (df_hist["date_match"] < date_ref)
+            if role is None:
+                q &= ((df_hist["equipe_domicile"] == equipe) | (df_hist["equipe_exterieur"] == equipe))
+            elif role is True:
+                q &= (df_hist["equipe_domicile"] == equipe)
+            elif role is False:
+                q &= (df_hist["equipe_exterieur"] == equipe)
+        
+            m = df_hist.loc[q].sort_values("date_match", ascending=False).head(n)
+            if m.empty:
                 return 0.0, 0.0, 0.0
-            buts_marques = np.mean([row["buts_m_dom"] if row["equipe_domicile"] == equipe else row["buts_m_ext"] for _, row in matchs.iterrows()])
-            buts_encaisses = np.mean([row["buts_m_ext"] if row["equipe_domicile"] == equipe else row["buts_m_dom"] for _, row in matchs.iterrows()])
-            over25 = np.mean([row["total_buts"] > 2.5 for _, row in matchs.iterrows()])
-            return buts_marques, buts_encaisses, over25
-
-        # Récupère les 5 derniers matchs de chaque équipe
+        
+            est_dom = (m["equipe_domicile"].values == equipe)
+            bm = np.where(est_dom, m["buts_m_dom"].values, m["buts_m_ext"].values)
+            be = np.where(est_dom, m["buts_m_ext"].values, m["buts_m_dom"].values)
+            tb = m["total_buts"].values
+        
+            # Pondération temporelle
+            w = decay ** np.arange(len(m))
+            w /= w.sum()
+        
+            return (
+                float(np.average(bm, weights=w)),
+                float(np.average(be, weights=w)),
+                float(np.average((tb > 2.5).astype(float), weights=w))
+            )
+        
+        
         def enrichir_forme_complet(equipe, date_ref):
-            matchs = df_hist[((df_hist["equipe_domicile"] == equipe) | (df_hist["equipe_exterieur"] == equipe)) & (df_hist["date_match"] < date_ref)].sort_values("date_match", ascending=False).head(5)
 
+            matchs = df_hist[
+                ((df_hist["equipe_domicile"] == equipe) | (df_hist["equipe_exterieur"] == equipe)) &
+                (df_hist["date_match"] < date_ref)
+            ].sort_values("date_match", ascending=False).head(5)
+        
             if matchs.empty:
-                return 0, 0, 0, 0, 0, 0  # marq, encaissés, over25, std_marq, std_enc, clean_sheets
-
+                return 0, 0, 0, 0, 0, 0
+        
             weights = np.linspace(1.0, 2.0, len(matchs))
-            buts_marques, buts_encaissés, over25, clean_sheets = [], [], [], []
-
+            buts_marques, buts_encaisses, over25, clean_sheets = [], [], [], []
+        
             for _, row in matchs.iterrows():
                 est_dom = (row["equipe_domicile"] == equipe)
                 bm = row["buts_m_dom"] if est_dom else row["buts_m_ext"]
                 be = row["buts_m_ext"] if est_dom else row["buts_m_dom"]
-
+        
                 buts_marques.append(bm)
-                buts_encaissés.append(be)
+                buts_encaisses.append(be)
                 over25.append(int(row["total_buts"] > 2.5))
                 clean_sheets.append(int(be == 0))
-
+        
             return (
                 np.average(buts_marques, weights=weights),
-                np.average(buts_encaissés, weights=weights),
+                np.average(buts_encaisses, weights=weights),
                 np.average(over25, weights=weights),
                 np.std(buts_marques),
-                np.std(buts_encaissés),
+                np.std(buts_encaisses),
                 np.sum(clean_sheets)
             )
-
+        
+        
         matchs = []
         seen_game_ids = set()
-
+        
         for row in rows:
             (
                 game_id, date_match, dom, ext,
@@ -630,90 +660,100 @@ try:
                 buts_ext, enc_ext, over25_ext, over15_ext, btts_ext, pass_pct_ext, pass_reussies_ext,
                 poss_ext, corners_ext, fautes_ext, cj_ext, cr_ext, xg_ext, tirs_ext, tirs_cadres_ext
             ) = row
-
-            if game_id in seen_game_ids: continue
+        
+            if game_id in seen_game_ids:
+                continue
             seen_game_ids.add(game_id)
-
-            fdm, fde, fdo25 = calculer_forme(dom, date_match)
-            fem, fee, feo25 = calculer_forme(ext, date_match)
-
-            # Forme complète
-            fdm, fde, fdo25, std_marq_dom, std_enc_dom, clean_dom = enrichir_forme_complet(dom, date_match)
-            fem, fee, feo25, std_marq_ext, std_enc_ext, clean_ext = enrichir_forme_complet(ext, date_match)
-
-            # Calculs intermédiaires
-            diff_xg = to_float(xg_dom - xg_ext)
-            sum_xg = to_float(xg_dom + xg_ext)
-            sum_btts = to_float(btts_dom + btts_ext)
-            diff_over25 = to_float(over25_dom - over25_ext)
-            total_tirs = to_float(tirs_dom + tirs_ext)
-            total_tirs_cadres = to_float(tirs_cadres_dom + tirs_cadres_ext)
-
-            clean_sheets_dom = 100 - to_float(btts_dom)
-            clean_sheets_ext = 100 - to_float(btts_ext)
-            solidite_dom = 1 / (to_float(enc_dom) + 0.1)
-            solidite_ext = 1 / (to_float(enc_ext) + 0.1)
-            solidite_def_dom = to_float(clean_dom) / (to_float(fde) + 1)
-            solidite_def_ext = to_float(clean_ext) / (to_float(fee) + 1)
-
-            forme_pond_dom = 0.6 * fdm + 0.4 * fdo25
-            forme_pond_ext = 0.6 * fem + 0.4 * feo25
-
+        
+            # --- Forme split domicile / extérieur ---
+            bm_home, be_home, o25_home = calculer_forme(dom, date_match, role=True)
+            bm_away, be_away, o25_away = calculer_forme(ext, date_match, role=False)
             
-
-            # Construction du dictionnaire temporaire avec les valeurs
+            # --- Forme complète (pour std & clean sheets réels) ---
+            _, _, _, std_marq_dom, std_enc_dom, clean_dom = enrichir_forme_complet(dom, date_match)
+            _, _, _, std_marq_ext, std_enc_ext, clean_ext = enrichir_forme_complet(ext, date_match)
+            
+            # --- Possession moyenne ---
+            poss_moyenne = float((poss_dom + poss_ext) / 2)
+            
+            # --- Cartons total ---
+            cartons_total = float(cj_dom + cr_dom + cj_ext + cr_ext)
+            
+            # --- Construction du dictionnaire optimisé ---
             features_dict = {
-                "forme_dom_enc": to_float(fde),
-                "forme_ext_enc": to_float(fee),
-                "std_enc_dom": to_float(std_enc_dom),
-                "std_enc_ext": to_float(std_enc_ext),
-                "solidite_dom": to_float(solidite_dom),
-                "solidite_ext": to_float(solidite_ext),
-                "clean_sheets_dom": to_float(clean_sheets_dom),
-                "clean_sheets_ext": to_float(clean_sheets_ext),
-                "diff_xg": to_float(diff_xg),
-                "sum_xg": to_float(sum_xg),
-                "total_tirs": to_float(total_tirs),
-                "total_tirs_cadres": to_float(total_tirs_cadres),
-                "diff_over25": to_float(diff_over25),
-                "sum_btts": to_float(sum_btts),
-                "forme_dom_marq": to_float(fdm),
-                "forme_ext_marq": to_float(fem),
+                # Forme split
+                "forme_home_buts_marques": to_float(bm_home),
+                "forme_home_buts_encaisses": to_float(be_home),
+                "forme_home_over25": to_float(o25_home),
+                "forme_away_buts_marques": to_float(bm_away),
+                "forme_away_buts_encaisses": to_float(be_away),
+                "forme_away_over25": to_float(o25_away),
+            
+                # Variabilité
                 "std_marq_dom": to_float(std_marq_dom),
+                "std_enc_dom": to_float(std_enc_dom),
                 "std_marq_ext": to_float(std_marq_ext),
-                "solidite_def_dom": to_float(clean_dom / (fde + 1)),
-                "solidite_def_ext": to_float(clean_ext / (fee + 1)),
+                "std_enc_ext": to_float(std_enc_ext),
+            
+                # Clean sheets réels
                 "clean_dom": to_float(clean_dom),
                 "clean_ext": to_float(clean_ext),
+            
+                # Expected Goals bruts
                 "moyenne_xg_dom": to_float(xg_dom),
                 "moyenne_xg_ext": to_float(xg_ext),
+            
+                # Buts encaissés bruts
                 "buts_encaissés_dom": to_float(enc_dom),
-                "buts_encaissés_ext": to_float(enc_ext)
+                "buts_encaissés_ext": to_float(enc_ext),
+            
+                # Possession et tirs
+                "poss_moyenne": to_float(poss_moyenne),
+                "tirs_dom": to_float(tirs_dom),
+                "tirs_ext": to_float(tirs_ext),
+                "tirs_cadres_dom": to_float(tirs_cadres_dom),
+                "tirs_cadres_ext": to_float(tirs_cadres_ext),
+            
+                # Discipline et corners
+                "corners_dom": to_float(corners_dom),
+                "corners_ext": to_float(corners_ext),
+                "cartons_total": to_float(cartons_total)
             }
-
+            
+            # --- Vector de features final ---
             feature_vector = [features_dict.get(f, 0.0) for f in features]
-
+            
+            # --- Stockage match ---
             matchs.append({
                 "match": f"{dom} vs {ext}",
                 "features": feature_vector,
-                "poss": float((poss_dom + poss_ext) / 2),
+                "poss": poss_moyenne,
                 "corners": float(corners_dom + corners_ext),
                 "fautes": float(fautes_dom + fautes_ext),
-                "cartons": float(cj_dom + cr_dom + cj_ext + cr_ext),
-                "solidite_dom": float(solidite_dom),
-                "solidite_ext": float(solidite_ext),
-                "clean_sheets_dom": float(clean_sheets_dom),
-                "clean_sheets_ext": float(clean_sheets_ext)
+                "cartons": cartons_total,
+                "clean_sheets_dom": float(clean_dom),
+                "clean_sheets_ext": float(clean_ext)
             })
-
+            
+                    
         cursor.close()
         return matchs
+
 
     matchs_jour = get_matchs_jour_for_prediction()
 
     # === Prédictions ===
     # ✅ Transformation
     X_live = pd.DataFrame([m["features"] for m in matchs_jour], columns=features)
+
+    X_live = X_live.replace([np.inf, -np.inf], np.nan)
+    for col in list(X_live.columns):
+        miss = X_live[col].isna()
+        if miss.any():
+            X_live[f"{col}_missing"] = miss.astype(int)  # flag AVANT
+            X_live[col].fillna(X_live[col].median(), inplace=True)
+
+    
     X_live_scaled = scaler_ml.transform(X_live)
     
     # prédiction principale
@@ -760,8 +800,12 @@ try:
         fem, feo25 = float(features_vec[15]), float(features_vec[17])
         forme_pond_dom = 0.6 * fdm + 0.4 * fdo25
         forme_pond_ext = 0.6 * fem + 0.4 * feo25
-        solidite_dom = float(100 - match.get("clean_sheets_dom", 0))
-        solidite_ext = float(100 - match.get("clean_sheets_ext", 0))
+        
+        clean_dom = match.get("clean_sheets_dom", 0.0)  # nb sur 5
+        clean_ext = match.get("clean_sheets_ext", 0.0)
+        solidite_dom = clean_dom / 5.0
+        solidite_ext = clean_ext / 5.0
+
         poss = float(match.get("poss", 50))
         corners = float(match.get("corners", 8))
         fautes = float(match.get("fautes", 20))
@@ -803,11 +847,11 @@ try:
         
         # 🔍 Classification automatique
         if pred_total >= 2.5 and prob_over25 >= 0.6 and incertitude < 1.5:
-            matchs_hauts.append((prob_over25, match["match"], pred_total, f"{int(p25)} – {int(p75)}", commentaire, score_heur))
+            matchs_hauts.append((prob_over25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}", commentaire, score_heur))
         if pred_total <= 2.0 and prob_under25 >= 0.7 and incertitude < 1.5:
-            matchs_bas.append((prob_under25, match["match"], pred_total, f"{int(p25)} – {int(p75)}", commentaire, score_heur))
+            matchs_bas.append((prob_under25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}", commentaire, score_heur))
         else:
-            matchs_incertain.append((abs(prob_over25 - 0.5), match["match"], pred_total, f"{int(p25)} – {int(p75)}", commentaire, score_heur))
+            matchs_incertain.append((abs(prob_over25 - 0.5), match["match"], pred_total, f"{p25:.2f} – {p75:.2f}", commentaire, score_heur))
             
         match["confiance"] = commentaire
 
@@ -896,9 +940,9 @@ try:
 # Gestion erreur
 except Exception as e:
     error_message = f"❌ Erreur durant l’exécution du script main du {today} :\n\n{str(e)}"
-    send_email(
+    send_email_html(
         subject="❌ Échec - Script Main",
-        body=error_message,
+        html_body=f"<pre>{error_message}</pre>",
         to_email="lilian.pamphile.bts@gmail.com"
     )
     
