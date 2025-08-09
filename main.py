@@ -1082,17 +1082,17 @@ try:
     <div class="pill">Opps: {len(matchs_opps)}</div>
     
     <div class="match-section">
-        <h3>🔥 TOP CONFIANCE OVER (≥ 2.5, score🧠 ≥ 0.6, intervalle &lt; 1.5)</h3>
+        <h3>🔥 TOP CONFIANCE OVER</h3>
         {gen_table(matchs_over, "Over")}
     </div>
     
     <div class="match-section">
-        <h3>❄️ TOP CONFIANCE UNDER (≤ 2.0, score🧠 ≤ 0.4, intervalle &lt; 1.5)</h3>
+        <h3>❄️ TOP CONFIANCE UNDER</h3>
         {gen_table(matchs_under, "Under")}
     </div>
     
     <div class="match-section">
-        <h3>🎯 OPPORTUNITÉS CACHÉES (proba 50–65% mais signaux cohérents)</h3>
+        <h3>🎯 OPPORTUNITÉS CACHÉES</h3>
         {gen_table(matchs_opps, "Opps")}
     </div>
     
@@ -1128,13 +1128,20 @@ except Exception as e:
     
 
 # === Sauvegarde dans un unique fichier historique CSV ===
+import os
 import pandas as pd
 from datetime import datetime
+import shutil
+import subprocess
 
 today_str = datetime.now().strftime("%Y-%m-%d")
 
+def run(cmd, cwd=None):
+    """Exécute une commande shell et lève en cas d’erreur (log propre)."""
+    print("→", " ".join(cmd))
+    subprocess.check_call(cmd, cwd=cwd)
+
 def split_home_away(s):
-    # "Team A vs Team B" -> ("Team A","Team B")
     parts = str(s).split(" vs ")
     return (parts[0], parts[1]) if len(parts) == 2 else (s, "")
 
@@ -1145,9 +1152,9 @@ for i, m in enumerate(matchs_jour):
     p25 = float(pred_p25[i])
     p75 = float(pred_p75[i])
     pred_b = float(pred_buts[i])
-    heur_pct = float(m.get("score_heur", 0.0)) / 1.5  # normalisation en %
-    
-    # Classification OR pour le CSV
+    heur_pct = float(m.get("score_heur", 0.0)) / 1.5  # normalisé [0,1]
+
+    # Classification OR identique au mail
     if (heur_pct >= 0.85) or (prob_o25 >= 0.70) or (pred_b >= 3.0):
         categorie = "Ouvert"
     elif (heur_pct <= 0.425) or (prob_o25 <= 0.50) or (pred_b <= 1.8):
@@ -1177,34 +1184,50 @@ GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 if not GITHUB_TOKEN:
     raise ValueError("❌ Le token GitHub (GITHUB_TOKEN) n'est pas défini.")
 
-# === Clone du dépôt GitHub ===
+# --- Git config (comme dans le train) ---
+run(["git", "config", "--global", "user.email", "lilian.pamphile.bts@gmail.com"])
+run(["git", "config", "--global", "user.name", "LilianPamphile"])
+
 REPO_DIR = "main_push"
 REPO_URL = f"https://{GITHUB_TOKEN}@github.com/LilianPamphile/paris-sportifs.git"
 
+# Nettoyage / clone
 if os.path.exists(REPO_DIR):
     shutil.rmtree(REPO_DIR)
-os.system(f"git clone {REPO_URL} {REPO_DIR}")
+run(["git", "clone", REPO_URL, REPO_DIR])
 
-# === Chargement de l'historique s’il existe ===
+# (Optionnel mais utile en CI/root)
+try:
+    run(["git", "config", "--global", "--add", "safe.directory", os.path.abspath(REPO_DIR)])
+except subprocess.CalledProcessError:
+    pass  # pas bloquant
+
+# Chemins
 suivi_path = os.path.join(REPO_DIR, "suivi_predictions")
 os.makedirs(suivi_path, exist_ok=True)
 csv_path = os.path.join(suivi_path, "historique_predictions.csv")
 
+# Fusion avec l’historique s’il existe
 if os.path.exists(csv_path):
     try:
         df_hist = pd.read_csv(csv_path)
     except Exception:
-        df_hist = pd.DataFrame(columns=df_today.columns)  # fichier corrompu → on repart de zéro
+        df_hist = pd.DataFrame(columns=df_today.columns)
     df_combined = pd.concat([df_hist, df_today], ignore_index=True)
 else:
     df_combined = df_today
 
-# === Écriture finale du fichier unique ===
+# Écriture
 df_combined.to_csv(csv_path, index=False)
+print(f"💾 Écrit: {csv_path} ({len(df_today)} lignes ajoutées)")
 
-# === Commit & Push sur GitHub ===
-os.system(f"cd {REPO_DIR} && git add suivi_predictions/historique_predictions.csv")
-os.system(f"cd {REPO_DIR} && git commit -m '📊 Ajout des prédictions du {today_str}' || echo 'Aucun changement à committer'")
-os.system(f"cd {REPO_DIR} && git push origin main")
+# Commit & push (avec erreurs visibles)
+run(["git", "add", "suivi_predictions/historique_predictions.csv"], cwd=REPO_DIR)
+# Si aucune diff, 'commit' renvoie code ≠0. On gère proprement.
+try:
+    run(["git", "commit", "-m", f"📊 Ajout des prédictions du {today_str}"], cwd=REPO_DIR)
+except subprocess.CalledProcessError:
+    print("ℹ️ Aucun changement à committer (fichier identique).")
 
+run(["git", "push", "origin", "main"], cwd=REPO_DIR)
 print("✅ Suivi des prédictions mis à jour dans historique_predictions.csv.")
