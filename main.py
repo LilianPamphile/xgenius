@@ -991,11 +991,13 @@ try:
         agreement_ratio = sum(agree_bits) / 3.0
         consistency = abs(agreement_ratio - 0.5) * 2.0
     
-        w1 = w2 = w3 = w4 = 0.25
+        # Moins de poids sur l'intervalle, plus sur proba et marge
+        w1, w2, w3, w4 = 0.15, 0.30, 0.30, 0.25
         confidence_score = w1*sharp + w2*prob_strength + w3*margin_strength + w4*consistency
+
         confidence_pct = int(round(confidence_score * 100))
     
-        if confidence_score >= 0.70:
+        if confidence_score >= 0.68:
             commentaire = f"✅ Confiance élevée ({confidence_pct}%)"
         elif confidence_score >= 0.50:
             commentaire = f"ℹ️ Confiance modérée ({confidence_pct}%)"
@@ -1098,7 +1100,9 @@ try:
         <strong>🧠 Méthodo.</strong><br>
         Sélection = ≥3 signaux alignés (régression ML, classif Over/Under, heuristique, intervalle).<br>
         Intervalle = Conformal [p25–p75]; Confiance élevée si largeur &lt; 1.5.<br>
-        Pondération ML: moyenne CatBoost/HGB pondérée à l’inverse des MAE.
+        Pondération ML: moyenne CatBoost/HGB pondérée à l’inverse des MAE.<br>
+        Score heuristique = indicateur (0%–100%) basé sur un modèle interne combinant stats d'équipes
+        (buts marqués/encaissés, xG, tirs cadrés, corners…) pour estimer le potentiel offensif du match.
     </div>
     </body>
     </html>
