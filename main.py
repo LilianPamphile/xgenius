@@ -11,6 +11,7 @@ import pickle
 import pandas as pd
 import numpy as np
 import shutil
+from decimal import Decimal
 
 # 🔑 Clé API SportsData.io
 API_KEY = "b63f99b8e4mshb5383731d310a85p103ea1jsn47e34368f5df"
@@ -51,6 +52,20 @@ def to_float(x):
         return v
     except:
         return np.nan
+
+
+def num(x, default=0.0):
+    """Convertit Decimal/float/int/str en float, remplace None ou NaN par default."""
+    if x is None:
+        return default
+    try:
+        v = float(x)
+        if np.isnan(v):
+            return default
+        return v
+    except Exception:
+        return default
+
 
 def convert_to_int(value):
     try:
@@ -783,10 +798,10 @@ try:
             _, _, _, std_marq_ext, std_enc_ext, clean_ext = enrichir_forme_complet(ext, date_match)
             
             # --- Possession moyenne ---
-            poss_moyenne = float((poss_dom + poss_ext) / 2)
+            poss_moyenne = (num(poss_dom) + num(poss_ext)) / 2.0
             
             # --- Cartons total ---
-            cartons_total = float(cj_dom + cr_dom + cj_ext + cr_ext)
+            cartons_total = num(cj_dom) + num(cr_dom) + num(cj_ext) + num(cr_ext)
             
             # --- Construction du dictionnaire optimisé ---
             features_dict = {
@@ -837,8 +852,8 @@ try:
                 "match": f"{dom} vs {ext}",
                 "features": feature_vector,
                 "poss": poss_moyenne,
-                "corners": float(corners_dom + corners_ext),
-                "fautes": float(fautes_dom + fautes_ext),
+                "corners": num(corners_dom) + num(corners_ext),
+                "fautes": num(fautes_dom) + num(fautes_ext),
                 "cartons": cartons_total,
                 "clean_sheets_dom": float(clean_dom),
                 "clean_sheets_ext": float(clean_ext)
@@ -921,8 +936,9 @@ try:
         solidite_dom = 1.0 / (enc_dom_val + 0.1)
         solidite_ext = 1.0 / (enc_ext_val + 0.1)
     
-        corners_total = float(match.get("corners", (row.get("corners_dom", 0.0) + row.get("corners_ext", 0.0))))
-        fautes_total  = float(match.get("fautes", 0.0))
+        corners_total = float(match.get("corners", num(row.get("corners_dom", 0.0)) + num(row.get("corners_ext", 0.0))))
+        fautes_total  = float(match.get("fautes", num(row.get("fautes_dom", 0.0)) + num(row.get("fautes_ext", 0.0))))
+
         cartons_total = float(match.get("cartons", row.get("cartons_total", 0.0)))
         poss_moy      = float(match.get("poss", row.get("poss_moyenne", 50.0)))
     
@@ -1095,25 +1111,42 @@ except Exception as e:
 
 # === Sauvegarde dans un unique fichier historique CSV ===
 import pandas as pd
+from datetime import datetime
 
 today_str = datetime.now().strftime("%Y-%m-%d")
-df_today = pd.DataFrame([
-    {
+
+def split_home_away(s):
+    # "Team A vs Team B" -> ("Team A","Team B")
+    parts = str(s).split(" vs ")
+    return (parts[0], parts[1]) if len(parts) == 2 else (s, "")
+
+rows_csv = []
+for i, m in enumerate(matchs_jour):
+    home, away = split_home_away(m["match"])
+    prob_o25 = float(probas_over25[i])
+    p25 = float(pred_p25[i])
+    p75 = float(pred_p75[i])
+    rows_csv.append({
         "date": today_str,
+        "home": home,
+        "away": away,
         "match": m["match"],
-        "prediction_buts": round(pred_buts[i], 2),
-        "p25": round(pred_p25[i], 2),
-        "p75": round(pred_p75[i], 2),
-        "confiance": m["confiance"],
-        "score_heuristique": round(m.get("score_heur", 0), 2),
+        "prediction_buts": round(float(pred_buts[i]), 2),
+        "p25": round(p25, 2),
+        "p75": round(p75, 2),
+        "incertitude": round(p75 - p25, 2),
+        "prob_over25": round(prob_o25, 3),
+        "prob_under25": round(1.0 - prob_o25, 3),
+        "confiance": m.get("confiance", ""),
+        "score_heuristique": round(float(m.get("score_heur", 0.0)), 2),
         "categorie": (
-            "Ouvert" if pred_buts[i] >= 2.5 and probas_over25[i] >= 0.6 and (pred_p75[i] - pred_p25[i]) < 1.5
-            else "Fermé" if pred_buts[i] <= 2.0 and (1 - probas_over25[i]) >= 0.7 and (pred_p75[i] - pred_p25[i]) < 1.5
+            "Ouvert" if (float(pred_buts[i]) >= 2.5 and prob_o25 >= 0.6 and (p75 - p25) < 1.5)
+            else "Fermé" if (float(pred_buts[i]) <= 2.0 and (1.0 - prob_o25) >= 0.7 and (p75 - p25) < 1.5)
             else "Neutre"
         )
-    }
-    for i, m in enumerate(matchs_jour)
-])
+    })
+
+df_today = pd.DataFrame(rows_csv)
 
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 if not GITHUB_TOKEN:
@@ -1133,7 +1166,10 @@ os.makedirs(suivi_path, exist_ok=True)
 csv_path = os.path.join(suivi_path, "historique_predictions.csv")
 
 if os.path.exists(csv_path):
-    df_hist = pd.read_csv(csv_path)
+    try:
+        df_hist = pd.read_csv(csv_path)
+    except Exception:
+        df_hist = pd.DataFrame(columns=df_today.columns)  # fichier corrompu → on repart de zéro
     df_combined = pd.concat([df_hist, df_today], ignore_index=True)
 else:
     df_combined = df_today
@@ -1143,7 +1179,7 @@ df_combined.to_csv(csv_path, index=False)
 
 # === Commit & Push sur GitHub ===
 os.system(f"cd {REPO_DIR} && git add suivi_predictions/historique_predictions.csv")
-os.system(f"cd {REPO_DIR} && git commit -m '📊 Ajout des prédictions du {today_str}'")
+os.system(f"cd {REPO_DIR} && git commit -m '📊 Ajout des prédictions du {today_str}' || echo 'Aucun changement à committer'")
 os.system(f"cd {REPO_DIR} && git push origin main")
 
 print("✅ Suivi des prédictions mis à jour dans historique_predictions.csv.")
