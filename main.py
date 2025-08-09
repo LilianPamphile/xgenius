@@ -889,7 +889,7 @@ try:
     matchs_over, matchs_under, matchs_opps = [], [], []
 
     def clip01(x):
-    return max(0.0, min(1.0, float(x)))
+        return max(0.0, min(1.0, float(x)))
 
     def score_over(pred_total, prob_over25, score_heur, incertitude):
         pred_part = clip01(pred_total / 4.0)
