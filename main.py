@@ -142,7 +142,7 @@ def gen_table(matchs, segment):
             <td>{pred:.2f}</td>
             <td>{intervalle}</td>
             <td>{int(prob*100)}%</td>
-            <td>{heur:.2f}</td>
+            <td>{heur/1.5:.0%}</td> 
             <td>{conf}</td>
         </tr>""")
 
@@ -938,7 +938,6 @@ try:
     
         corners_total = float(match.get("corners", num(row.get("corners_dom", 0.0)) + num(row.get("corners_ext", 0.0))))
         fautes_total  = float(match.get("fautes", num(row.get("fautes_dom", 0.0)) + num(row.get("fautes_ext", 0.0))))
-
         cartons_total = float(match.get("cartons", row.get("cartons_total", 0.0)))
         poss_moy      = float(match.get("poss", row.get("poss_moyenne", 50.0)))
     
@@ -966,50 +965,65 @@ try:
         missing_feats = [f for f in features_heur if f not in d]
         if missing_feats:
             print(f"[WARN] Features manquantes pour score_heur: {missing_feats}")
-        
+    
         # Construction dans le bon ordre
         X_input_heur = pd.DataFrame([[d.get(f, 0.0) for f in features_heur]], columns=features_heur)
-        
-        # Prédiction
+    
+        # Prédiction heuristique
         score_heur = float(model_heuristique.predict(X_input_heur)[0])
-        
-        # Contrôle des bornes
+    
+        # Contrôle bornes et clamp
         if score_heur < -0.05 or score_heur > 2:
             print(f"[WARN] score_heur aberrant ({score_heur:.2f}) pour {match.get('match', 'inconnu')}")
-        
-        # Clamp pour rester dans la plage exploitable
         score_heur = max(0.0, min(score_heur, 1.5))
-
         match["score_heur"] = score_heur
     
-        # commentaire confiance simple
-        if incertitude > 2.5:
-            commentaire = "⚠️ Incertitude élevée"
-        elif incertitude < 1.5:
-            commentaire = "✅ Confiance élevée"
-        else:
-            commentaire = "ℹ️ Confiance modérée"
-        match["confiance"] = commentaire
+        # === Confiance composite ===
+        sharp = 1.0 - min(1.0, incertitude / 3.0)
+        prob_strength = abs(prob_over25 - 0.5) * 2.0
+        margin_strength = min(1.0, abs(pred_total - 2.5) / 2.0)
+        heur_pct = score_heur / 1.5
+        agree_bits = [
+            1.0 if pred_total >= 2.5 else 0.0,
+            1.0 if prob_over25 >= 0.5 else 0.0,
+            1.0 if heur_pct >= 0.5 else 0.0,
+        ]
+        agreement_ratio = sum(agree_bits) / 3.0
+        consistency = abs(agreement_ratio - 0.5) * 2.0
     
-        # === CLASSEMENT SOUPLE (aucune exclusion) ===
-        s_over = score_over(pred_total, prob_over25, score_heur, incertitude)
-        s_under = score_under(pred_total, prob_over25, score_heur, incertitude)
-        
-        # étiquette soft: on prend le score dominant, sinon “Opps/Neutre”
-        if s_over - s_under > 0.05:
-            # pour Over, on affiche la proba over
-            matchs_over.append((prob_over25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}", commentaire, score_heur, s_over))
-        elif s_under - s_over > 0.05:
-            # pour Under, on affiche la proba under
-            prob_under25 = 1.0 - prob_over25
-            matchs_under.append((prob_under25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}", commentaire, score_heur, s_under))
+        w1 = w2 = w3 = w4 = 0.25
+        confidence_score = w1*sharp + w2*prob_strength + w3*margin_strength + w4*consistency
+        confidence_pct = int(round(confidence_score * 100))
+    
+        if confidence_score >= 0.70:
+            commentaire = f"✅ Confiance élevée ({confidence_pct}%)"
+        elif confidence_score >= 0.50:
+            commentaire = f"ℹ️ Confiance modérée ({confidence_pct}%)"
         else:
-            # borderline → on conserve aussi (classe “opportunités/neutre”), proba over par cohérence d'affichage
-            s_final = max(s_over, s_under)
-            matchs_opps.append((prob_over25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}", commentaire, score_heur, s_final))
-
-                
+            commentaire = f"⚠️ Confiance faible ({confidence_pct}%)"
+    
         match["confiance"] = commentaire
+        match["confidence_pct"] = confidence_pct
+    
+        # === Classification par règles OR ===
+        over_rule = (heur_pct >= 0.85) or (prob_over25 >= 0.70) or (pred_total >= 3.0)
+        under_rule = (heur_pct <= 0.425) or (prob_over25 <= 0.50) or (pred_total <= 1.8)
+    
+        if over_rule and not under_rule:
+            matchs_over.append((
+                prob_over25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}",
+                commentaire, score_heur, 1.0
+            ))
+        elif under_rule and not over_rule:
+            matchs_under.append((
+                prob_under25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}",
+                commentaire, score_heur, 1.0
+            ))
+        else:
+            matchs_opps.append((
+                prob_over25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}",
+                commentaire, score_heur, 1.0
+            ))
 
     
     # === Génération du mail ===
@@ -1018,21 +1032,21 @@ try:
     # Over (tous)
     mail_lines.append("🔥 CLASSEMENT OVER (tous les matchs)\n")
     for prob, name, pred, intervalle, conf, heur, s in sorted(matchs_over, key=lambda x: x[-1], reverse=True):
-        mail_lines.append(f"{name}\t⚽ {pred:.2f}\t🔁 {intervalle}\t📊 {int(prob*100)}%\t{conf}\t🧠 {heur:.2f}")
+        mail_lines.append(f"{name}\t⚽ {pred:.2f}\t🔁 {intervalle}\t📊 {int(prob*100)}%\t{conf}\t🧠 {heur/1.5:.0%}")
     if not matchs_over:
         mail_lines.append("Aucun match taggué Over.\n")
     
     # Under (tous)
     mail_lines.append("\n❄️ CLASSEMENT UNDER (tous les matchs)\n")
     for probU, name, pred, intervalle, conf, heur, s in sorted(matchs_under, key=lambda x: x[-1], reverse=True):
-        mail_lines.append(f"{name}\t⚽ {pred:.2f}\t🔁 {intervalle}\t🚫 {int(probU*100)}%\t{conf}\t🧠 {heur:.2f}")
+        mail_lines.append(f"{name}\t⚽ {pred:.2f}\t🔁 {intervalle}\t🚫 {int(probU*100)}%\t{conf}\t🧠 {heur/1.5:.0%}")
     if not matchs_under:
         mail_lines.append("Aucun match taggué Under.\n")
     
     # Opps/Neutres (tous)
     mail_lines.append("\n🎯 OPPORTUNITÉS / NEUTRES (tous les matchs)\n")
     for probO, name, pred, intervalle, conf, heur, s in sorted(matchs_opps, key=lambda x: x[-1], reverse=True):
-        mail_lines.append(f"{name}\t⚽ {pred:.2f}\t🔁 {intervalle}\t📊 {int(probO*100)}%\t{conf}\t🧠 {heur:.2f}")
+        mail_lines.append(f"{name}\t⚽ {pred:.2f}\t🔁 {intervalle}\t📊 {int(probO*100)}%\t{conf}\t🧠 {heur/1.5:.0%}")
     if not matchs_opps:
         mail_lines.append("Aucun match borderline/neutre.\n")
 
@@ -1126,12 +1140,23 @@ for i, m in enumerate(matchs_jour):
     prob_o25 = float(probas_over25[i])
     p25 = float(pred_p25[i])
     p75 = float(pred_p75[i])
+    pred_b = float(pred_buts[i])
+    heur_pct = float(m.get("score_heur", 0.0)) / 1.5  # normalisation en %
+    
+    # Classification OR pour le CSV
+    if (heur_pct >= 0.85) or (prob_o25 >= 0.70) or (pred_b >= 3.0):
+        categorie = "Ouvert"
+    elif (heur_pct <= 0.425) or (prob_o25 <= 0.50) or (pred_b <= 1.8):
+        categorie = "Fermé"
+    else:
+        categorie = "Neutre"
+
     rows_csv.append({
         "date": today_str,
         "home": home,
         "away": away,
         "match": m["match"],
-        "prediction_buts": round(float(pred_buts[i]), 2),
+        "prediction_buts": round(pred_b, 2),
         "p25": round(p25, 2),
         "p75": round(p75, 2),
         "incertitude": round(p75 - p25, 2),
@@ -1139,11 +1164,7 @@ for i, m in enumerate(matchs_jour):
         "prob_under25": round(1.0 - prob_o25, 3),
         "confiance": m.get("confiance", ""),
         "score_heuristique": round(float(m.get("score_heur", 0.0)), 2),
-        "categorie": (
-            "Ouvert" if (float(pred_buts[i]) >= 2.5 and prob_o25 >= 0.6 and (p75 - p25) < 1.5)
-            else "Fermé" if (float(pred_buts[i]) <= 2.0 and (1.0 - prob_o25) >= 0.7 and (p75 - p25) < 1.5)
-            else "Neutre"
-        )
+        "categorie": categorie
     })
 
 df_today = pd.DataFrame(rows_csv)
