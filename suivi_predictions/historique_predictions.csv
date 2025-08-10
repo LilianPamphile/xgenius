@@ -7,3 +7,10 @@ date,home,away,match,prediction_buts,p25,p75,incertitude,prob_over25,prob_under2
 2025-08-09,Dynamo Dresden,1. FC Magdeburg,Dynamo Dresden vs 1. FC Magdeburg,3.72,2.47,5.75,3.28,0.709,0.291,⚠️ Confiance faible (39%),0.0,Ouvert
 2025-08-09,Eintracht Braunschweig,SpVgg Greuther Fürth,Eintracht Braunschweig vs SpVgg Greuther Fürth,2.9,0.93,4.92,4.0,0.518,0.482,⚠️ Confiance faible (15%),0.44,Fermé
 2025-08-09,1. FC Kaiserslautern,FC Schalke 04,1. FC Kaiserslautern vs FC Schalke 04,3.35,0.75,4.57,3.82,0.626,0.374,⚠️ Confiance faible (29%),0.58,Ouvert
+2025-08-10,PEC Zwolle,Twente,PEC Zwolle vs Twente,2.42,0.74,4.42,3.68,0.396,0.604,⚠️ Confiance faible (32%),0.68,Fermé
+2025-08-10,Ajax,Telstar,Ajax vs Telstar,1.64,-0.69,3.44,4.14,0.321,0.679,⚠️ Confiance faible (49%),0.55,Fermé
+2025-08-10,AZ Alkmaar,Groningen,AZ Alkmaar vs Groningen,2.68,0.44,4.77,4.33,0.391,0.609,⚠️ Confiance faible (18%),0.71,Fermé
+2025-08-10,Utrecht,Heracles,Utrecht vs Heracles,2.2,0.29,3.77,3.48,0.426,0.574,⚠️ Confiance faible (34%),0.57,Fermé
+2025-08-10,Hertha BSC,Karlsruher SC,Hertha BSC vs Karlsruher SC,3.04,1.44,4.78,3.34,0.575,0.425,⚠️ Confiance faible (21%),0.25,Ouvert
+2025-08-10,VfL Bochum,SV Elversberg,VfL Bochum vs SV Elversberg,2.82,1.24,4.65,3.41,0.694,0.306,⚠️ Confiance faible (25%),0.17,Fermé
+2025-08-10,Holstein Kiel,Arminia Bielefeld,Holstein Kiel vs Arminia Bielefeld,3.42,2.15,4.85,2.7,0.632,0.368,⚠️ Confiance faible (32%),0.11,Ouvert
