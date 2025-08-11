@@ -1115,6 +1115,15 @@ try:
         to_email=["lilian.pamphile.bts@gmail.com"]
     )
 
+    from telegram_message import send_telegram_message
+    import os
+    
+    BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+    CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+    
+    # Utiliser le texte brut du mail
+    send_telegram_message(BOT_TOKEN, CHAT_ID, "\n".join(mail_lines))
+
 
 # Gestion erreur
 except Exception as e:
