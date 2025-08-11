@@ -14,10 +14,3 @@ def send_telegram_message(bot_token: str, chat_id: str, message: str):
         print("📲 Message envoyé sur Telegram.")
     else:
         print(f"❌ Erreur Telegram {r.status_code} : {r.text}")
-
-if __name__ == "__main__":
-    BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")  # ou mets directement ton token pour tester
-    CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")      # ou "@NomDuCanal"
-    MESSAGE = "Hello depuis XGenius ⚽📊"
-    
-    send_telegram_message(BOT_TOKEN, CHAT_ID, MESSAGE)
