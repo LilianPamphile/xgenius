@@ -1119,7 +1119,7 @@ try:
     import os
     
     BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-    CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+    CHAT_ID = "Xgenius"
     
     # Utiliser le texte brut du mail
     send_telegram_message(BOT_TOKEN, CHAT_ID, "\n".join(mail_lines))
