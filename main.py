@@ -1240,3 +1240,33 @@ except subprocess.CalledProcessError:
 
 run(["git", "push", "origin", "main"], cwd=REPO_DIR)
 print("✅ Suivi des prédictions mis à jour dans historique_predictions.csv.")
+
+# === TikTok : création + publication quotidienne ===
+try:
+    from generate_tiktok_daily import create_tiktok_daily, pick_daily_match, build_caption
+    from tiktok_poster import upload_and_publish
+
+    # 1) Sélectionne le meilleur match (selon la confiance calculée dans main.py)
+    best = pick_daily_match(matchs_over, matchs_under, matchs_opps)
+
+    # 2) Génère la vidéo verticale (1080x1920) avec contexte + stats + verdict + CTA Telegram
+    video_path = create_tiktok_daily(
+        matchs_over=matchs_over,
+        matchs_under=matchs_under,
+        matchs_opps=matchs_opps,
+        date=today_str,
+        audio_path=None,          # mets un mp3 si tu veux une musique
+        save_dir="out"
+    )
+    print("🎬 Vidéo TikTok générée:", video_path)
+
+    # 3) Légende/description TikTok (avec hashtags et CTA)
+    caption = build_caption(best, hashtags=True)
+    print("📝 Caption:", caption)
+
+    # 4) Publication via API TikTok (auto-refresh du token)
+    resp = upload_and_publish(video_path, caption)
+    print("✅ TikTok publié:", resp)
+
+except Exception as e:
+    print("❌ TikTok non publié :", e)
