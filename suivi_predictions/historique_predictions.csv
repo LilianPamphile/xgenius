@@ -14,3 +14,14 @@ date,home,away,match,prediction_buts,p25,p75,incertitude,prob_over25,prob_under2
 2025-08-10,Hertha BSC,Karlsruher SC,Hertha BSC vs Karlsruher SC,3.04,1.44,4.78,3.34,0.575,0.425,⚠️ Confiance faible (21%),0.25,Ouvert
 2025-08-10,VfL Bochum,SV Elversberg,VfL Bochum vs SV Elversberg,2.82,1.24,4.65,3.41,0.694,0.306,⚠️ Confiance faible (25%),0.17,Fermé
 2025-08-10,Holstein Kiel,Arminia Bielefeld,Holstein Kiel vs Arminia Bielefeld,3.42,2.15,4.85,2.7,0.632,0.368,⚠️ Confiance faible (32%),0.11,Ouvert
+2025-08-12,Qarabag,Shkendija,Qarabag vs Shkendija,2.91,0.94,4.59,3.65,0.396,0.604,⚠️ Confiance faible (21%),0.28,Fermé
+2025-08-12,FC Copenhagen,Malmo FF,FC Copenhagen vs Malmo FF,2.71,1.01,3.97,2.96,0.488,0.512,⚠️ Confiance faible (12%),0.4,Fermé
+2025-08-12,Plzen,Rangers,Plzen vs Rangers,1.98,0.76,3.63,2.86,0.383,0.617,⚠️ Confiance faible (41%),0.6,Fermé
+2025-08-12,Fenerbahce,Feyenoord,Fenerbahce vs Feyenoord,2.41,1.26,4.31,3.05,0.501,0.499,⚠️ Confiance faible (10%),0.47,Fermé
+2025-08-12,Pafos,Dynamo Kyiv,Pafos vs Dynamo Kyiv,3.39,1.34,4.77,3.43,0.623,0.377,⚠️ Confiance faible (29%),0.54,Ouvert
+2025-08-12,Club Brugge KV,Red Bull Salzburg,Club Brugge KV vs Red Bull Salzburg,2.53,1.37,4.22,2.85,0.58,0.42,⚠️ Confiance faible (14%),0.28,Fermé
+2025-08-12,Ferencvarosi TC,Ludogorets,Ferencvarosi TC vs Ludogorets,1.93,0.59,3.08,2.49,0.188,0.812,⚠️ Confiance faible (38%),0.88,Fermé
+2025-08-12,Slovan Bratislava,Kairat Almaty,Slovan Bratislava vs Kairat Almaty,2.98,1.07,4.67,3.6,0.394,0.606,⚠️ Confiance faible (22%),0.41,Fermé
+2025-08-12,Benfica,Nice,Benfica vs Nice,2.98,1.09,4.52,3.43,0.805,0.195,ℹ️ Confiance modérée (50%),0.77,Ouvert
+2025-08-12,FK Crvena Zvezda,Lech Poznan,FK Crvena Zvezda vs Lech Poznan,5.0,2.71,6.51,3.79,0.948,0.052,ℹ️ Confiance modérée (65%),0.69,Ouvert
+2025-08-12,Shelbourne,HNK Rijeka,Shelbourne vs HNK Rijeka,0.9,-0.38,2.47,2.85,0.123,0.877,✅ Confiance élevée (72%),0.0,Fermé
