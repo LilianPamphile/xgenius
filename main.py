@@ -1007,12 +1007,7 @@ sec_over  = build_section("🔥", "TOP CONFIANCE OVER",   matchs_over, is_under=
 sec_under = build_section("❄️", "TOP CONFIANCE UNDER",  matchs_under, is_under=True)
 sec_opps  = build_section("🎯", "OPPORTUNITÉS CACHÉES", matchs_opps)  # par défaut O2.5
 
-recap = (
-    f"<b>📅 Prévisions du {today}</b>\n"
-    f"<i>Over:</i> {len(matchs_over)}  •  <i>Under:</i> {len(matchs_under)}  •  <i>Opps:</i> {len(matchs_opps)}\n"
-)
-
-messages = [recap, sec_over, sec_under, sec_opps, recap]
+messages = [recap, sec_over, sec_under, sec_opps]
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
