@@ -959,6 +959,9 @@ try:
                 commentaire, score_heur, 1.0
             ))
 
+except Exception as e:
+    print("❌ Erreur pendant la génération des prédictions :", e)
+
 # --- Après le remplissage de matchs_over / matchs_under / matchs_opps ---
 def build_section(title_emoji, title_text, rows, is_under=False):
     header = "Match                          P    Intervalle   Proba  Score  Confiance"
