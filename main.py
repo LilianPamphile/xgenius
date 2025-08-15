@@ -994,7 +994,7 @@ note = (
 messages = [recap, sec_over, sec_under, sec_opps, note]
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-CHAT_ID = "@Xgenius"
+CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 for chunk in messages:
     if len(chunk) > 3800:
         chunk = chunk[:3800] + "\n<i>(troncature…)</i>"
