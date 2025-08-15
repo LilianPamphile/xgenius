@@ -989,12 +989,10 @@ def build_section(title_emoji: str, title_text: str, rows, is_under: bool = Fals
 
         card = (
             f"<b>{esc(short_name(name))}</b>\n"
-            f"<pre><code>"
             f"Prédiction buts : {pred:>4.2f}\n"
             f"Intervalle      : {esc(intervalle)}\n"
             f"{label} Probabilité: {prob_pct:>3d}%\n"
             f"Score XGenius   : {score_pct:>3d}%"
-            f"</code></pre>\n"
             f"{esc(conf)}"
         )
         blocks.append(card)
