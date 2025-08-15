@@ -460,15 +460,23 @@ print("✅ Modèles commités et poussés sur GitHub.")
 def send_email(subject, body, to_email):
     from email.mime.text import MIMEText
     import smtplib
-    
+    import os
+
+    from_email = "lilian.pamphile.bts@gmail.com"
+    app_password = os.getenv("EMAIL_APP_PASSWORD")  # <-- GitHub Secret
+
+    if not app_password:
+        print("❌ EMAIL_APP_PASSWORD non défini dans l'environnement.")
+        return
+
     msg = MIMEText(body)
     msg["Subject"] = subject
-    msg["From"] = "lilian.pamphile.bts@gmail.com"
+    msg["From"] = from_email
     msg["To"] = to_email
 
     try:
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login("lilian.pamphile.bts@gmail.com", "fifkktsenfxsqiob")
+            server.login(from_email, app_password)
             server.send_message(msg)
         print("📬 Email envoyé.")
     except Exception as e:
