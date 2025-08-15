@@ -3,15 +3,14 @@ import requests
 import psycopg2
 # Fonction de conversion sécurisée
 from datetime import datetime, timedelta
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 import os
 import pickle
 import pandas as pd
 import numpy as np
 import shutil
 from decimal import Decimal
+
+from telegram_message import send_telegram_message
 
 # 🔑 Clé API SportsData.io
 API_KEY = "b63f99b8e4mshb5383731d310a85p103ea1jsn47e34368f5df"
@@ -97,73 +96,6 @@ def get_fixture_with_goals(fixture_id, headers):
             goals = data[0]["goals"]
             return goals["home"], goals["away"]
     return 0, 0
-
-"""## **Envoie de mail et execution des fonction de récupération de données**"""
-def send_email_html(subject, html_body, to_email):
-    from_email = "lilian.pamphile.bts@gmail.com"
-    password = "fifkktsenfxsqiob"  # mot de passe d'application Gmail
-
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = from_email
-    msg["To"] = ", ".join(to_email)
-
-    part_html = MIMEText(html_body, "html")
-    msg.attach(part_html)
-
-    try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(from_email, password)
-            server.send_message(msg)
-        print("📬 Email HTML envoyé avec succès.")
-    except Exception as e:
-        print("❌ Erreur lors de l'envoi de l'email HTML :", e)
-
-
-def gen_table(matchs, segment):
-    """
-    matchs: liste de tuples (prob, name, pred, intervalle, conf, heur, s_final)
-    segment: "Over" | "Under" | "Opps"
-    """
-    if not matchs:
-        return "<p>Aucun match détecté.</p>"
-
-    # tri par score final décroissant
-    matchs_sorted = sorted(matchs, key=lambda x: x[-1], reverse=True)
-
-    # libellé proba selon segment
-    proba_col = "📊 Proba O≥2.5" if segment in ("Over", "Opps") else "🚫 Proba U≤2.0"
-
-    rows = []
-    for prob, name, pred, intervalle, conf, heur, _ in matchs_sorted:
-        rows.append(f"""
-        <tr>
-            <td>{name}</td>
-            <td>{pred:.2f}</td>
-            <td>{intervalle}</td>
-            <td>{int(prob*100)}%</td>
-            <td>{heur/1.5:.0%}</td> 
-            <td>{conf}</td>
-        </tr>""")
-
-    return f"""
-    <table>
-        <thead>
-            <tr>
-                <th>Match</th>
-                <th>⚽ Prédiction</th>
-                <th>🔁 Intervalle</th>
-                <th>{proba_col}</th>
-                <th>🧠 Score</th>
-                <th>Confiance</th>
-            </tr>
-        </thead>
-        <tbody>
-            {''.join(rows)}
-        </tbody>
-    </table>"""
-
-
 
 # --- Téléchargement des fichiers modèle/scaler depuis GitHub ---
 def telecharger_model_depuis_github():
@@ -1027,114 +959,44 @@ try:
                 commentaire, score_heur, 1.0
             ))
 
-    
-    # === Génération du mail ===
-    mail_lines = [f"📅 Prévisions du {today}\n"]
+# --- Après le remplissage de matchs_over / matchs_under / matchs_opps ---
+def build_section(title_emoji, title_text, rows, is_under=False):
+    header = "Match                          P    Intervalle   Proba  Score  Confiance"
+    sep    = "──────────────────────────────────────────────────────────────────────────"
+    def to_line(tup):
+        prob, name, pred, intervalle, conf, heur, _ = tup
+        proba_pct = int(round(prob * 100))
+        score_pct = int(round(min(heur/1.5, 1.0) * 100))
+        name_txt = (name[:28] + "…") if len(name) > 29 else name.ljust(29)
+        return f"{name_txt}  {pred:>4.2f}   {intervalle:^11}   {proba_pct:>3d}%   {score_pct:>3d}%   {conf}"
+    if not rows:
+        body = "Aucun match détecté."
+    else:
+        ordered = sorted(rows, key=lambda x: x[-1], reverse=True)
+        lines = [to_line(t) for t in ordered]
+        body = f"<pre>{header}\n{sep}\n" + "\n".join(lines) + "</pre>"
+    return f"<b>{title_emoji} {title_text}</b>\n{body}\n"
 
-    # Over (tous)
-    mail_lines.append("🔥 CLASSEMENT OVER (tous les matchs)\n")
-    for prob, name, pred, intervalle, conf, heur, s in sorted(matchs_over, key=lambda x: x[-1], reverse=True):
-        mail_lines.append(f"{name}\t⚽ {pred:.2f}\t🔁 {intervalle}\t📊 {int(prob*100)}%\t{conf}\t🧠 {heur/1.5:.0%}")
-    if not matchs_over:
-        mail_lines.append("Aucun match taggué Over.\n")
-    
-    # Under (tous)
-    mail_lines.append("\n❄️ CLASSEMENT UNDER (tous les matchs)\n")
-    for probU, name, pred, intervalle, conf, heur, s in sorted(matchs_under, key=lambda x: x[-1], reverse=True):
-        mail_lines.append(f"{name}\t⚽ {pred:.2f}\t🔁 {intervalle}\t🚫 {int(probU*100)}%\t{conf}\t🧠 {heur/1.5:.0%}")
-    if not matchs_under:
-        mail_lines.append("Aucun match taggué Under.\n")
-    
-    # Opps/Neutres (tous)
-    mail_lines.append("\n🎯 OPPORTUNITÉS / NEUTRES (tous les matchs)\n")
-    for probO, name, pred, intervalle, conf, heur, s in sorted(matchs_opps, key=lambda x: x[-1], reverse=True):
-        mail_lines.append(f"{name}\t⚽ {pred:.2f}\t🔁 {intervalle}\t📊 {int(probO*100)}%\t{conf}\t🧠 {heur/1.5:.0%}")
-    if not matchs_opps:
-        mail_lines.append("Aucun match borderline/neutre.\n")
+recap = f"<b>📅 Prévisions du {today}</b>\n" \
+        f"<i>Over:</i> {len(matchs_over)}  •  <i>Under:</i> {len(matchs_under)}  •  <i>Opps:</i> {len(matchs_opps)}\n"
+sec_over = build_section("🔥", "TOP CONFIANCE OVER",   matchs_over)
+sec_under= build_section("❄️", "TOP CONFIANCE UNDER",  matchs_under, is_under=True)
+sec_opps = build_section("🎯", "OPPORTUNITÉS CACHÉES", matchs_opps)
+note = (
+    "🧠 <b>Notes</b>\n"
+    "• Sélection = ≥3 signaux alignés (régression ML, classif O/U 2.5, heuristique, intervalle).\n"
+    "• Intervalle = Conformal [p25–p75] ; confiance élevée si largeur < 1.5.\n"
+    "• Score = potentiel offensif (0–100%).\n"
+)
+messages = [recap, sec_over, sec_under, sec_opps, note]
 
-    
-    mail_lines += [
-        "\n🧠 Note méthodologique",
-        "Sélection = ≥3 signaux alignés (ML, classif over/under, heuristique, intervalle).",
-        "Intervalle = Conformal [p25 – p75] ; Confiance élevée si largeur < 1.5.",
-        "Score🧠: ≥0.6 fort potentiel offensif ; ≤0.4 faible potentiel.",
-    ]
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+CHAT_ID = "@Xgenius"
+for chunk in messages:
+    if len(chunk) > 3800:
+        chunk = chunk[:3800] + "\n<i>(troncature…)</i>"
+    send_telegram_message(BOT_TOKEN, CHAT_ID, chunk)
 
-    
-    html_body = f"""
-    <html>
-    <head>
-    <style>
-        body {{ font-family: Arial, sans-serif; color: #333; }}
-        h2 {{ color: #d9534f; margin-bottom: 6px; }}
-        h3 {{ margin-top: 18px; }}
-        .pill {{ display:inline-block; background:#eef; border-radius:12px; padding:2px 8px; font-size:12px; color:#445; margin-left:8px; }}
-        table {{ width: 100%; border-collapse: collapse; margin-top: 6px; }}
-        th, td {{ border: 1px solid #ddd; padding: 6px 8px; text-align: left; }}
-        th {{ background-color: #f7f7f7; }}
-        .note {{ font-size: 12px; color: #555; margin-top: 16px; line-height: 1.4; }}
-    </style>
-    </head>
-    <body>
-    <h2>📅 Prévisions du {today}</h2>
-    <div class="pill">Over: {len(matchs_over)}</div>
-    <div class="pill">Under: {len(matchs_under)}</div>
-    <div class="pill">Opps: {len(matchs_opps)}</div>
-    
-    <div class="match-section">
-        <h3>🔥 TOP CONFIANCE OVER</h3>
-        {gen_table(matchs_over, "Over")}
-    </div>
-    
-    <div class="match-section">
-        <h3>❄️ TOP CONFIANCE UNDER</h3>
-        {gen_table(matchs_under, "Under")}
-    </div>
-    
-    <div class="match-section">
-        <h3>🎯 OPPORTUNITÉS CACHÉES</h3>
-        {gen_table(matchs_opps, "Opps")}
-    </div>
-    
-    <div class="note">
-        <strong>🧠 Méthodo.</strong><br>
-        Sélection = ≥3 signaux alignés (régression ML, classif Over/Under, heuristique, intervalle).<br>
-        Intervalle = Conformal [p25–p75]; Confiance élevée si largeur &lt; 1.5.<br>
-        Pondération ML: moyenne CatBoost/HGB pondérée à l’inverse des MAE.<br>
-        Score heuristique = indicateur (0%–100%) basé sur un modèle interne combinant stats d'équipes
-        (buts marqués/encaissés, xG, tirs cadrés, corners…) pour estimer le potentiel offensif du match.
-    </div>
-    </body>
-    </html>
-    """
-
-    
-    send_email_html(
-        subject="📊 Analyse quotidienne Xgenius",
-        html_body=html_body,
-        to_email=["lilian.pamphile.bts@gmail.com"]
-    )
-
-    from telegram_message import send_telegram_message
-    import os
-    
-    BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-    CHAT_ID = "@Xgenius"
-    
-    # Utiliser le texte brut du mail
-    send_telegram_message(BOT_TOKEN, CHAT_ID, "\n".join(mail_lines))
-
-
-# Gestion erreur
-except Exception as e:
-    error_message = f"❌ Erreur durant l’exécution du script main du {today} :\n\n{str(e)}"
-    send_email_html(
-        subject="❌ Échec - Script Main",
-        html_body=f"<pre>{error_message}</pre>",
-        to_email=["lilian.pamphile.bts@gmail.com"]  # liste, pas string
-    )
-
-    
 
 # === Sauvegarde dans un unique fichier historique CSV ===
 import os
