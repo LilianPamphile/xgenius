@@ -52,9 +52,13 @@ def to_float(x):
     except:
         return np.nan
 
-def esc(x):
+def esc(x: str) -> str:
     s = str(x) if x is not None else ""
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+def short_name(name: str, n: int = 32) -> str:
+    name = str(name).replace(" vs ", " – ")
+    return (name[:n-1] + "…") if len(name) > n else name
 
 def num(x, default=0.0):
     """Convertit Decimal/float/int/str en float, remplace None ou NaN par default."""
@@ -965,44 +969,50 @@ try:
 except Exception as e:
     print("❌ Erreur pendant la génération des prédictions :", e)
 
-def build_section(title_emoji, title_text, rows, is_under=False):
-    col_label = "U2.5" if is_under else "O2.5"
-    header = f"Match                          P    Intervalle   {col_label}  Score  Confiance"
-    sep    = "────────────────────────────────────────────────────────────────────────"
-
-    def to_line(tup):
-        prob, name, pred, intervalle, conf, heur, _ = tup
-        # prob = prob_over25 si over, prob_under25 si under
-        prob_pct = int(round(float(prob) * 100))
-        score_pct = int(round(min(float(heur)/1.5, 1.0) * 100))
-        name_txt = (name[:28] + "…") if len(name) > 29 else name.ljust(29)
-        return (
-            f"{esc(name_txt)}  {pred:>4.2f}   {esc(intervalle):^11}   "
-            f"{prob_pct:>3d}%  {score_pct:>3d}%   {esc(conf)}"
-        )
-
+def build_section(title_emoji: str, title_text: str, rows, is_under: bool = False) -> str:
+    """
+    rows = [(prob, name, pred, intervalle, commentaire, score_heur, ...), ...]
+    - Pour OVER: prob = prob_over25 (déjà le cas)
+    - Pour UNDER: prob = prob_under25 (déjà le cas)
+    """
+    label = "U2.5" if is_under else "O2.5"
     if not rows:
-        body = "Aucun match détecté."
-    else:
-        ordered = sorted(rows, key=lambda x: x[-1], reverse=True)
-        lines = [to_line(t) for t in ordered]
-        body = f"<pre><code>{esc(header)}\n{esc(sep)}\n" + "\n".join(lines) + "</code></pre>"
+        return f"<b>{esc(title_emoji)} {esc(title_text)}</b>\nAucun match détecté.\n"
 
-    return f"<b>{esc(title_emoji)} {esc(title_text)}</b>\n{body}\n"
+    # Tri par “confiance” (ton dernier champ)
+    ordered = sorted(rows, key=lambda x: x[-1], reverse=True)
+    blocks = [f"<b>{esc(title_emoji)} {esc(title_text)}</b>"]
+
+    for prob, name, pred, intervalle, conf, heur, *_ in ordered:
+        prob_pct  = int(round(float(prob) * 100))
+        score_pct = int(round(min(float(heur) / 1.5, 1.0) * 100))
+
+        card = (
+            f"<b>{esc(short_name(name))}</b>\n"
+            f"<pre><code>"
+            f"Prédiction buts : {pred:>4.2f}\n"
+            f"Intervalle      : {esc(intervalle)}\n"
+            f"{label} Probabilité: {prob_pct:>3d}%\n"
+            f"Score XGenius   : {score_pct:>3d}%"
+            f"</code></pre>\n"
+            f"{esc(conf)}"
+        )
+        blocks.append(card)
+
+    return "\n".join(blocks) + "\n"
 
 recap = f"<b>📅 Prévisions du {today}</b>\n" \
         f"<i>Over:</i> {len(matchs_over)}  •  <i>Under:</i> {len(matchs_under)}  •  <i>Opps:</i> {len(matchs_opps)}\n"
-sec_over = build_section("🔥", "TOP CONFIANCE OVER", matchs_over, is_under=False)
-sec_under = build_section("❄️", "TOP CONFIANCE UNDER", matchs_under, is_under=True)
-sec_opps = build_section("🎯", "OPPORTUNITÉS CACHÉES", matchs_opps)
-note = (
-    "🧠 <b>Notes</b>\n"
-    "• Sélection = ≥3 signaux alignés (régression ML, classif O/U 2.5, heuristique, intervalle).\n"
-    "• Intervalle = Conformal [p25–p75] ; confiance élevée si largeur &lt; 1.5.\n"
-    "• Score = potentiel offensif (0–100%).\n"
+sec_over  = build_section("🔥", "TOP CONFIANCE OVER",   matchs_over, is_under=False)
+sec_under = build_section("❄️", "TOP CONFIANCE UNDER",  matchs_under, is_under=True)
+sec_opps  = build_section("🎯", "OPPORTUNITÉS CACHÉES", matchs_opps)  # par défaut O2.5
+
+recap = (
+    f"<b>📅 Prévisions du {today}</b>\n"
+    f"<i>Over:</i> {len(matchs_over)}  •  <i>Under:</i> {len(matchs_under)}  •  <i>Opps:</i> {len(matchs_opps)}\n"
 )
 
-messages = [recap, sec_over, sec_under, sec_opps, note]
+messages = [recap, sec_over, sec_under, sec_opps, recap]
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
