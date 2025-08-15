@@ -52,6 +52,9 @@ def to_float(x):
     except:
         return np.nan
 
+def esc(x):
+    s = str(x) if x is not None else ""
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 def num(x, default=0.0):
     """Convertit Decimal/float/int/str en float, remplace None ou NaN par default."""
@@ -962,35 +965,43 @@ try:
 except Exception as e:
     print("❌ Erreur pendant la génération des prédictions :", e)
 
-# --- Après le remplissage de matchs_over / matchs_under / matchs_opps ---
 def build_section(title_emoji, title_text, rows, is_under=False):
-    header = "Match                          P    Intervalle   Proba  Score  Confiance"
-    sep    = "──────────────────────────────────────────────────────────────────────────"
+    col_label = "U2.5" if is_under else "O2.5"
+    header = f"Match                          P    Intervalle   {col_label}  Score  Confiance"
+    sep    = "────────────────────────────────────────────────────────────────────────"
+
     def to_line(tup):
         prob, name, pred, intervalle, conf, heur, _ = tup
-        proba_pct = int(round(prob * 100))
-        score_pct = int(round(min(heur/1.5, 1.0) * 100))
+        # prob = prob_over25 si over, prob_under25 si under
+        prob_pct = int(round(float(prob) * 100))
+        score_pct = int(round(min(float(heur)/1.5, 1.0) * 100))
         name_txt = (name[:28] + "…") if len(name) > 29 else name.ljust(29)
-        return f"{name_txt}  {pred:>4.2f}   {intervalle:^11}   {proba_pct:>3d}%   {score_pct:>3d}%   {conf}"
+        return (
+            f"{esc(name_txt)}  {pred:>4.2f}   {esc(intervalle):^11}   "
+            f"{prob_pct:>3d}%  {score_pct:>3d}%   {esc(conf)}"
+        )
+
     if not rows:
         body = "Aucun match détecté."
     else:
         ordered = sorted(rows, key=lambda x: x[-1], reverse=True)
         lines = [to_line(t) for t in ordered]
-        body = f"<pre>{header}\n{sep}\n" + "\n".join(lines) + "</pre>"
-    return f"<b>{title_emoji} {title_text}</b>\n{body}\n"
+        body = f"<pre><code>{esc(header)}\n{esc(sep)}\n" + "\n".join(lines) + "</code></pre>"
+
+    return f"<b>{esc(title_emoji)} {esc(title_text)}</b>\n{body}\n"
 
 recap = f"<b>📅 Prévisions du {today}</b>\n" \
         f"<i>Over:</i> {len(matchs_over)}  •  <i>Under:</i> {len(matchs_under)}  •  <i>Opps:</i> {len(matchs_opps)}\n"
-sec_over = build_section("🔥", "TOP CONFIANCE OVER",   matchs_over)
-sec_under= build_section("❄️", "TOP CONFIANCE UNDER",  matchs_under, is_under=True)
+sec_over = build_section("🔥", "TOP CONFIANCE OVER", matchs_over, is_under=False)
+sec_under = build_section("❄️", "TOP CONFIANCE UNDER", matchs_under, is_under=True)
 sec_opps = build_section("🎯", "OPPORTUNITÉS CACHÉES", matchs_opps)
 note = (
     "🧠 <b>Notes</b>\n"
     "• Sélection = ≥3 signaux alignés (régression ML, classif O/U 2.5, heuristique, intervalle).\n"
-    "• Intervalle = Conformal [p25–p75] ; confiance élevée si largeur < 1.5.\n"
+    "• Intervalle = Conformal [p25–p75] ; confiance élevée si largeur &lt; 1.5.\n"
     "• Score = potentiel offensif (0–100%).\n"
 )
+
 messages = [recap, sec_over, sec_under, sec_opps, note]
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -998,8 +1009,7 @@ CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 for chunk in messages:
     if len(chunk) > 3800:
         chunk = chunk[:3800] + "\n<i>(troncature…)</i>"
-    send_telegram_message(BOT_TOKEN, CHAT_ID, chunk)
-
+    send_telegram_message(BOT_TOKEN, CHAT_ID, chunk)  # parse_mode="HTML"
 
 # === Sauvegarde dans un unique fichier historique CSV ===
 import os
