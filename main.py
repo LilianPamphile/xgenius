@@ -80,7 +80,7 @@ def fmt_pct(x):
         return "  ?%"
 
 
-def short_name(name: str, n: int = 32) -> str:
+def short_name(name: str, n: int = 23) -> str:
     name = str(name).replace(" vs ", " – ")
     return (name[:n-1] + "…") if len(name) > n else name
 
@@ -1019,7 +1019,6 @@ def build_table(title_emoji: str, title_text: str, rows, is_under: bool = False)
 
     lines = []
     lines.append("```")
-    lines.append(f"{title_emoji} {title_text}")
     lines.append(
         f"{pad('Match', W_MATCH)} | "
         f"{pad('G', W_GEXP,'right')} | "
@@ -1062,8 +1061,7 @@ def build_table(title_emoji: str, title_text: str, rows, is_under: bool = False)
     lines.append("```")
     # Pas d’escape à l’intérieur d’un bloc ``` ; on escape seulement le titre
     title_md = f"*{mdv2_escape(title_emoji + ' ' + title_text)}*"
-    return "\n".join([title_md, "\n".join(lines[1:])]) + "\n"
-
+    return "\n".join([title_md, "\n".join(lines)]) + "\n"
 
 recap_md = (
     f"*{mdv2_escape('📅 Prévisions du ' + str(today))}*\n"
