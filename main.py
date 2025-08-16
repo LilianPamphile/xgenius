@@ -56,6 +56,30 @@ def esc(x: str) -> str:
     s = str(x) if x is not None else ""
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
+
+# === Helpers MarkdownV2 (monospace) ===
+MD_SPECIAL = r"_*[]()~`>#+-=|{}.!"
+
+def mdv2_escape(s: str) -> str:
+    s = str(s)
+    out = []
+    for ch in s:
+        out.append("\\" + ch if ch in MD_SPECIAL else ch)
+    return "".join(out)
+
+def pad(s, n, align="left"):
+    s = str(s)
+    if len(s) > n:
+        return s[:max(0, n-1)] + "…"
+    return s.ljust(n) if align == "left" else s.rjust(n)
+
+def fmt_pct(x):
+    try:
+        return f"{int(round(float(x)*100)):>3d}%"
+    except:
+        return "  ?%"
+
+
 def short_name(name: str, n: int = 32) -> str:
     name = str(name).replace(" vs ", " – ")
     return (name[:n-1] + "…") if len(name) > n else name
@@ -969,50 +993,99 @@ try:
 except Exception as e:
     print("❌ Erreur pendant la génération des prédictions :", e)
 
-def build_section(title_emoji: str, title_text: str, rows, is_under: bool = False) -> str:
+def build_table(title_emoji: str, title_text: str, rows, is_under: bool = False) -> str:
     """
-    rows = [(prob, name, pred, intervalle, commentaire, score_heur, ...), ...]
-    - Pour OVER: prob = prob_over25 (déjà le cas)
-    - Pour UNDER: prob = prob_under25 (déjà le cas)
+    rows = [(prob, name, pred, intervalle, commentaire, score_heur, _), ...]
+    - prob = O2.5 (OVER) OU U2.5 (UNDER) selon is_under
+    - intervalle = 'p25 – p75' (déjà au bon format dans ton code)
     """
-    label = "U2.5" if is_under else "O2.5"
+
     if not rows:
-        return f"<b>{esc(title_emoji)} {esc(title_text)}</b>\nAucun match détecté.\n"
+        header = f"{title_emoji} {title_text}"
+        return f"*{mdv2_escape(header)}*\n_Aucun match détecté._\n"
 
-    # Tri par “confiance” (ton dernier champ)
+    # Tri par confiance (tu stocks déjà confidence au dernier champ)
     ordered = sorted(rows, key=lambda x: x[-1], reverse=True)
-    blocks = [f"<b>{esc(title_emoji)} {esc(title_text)}</b>"]
 
-    for prob, name, pred, intervalle, conf, heur, *_ in ordered:
-        prob_pct  = int(round(float(prob) * 100))
-        score_pct = int(round(min(float(heur) / 1.5, 1.0) * 100))
+    # ---- En-tête monospace (colonnes courtes = mobile friendly) ----
+    # Largeurs calibrées pour tenir sur iPhone/Android
+    W_MATCH = 23
+    W_GEXP  = 5
+    W_CI    = 11
+    W_O25   = 4
+    W_U25   = 4
+    W_XGS   = 4
+    W_CONF  = 6
 
-        card = (
-            f"<b>{esc(short_name(name))}</b>\n"
-            f"Prédiction buts : {pred:>4.2f}\n"
-            f"Intervalle      : {esc(intervalle)}\n"
-            f"{label} Probabilité: {prob_pct:>3d}%\n"
-            f"Score XGenius   : {score_pct:>3d}%"
-            f"{esc(conf)}"
+    lines = []
+    lines.append("```")
+    lines.append(f"{title_emoji} {title_text}")
+    lines.append(
+        f"{pad('Match', W_MATCH)} | "
+        f"{pad('G', W_GEXP,'right')} | "
+        f"{pad('CI', W_CI)} | "
+        f"{pad('O2.5', W_O25,'right')} | "
+        f"{pad('U2.5', W_U25,'right')} | "
+        f"{pad('XGS', W_XGS,'right')} | "
+        f"{pad('Conf', W_CONF,'right')}"
+    )
+    lines.append("".ljust(W_MATCH, "─") + "─┼─" +
+                 "".rjust(W_GEXP, "─")    + "─┼─" +
+                 "".ljust(W_CI, "─")      + "─┼─" +
+                 "".rjust(W_O25, "─")     + "─┼─" +
+                 "".rjust(W_U25, "─")     + "─┼─" +
+                 "".rjust(W_XGS, "─")     + "─┼─" +
+                 "".rjust(W_CONF, "─"))
+
+    for prob, name, pred, intervalle, conf_txt, heur, *_ in ordered:
+        o25 = float(prob) if not is_under else (1.0 - float(prob))  # sécurité
+        u25 = 1.0 - o25
+        xgs = min(max(float(heur) / 1.5, 0.0), 1.0)
+
+        # Conf % lisible à la fin du texte 'confiance'
+        # (ton code pose déjà confidence_pct dans commentaire)
+        # On récupère le premier entier dans conf_txt si présent
+        import re
+        m = re.search(r"(\d+)%", conf_txt or "")
+        conf_pct = int(m.group(1)) if m else 0
+
+        lines.append(
+            f"{pad(short_name(name, W_MATCH), W_MATCH)} | "
+            f"{pad(f'{pred:.2f}', W_GEXP,'right')} | "
+            f"{pad(intervalle, W_CI)} | "
+            f"{pad(f'{int(round(o25*100)):>3d}%', W_O25,'right')} | "
+            f"{pad(f'{int(round(u25*100)):>3d}%', W_U25,'right')} | "
+            f"{pad(f'{int(round(xgs*100)):>3d}%', W_XGS,'right')} | "
+            f"{pad(f'{conf_pct:>3d}%', W_CONF,'right')}"
         )
-        blocks.append(card)
 
-    return "\n".join(blocks) + "\n"
+    lines.append("```")
+    # Pas d’escape à l’intérieur d’un bloc ``` ; on escape seulement le titre
+    title_md = f"*{mdv2_escape(title_emoji + ' ' + title_text)}*"
+    return "\n".join([title_md, "\n".join(lines[1:])]) + "\n"
 
-recap = f"<b>📅 Prévisions du {today}</b>\n" \
-        f"<i>Over:</i> {len(matchs_over)}  •  <i>Under:</i> {len(matchs_under)}  •  <i>Opps:</i> {len(matchs_opps)}\n"
-sec_over  = build_section("🔥", "TOP CONFIANCE OVER",   matchs_over, is_under=False)
-sec_under = build_section("❄️", "TOP CONFIANCE UNDER",  matchs_under, is_under=True)
-sec_opps  = build_section("🎯", "OPPORTUNITÉS CACHÉES", matchs_opps)  # par défaut O2.5
 
-messages = [recap, sec_over, sec_under, sec_opps]
+recap_md = (
+    f"*{mdv2_escape('📅 Prévisions du ' + str(today))}*\n"
+    f"{mdv2_escape('Over:')} *{len(matchs_over)}*  •  "
+    f"{mdv2_escape('Under:')} *{len(matchs_under)}*  •  "
+    f"{mdv2_escape('Opps:')} *{len(matchs_opps)}*\n"
+)
+
+sec_over  = build_table("🔥", "TOP CONFIANCE OVER",   matchs_over,  is_under=False)
+sec_under = build_table("❄️", "TOP CONFIANCE UNDER",  matchs_under, is_under=True)
+sec_opps  = build_table("🎯", "OPPORTUNITÉS CACHÉES", matchs_opps,  is_under=False)
+
+messages = [recap_md, sec_over, sec_under, sec_opps]
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
 for chunk in messages:
+    # Telegram MarkdownV2: 4096 chars max → on reste safe à ~3800
     if len(chunk) > 3800:
-        chunk = chunk[:3800] + "\n<i>(troncature…)</i>"
-    send_telegram_message(BOT_TOKEN, CHAT_ID, chunk)  # parse_mode="HTML"
+        chunk = chunk[:3800] + "\n_" + mdv2_escape("(troncature…)") + "_"
+    send_telegram_message(BOT_TOKEN, CHAT_ID, chunk, parse_mode="MarkdownV2")
 
 # === Sauvegarde dans un unique fichier historique CSV ===
 import os
