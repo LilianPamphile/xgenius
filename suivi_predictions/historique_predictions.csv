@@ -110,3 +110,19 @@ date,home,away,match,prediction_buts,p25,p75,incertitude,prob_over25,prob_under2
 2025-08-16,Mallorca,Barcelona,Mallorca vs Barcelona,2.53,0.89,4.23,3.34,0.5,0.5,⚠️ Confiance faible (9%),0.73,Fermé
 2025-08-16,Valencia,Real Sociedad,Valencia vs Real Sociedad,2.23,0.76,4.0,3.24,0.565,0.435,⚠️ Confiance faible (16%),0.28,Fermé
 2025-08-16,Alaves,Levante,Alaves vs Levante,1.97,0.32,3.96,3.64,0.417,0.583,⚠️ Confiance faible (38%),0.08,Fermé
+2025-08-17,Stade Brestois 29,Lille,Stade Brestois 29 vs Lille,2.48,0.75,4.4,3.65,0.567,0.433,⚠️ Confiance faible (13%),0.49,Fermé
+2025-08-17,Angers,Paris FC,Angers vs Paris FC,2.0,0.38,4.12,3.74,0.423,0.577,⚠️ Confiance faible (37%),0.31,Fermé
+2025-08-17,Auxerre,Lorient,Auxerre vs Lorient,2.19,0.44,4.47,4.03,0.445,0.555,⚠️ Confiance faible (33%),0.34,Fermé
+2025-08-17,Metz,Strasbourg,Metz vs Strasbourg,2.53,0.91,3.96,3.04,0.451,0.549,⚠️ Confiance faible (12%),0.21,Fermé
+2025-08-17,Nantes,Paris Saint Germain,Nantes vs Paris Saint Germain,2.78,1.14,4.78,3.64,0.685,0.315,⚠️ Confiance faible (24%),0.57,Fermé
+2025-08-17,Chelsea,Crystal Palace,Chelsea vs Crystal Palace,2.89,0.88,4.57,3.68,0.462,0.538,⚠️ Confiance faible (16%),0.42,Fermé
+2025-08-17,Nottingham Forest,Brentford,Nottingham Forest vs Brentford,2.48,0.73,4.24,3.51,0.369,0.631,⚠️ Confiance faible (33%),0.37,Fermé
+2025-08-17,Manchester United,Arsenal,Manchester United vs Arsenal,3.28,1.35,4.89,3.54,0.518,0.482,⚠️ Confiance faible (38%),0.87,Ouvert
+2025-08-17,GO Ahead Eagles,Ajax,GO Ahead Eagles vs Ajax,1.81,0.42,3.41,2.99,0.303,0.697,⚠️ Confiance faible (47%),0.58,Fermé
+2025-08-17,Twente,PSV Eindhoven,Twente vs PSV Eindhoven,3.4,1.4,5.14,3.74,0.785,0.215,ℹ️ Confiance modérée (56%),0.84,Ouvert
+2025-08-17,Sparta Rotterdam,Utrecht,Sparta Rotterdam vs Utrecht,2.37,0.21,4.21,3.99,0.584,0.416,⚠️ Confiance faible (15%),0.9,Neutre
+2025-08-17,FC Volendam,AZ Alkmaar,FC Volendam vs AZ Alkmaar,1.26,-0.19,2.95,3.15,0.452,0.548,⚠️ Confiance faible (46%),0.08,Fermé
+2025-08-17,NAC Breda,Fortuna Sittard,NAC Breda vs Fortuna Sittard,3.02,0.75,4.57,3.82,0.492,0.508,⚠️ Confiance faible (17%),0.27,Ouvert
+2025-08-17,Celta Vigo,Getafe,Celta Vigo vs Getafe,1.81,-0.17,3.47,3.65,0.287,0.713,⚠️ Confiance faible (48%),0.55,Fermé
+2025-08-17,Athletic Club,Sevilla,Athletic Club vs Sevilla,2.44,0.67,4.15,3.47,0.415,0.585,⚠️ Confiance faible (31%),0.17,Fermé
+2025-08-17,Espanyol,Atletico Madrid,Espanyol vs Atletico Madrid,1.72,0.3,3.47,3.17,0.234,0.766,ℹ️ Confiance modérée (53%),0.33,Fermé
