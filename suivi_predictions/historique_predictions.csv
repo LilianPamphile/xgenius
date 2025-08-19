@@ -126,3 +126,7 @@ date,home,away,match,prediction_buts,p25,p75,incertitude,prob_over25,prob_under2
 2025-08-17,Celta Vigo,Getafe,Celta Vigo vs Getafe,1.81,-0.17,3.47,3.65,0.287,0.713,⚠️ Confiance faible (48%),0.55,Fermé
 2025-08-17,Athletic Club,Sevilla,Athletic Club vs Sevilla,2.44,0.67,4.15,3.47,0.415,0.585,⚠️ Confiance faible (31%),0.17,Fermé
 2025-08-17,Espanyol,Atletico Madrid,Espanyol vs Atletico Madrid,1.72,0.3,3.47,3.17,0.234,0.766,ℹ️ Confiance modérée (53%),0.33,Fermé
+2025-08-19,Real Madrid,Osasuna,Real Madrid vs Osasuna,2.82,1.06,5.2,4.13,0.512,0.488,⚠️ Confiance faible (14%),0.63,Fermé
+2025-08-19,Rangers,Club Brugge KV,Rangers vs Club Brugge KV,2.07,0.5,3.79,3.28,0.375,0.625,⚠️ Confiance faible (39%),0.28,Fermé
+2025-08-19,FK Crvena Zvezda,Pafos,FK Crvena Zvezda vs Pafos,3.2,1.46,4.94,3.48,0.751,0.249,ℹ️ Confiance modérée (51%),1.11,Ouvert
+2025-08-19,Ferencvarosi TC,Qarabag,Ferencvarosi TC vs Qarabag,3.95,2.36,5.32,2.96,0.827,0.173,ℹ️ Confiance modérée (67%),1.03,Ouvert
