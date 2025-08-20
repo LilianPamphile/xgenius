@@ -130,3 +130,7 @@ date,home,away,match,prediction_buts,p25,p75,incertitude,prob_over25,prob_under2
 2025-08-19,Rangers,Club Brugge KV,Rangers vs Club Brugge KV,2.07,0.5,3.79,3.28,0.375,0.625,⚠️ Confiance faible (39%),0.28,Fermé
 2025-08-19,FK Crvena Zvezda,Pafos,FK Crvena Zvezda vs Pafos,3.2,1.46,4.94,3.48,0.751,0.249,ℹ️ Confiance modérée (51%),1.11,Ouvert
 2025-08-19,Ferencvarosi TC,Qarabag,Ferencvarosi TC vs Qarabag,3.95,2.36,5.32,2.96,0.827,0.173,ℹ️ Confiance modérée (67%),1.03,Ouvert
+2025-08-20,Celtic,Kairat Almaty,Celtic vs Kairat Almaty,3.09,1.16,4.44,3.28,0.595,0.405,⚠️ Confiance faible (23%),0.72,Ouvert
+2025-08-20,Bodo/Glimt,Sturm Graz,Bodo/Glimt vs Sturm Graz,2.4,0.66,4.07,3.41,0.64,0.36,⚠️ Confiance faible (18%),0.91,Neutre
+2025-08-20,FC Basel 1893,FC Copenhagen,FC Basel 1893 vs FC Copenhagen,1.96,0.2,3.65,3.45,0.474,0.526,⚠️ Confiance faible (35%),0.09,Fermé
+2025-08-20,Fenerbahce,Benfica,Fenerbahce vs Benfica,2.43,1.06,3.66,2.6,0.433,0.567,⚠️ Confiance faible (15%),0.89,Fermé
