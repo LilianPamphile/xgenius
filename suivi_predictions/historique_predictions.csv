@@ -134,3 +134,39 @@ date,home,away,match,prediction_buts,p25,p75,incertitude,prob_over25,prob_under2
 2025-08-20,Bodo/Glimt,Sturm Graz,Bodo/Glimt vs Sturm Graz,2.4,0.66,4.07,3.41,0.64,0.36,⚠️ Confiance faible (18%),0.91,Neutre
 2025-08-20,FC Basel 1893,FC Copenhagen,FC Basel 1893 vs FC Copenhagen,1.96,0.2,3.65,3.45,0.474,0.526,⚠️ Confiance faible (35%),0.09,Fermé
 2025-08-20,Fenerbahce,Benfica,Fenerbahce vs Benfica,2.43,1.06,3.66,2.6,0.433,0.567,⚠️ Confiance faible (15%),0.89,Fermé
+2025-08-21,FC Midtjylland,KuPS,FC Midtjylland vs KuPS,1.51,-0.28,2.71,3.0,0.087,0.913,⚠️ Confiance faible (48%),0.77,Fermé
+2025-08-21,Brann,AEK Larnaca,Brann vs AEK Larnaca,1.71,0.36,3.07,2.71,0.366,0.634,⚠️ Confiance faible (46%),0.45,Fermé
+2025-08-21,Malmo FF,Sigma Olomouc,Malmo FF vs Sigma Olomouc,3.21,1.22,5.3,4.08,0.658,0.342,⚠️ Confiance faible (28%),0.25,Ouvert
+2025-08-21,Zrinjski,Utrecht,Zrinjski vs Utrecht,2.15,0.55,4.02,3.48,0.417,0.583,⚠️ Confiance faible (35%),0.29,Fermé
+2025-08-21,Maccabi Tel Aviv,Dynamo Kyiv,Maccabi Tel Aviv vs Dynamo Kyiv,2.66,0.91,4.5,3.59,0.635,0.365,⚠️ Confiance faible (19%),0.5,Fermé
+2025-08-21,Shkendija,Ludogorets,Shkendija vs Ludogorets,1.59,0.05,3.38,3.33,0.309,0.691,ℹ️ Confiance modérée (50%),0.0,Fermé
+2025-08-21,Panathinaikos,Samsunspor,Panathinaikos vs Samsunspor,1.49,0.35,3.33,2.98,0.363,0.637,⚠️ Confiance faible (48%),0.72,Fermé
+2025-08-21,Slovan Bratislava,BSC Young Boys,Slovan Bratislava vs BSC Young Boys,2.98,1.43,5.77,4.34,0.887,0.113,⚠️ Confiance faible (39%),0.5,Ouvert
+2025-08-21,Lech Poznan,Genk,Lech Poznan vs Genk,3.52,1.99,5.73,3.74,0.809,0.191,⚠️ Confiance faible (42%),0.25,Ouvert
+2025-08-21,Aberdeen,FCSB,Aberdeen vs FCSB,2.1,0.09,3.73,3.65,0.346,0.654,⚠️ Confiance faible (40%),0.09,Fermé
+2025-08-21,HNK Rijeka,PAOK,HNK Rijeka vs PAOK,1.22,0.17,2.52,2.35,0.236,0.764,ℹ️ Confiance modérée (63%),0.41,Fermé
+2025-08-21,Lincoln Red Imps FC,SC Braga,Lincoln Red Imps FC vs SC Braga,1.74,0.02,3.34,3.32,0.576,0.424,⚠️ Confiance faible (24%),0.6,Fermé
+2025-08-21,Rosenborg,FSV Mainz 05,Rosenborg vs FSV Mainz 05,2.71,0.64,4.2,3.56,0.479,0.521,⚠️ Confiance faible (13%),0.19,Fermé
+2025-08-21,BK Hacken,CFR 1907 Cluj,BK Hacken vs CFR 1907 Cluj,1.98,0.57,3.52,2.96,0.374,0.626,⚠️ Confiance faible (41%),0.23,Fermé
+2025-08-21,Wolfsberger AC,Omonia Nicosia,Wolfsberger AC vs Omonia Nicosia,1.32,0.25,2.84,2.59,0.26,0.74,ℹ️ Confiance modérée (59%),0.03,Fermé
+2025-08-21,Hamrun Spartans,Rīgas FS,Hamrun Spartans vs Rīgas FS,2.69,1.64,4.3,2.66,0.755,0.245,⚠️ Confiance faible (28%),0.35,Ouvert
+2025-08-21,Gyori ETO FC,Rapid Vienna,Gyori ETO FC vs Rapid Vienna,1.53,-0.32,3.41,3.72,0.164,0.836,ℹ️ Confiance modérée (60%),0.1,Fermé
+2025-08-21,Istanbul Basaksehir,Universitatea Craiova,Istanbul Basaksehir vs Universitatea Craiova,1.99,0.55,3.19,2.64,0.356,0.644,⚠️ Confiance faible (43%),0.56,Fermé
+2025-08-21,Polessya,Fiorentina,Polessya vs Fiorentina,2.28,0.15,4.15,4.0,0.414,0.586,⚠️ Confiance faible (34%),0.09,Fermé
+2025-08-21,Anderlecht,AEK Athens FC,Anderlecht vs AEK Athens FC,2.28,0.58,3.88,3.31,0.396,0.604,⚠️ Confiance faible (35%),0.73,Fermé
+2025-08-21,Levski Sofia,AZ Alkmaar,Levski Sofia vs AZ Alkmaar,1.9,0.18,3.45,3.27,0.379,0.621,⚠️ Confiance faible (41%),0.19,Fermé
+2025-08-21,Shakhtar Donetsk,Servette FC,Shakhtar Donetsk vs Servette FC,2.64,0.98,3.84,2.86,0.412,0.588,⚠️ Confiance faible (16%),0.41,Fermé
+2025-08-21,Neman,Rayo Vallecano,Neman vs Rayo Vallecano,2.02,0.41,3.81,3.4,0.447,0.553,⚠️ Confiance faible (35%),0.1,Fermé
+2025-08-21,Sparta Praha,Riga,Sparta Praha vs Riga,2.32,0.45,3.36,2.91,0.384,0.616,⚠️ Confiance faible (35%),0.37,Fermé
+2025-08-21,Strasbourg,Brondby,Strasbourg vs Brondby,3.69,2.19,5.51,3.32,0.871,0.129,ℹ️ Confiance modérée (65%),0.96,Ouvert
+2025-08-21,Olimpija Ljubljana,FC Noah,Olimpija Ljubljana vs FC Noah,2.19,0.56,4.14,3.57,0.243,0.757,⚠️ Confiance faible (45%),0.42,Fermé
+2025-08-21,Celje,Baník Ostrava,Celje vs Baník Ostrava,1.91,-0.02,3.03,3.05,0.124,0.876,ℹ️ Confiance modérée (56%),0.66,Fermé
+2025-08-21,Breidablik,Virtus,Breidablik vs Virtus,1.61,0.1,3.18,3.08,0.335,0.665,⚠️ Confiance faible (48%),0.0,Fermé
+2025-08-21,Drita,FC Differdange 03,Drita vs FC Differdange 03,1.61,0.1,3.18,3.08,0.335,0.665,⚠️ Confiance faible (48%),0.0,Fermé
+2025-08-21,Lausanne,Besiktas,Lausanne vs Besiktas,2.52,0.99,4.47,3.48,0.454,0.546,⚠️ Confiance faible (11%),0.01,Fermé
+2025-08-21,Jagiellonia,Dinamo Tirana,Jagiellonia vs Dinamo Tirana,2.13,0.33,3.47,3.14,0.321,0.679,⚠️ Confiance faible (41%),0.49,Fermé
+2025-08-21,Shelbourne,Linfield,Shelbourne vs Linfield,0.84,-0.3,2.09,2.4,0.111,0.889,✅ Confiance élevée (76%),0.0,Fermé
+2025-08-21,Crystal Palace,Fredrikstad,Crystal Palace vs Fredrikstad,3.62,1.91,4.57,2.66,0.875,0.125,⚠️ Confiance faible (49%),0.6,Ouvert
+2025-08-21,Hibernian,Legia Warszawa,Hibernian vs Legia Warszawa,1.93,-0.12,3.87,3.99,0.282,0.718,⚠️ Confiance faible (47%),0.17,Fermé
+2025-08-21,Santa Clara,Shamrock Rovers,Santa Clara vs Shamrock Rovers,1.95,-0.09,3.62,3.71,0.388,0.612,⚠️ Confiance faible (40%),0.02,Fermé
+2025-08-21,Raków Częstochowa,Arda Kardzhali,Raków Częstochowa vs Arda Kardzhali,1.61,0.1,3.18,3.08,0.335,0.665,⚠️ Confiance faible (48%),0.0,Fermé
