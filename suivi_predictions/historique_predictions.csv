@@ -170,3 +170,9 @@ date,home,away,match,prediction_buts,p25,p75,incertitude,prob_over25,prob_under2
 2025-08-21,Hibernian,Legia Warszawa,Hibernian vs Legia Warszawa,1.93,-0.12,3.87,3.99,0.282,0.718,⚠️ Confiance faible (47%),0.17,Fermé
 2025-08-21,Santa Clara,Shamrock Rovers,Santa Clara vs Shamrock Rovers,1.95,-0.09,3.62,3.71,0.388,0.612,⚠️ Confiance faible (40%),0.02,Fermé
 2025-08-21,Raków Częstochowa,Arda Kardzhali,Raków Częstochowa vs Arda Kardzhali,1.61,0.1,3.18,3.08,0.335,0.665,⚠️ Confiance faible (48%),0.0,Fermé
+2025-08-22,Paris Saint Germain,Angers,Paris Saint Germain vs Angers,2.15,0.95,4.06,3.1,0.376,0.624,⚠️ Confiance faible (21%),1.08,Fermé
+2025-08-22,West Ham,Chelsea,West Ham vs Chelsea,3.45,1.14,4.84,3.7,0.666,0.334,⚠️ Confiance faible (33%),0.62,Ouvert
+2025-08-22,Bayern München,RB Leipzig,Bayern München vs RB Leipzig,3.72,2.11,5.55,3.45,0.748,0.252,ℹ️ Confiance modérée (58%),1.16,Ouvert
+2025-08-22,Real Betis,Alaves,Real Betis vs Alaves,2.35,0.7,4.51,3.81,0.341,0.659,⚠️ Confiance faible (37%),0.67,Fermé
+2025-08-22,Preußen Münster,1. FC Nürnberg,Preußen Münster vs 1. FC Nürnberg,2.96,0.96,5.01,4.04,0.573,0.427,⚠️ Confiance faible (20%),0.23,Fermé
+2025-08-22,SV Elversberg,1. FC Kaiserslautern,SV Elversberg vs 1. FC Kaiserslautern,2.06,1.02,3.9,2.88,0.516,0.484,⚠️ Confiance faible (16%),0.75,Neutre
