@@ -176,3 +176,31 @@ date,home,away,match,prediction_buts,p25,p75,incertitude,prob_over25,prob_under2
 2025-08-22,Real Betis,Alaves,Real Betis vs Alaves,2.35,0.7,4.51,3.81,0.341,0.659,⚠️ Confiance faible (37%),0.67,Fermé
 2025-08-22,Preußen Münster,1. FC Nürnberg,Preußen Münster vs 1. FC Nürnberg,2.96,0.96,5.01,4.04,0.573,0.427,⚠️ Confiance faible (20%),0.23,Fermé
 2025-08-22,SV Elversberg,1. FC Kaiserslautern,SV Elversberg vs 1. FC Kaiserslautern,2.06,1.02,3.9,2.88,0.516,0.484,⚠️ Confiance faible (16%),0.75,Neutre
+2025-08-23,Marseille,Paris FC,Marseille vs Paris FC,2.92,1.42,3.94,2.52,0.212,0.788,⚠️ Confiance faible (34%),1.2,Fermé
+2025-08-23,Nice,Auxerre,Nice vs Auxerre,2.75,1.21,4.35,3.14,0.465,0.535,⚠️ Confiance faible (14%),0.72,Fermé
+2025-08-23,Lyon,Metz,Lyon vs Metz,2.12,0.71,3.75,3.04,0.403,0.597,⚠️ Confiance faible (20%),1.11,Fermé
+2025-08-23,Manchester City,Tottenham,Manchester City vs Tottenham,2.84,1.25,4.32,3.07,0.695,0.305,⚠️ Confiance faible (42%),0.98,Neutre
+2025-08-23,Bournemouth,Wolves,Bournemouth vs Wolves,3.27,1.35,4.94,3.59,0.498,0.502,⚠️ Confiance faible (20%),0.57,Ouvert
+2025-08-23,Burnley,Sunderland,Burnley vs Sunderland,3.18,1.48,5.07,3.59,0.681,0.319,⚠️ Confiance faible (29%),0.17,Ouvert
+2025-08-23,Brentford,Aston Villa,Brentford vs Aston Villa,2.21,0.69,4.32,3.63,0.343,0.657,⚠️ Confiance faible (22%),0.94,Fermé
+2025-08-23,Arsenal,Leeds,Arsenal vs Leeds,0.78,-0.61,2.25,2.86,0.121,0.879,✅ Confiance élevée (74%),0.51,Fermé
+2025-08-23,SC Freiburg,FC Augsburg,SC Freiburg vs FC Augsburg,2.33,0.44,4.15,3.71,0.39,0.61,⚠️ Confiance faible (34%),0.62,Fermé
+2025-08-23,Bayer Leverkusen,1899 Hoffenheim,Bayer Leverkusen vs 1899 Hoffenheim,4.37,1.47,6.3,4.84,0.783,0.217,ℹ️ Confiance modérée (53%),0.74,Ouvert
+2025-08-23,Eintracht Frankfurt,Werder Bremen,Eintracht Frankfurt vs Werder Bremen,3.96,1.13,5.2,4.07,0.731,0.269,ℹ️ Confiance modérée (61%),0.79,Ouvert
+2025-08-23,1. FC Heidenheim,VfL Wolfsburg,1. FC Heidenheim vs VfL Wolfsburg,2.62,0.59,4.57,3.98,0.502,0.498,⚠️ Confiance faible (10%),0.5,Fermé
+2025-08-23,Union Berlin,VfB Stuttgart,Union Berlin vs VfB Stuttgart,3.24,1.19,4.72,3.52,0.664,0.336,⚠️ Confiance faible (29%),0.44,Ouvert
+2025-08-23,FC St. Pauli,Borussia Dortmund,FC St. Pauli vs Borussia Dortmund,2.67,0.84,4.78,3.94,0.67,0.33,⚠️ Confiance faible (21%),0.44,Fermé
+2025-08-23,Sassuolo,Napoli,Sassuolo vs Napoli,2.33,0.11,3.86,3.75,0.376,0.624,⚠️ Confiance faible (35%),0.19,Fermé
+2025-08-23,Genoa,Lecce,Genoa vs Lecce,2.33,0.35,4.26,3.91,0.418,0.582,⚠️ Confiance faible (32%),0.34,Fermé
+2025-08-23,AC Milan,Cremonese,AC Milan vs Cremonese,2.9,1.41,4.88,3.47,0.391,0.609,⚠️ Confiance faible (21%),0.86,Fermé
+2025-08-23,AS Roma,Bologna,AS Roma vs Bologna,2.82,0.75,4.28,3.52,0.461,0.539,⚠️ Confiance faible (15%),0.5,Fermé
+2025-08-23,GO Ahead Eagles,Sparta Rotterdam,GO Ahead Eagles vs Sparta Rotterdam,1.93,0.49,3.93,3.44,0.413,0.587,⚠️ Confiance faible (39%),0.68,Fermé
+2025-08-23,PSV Eindhoven,Groningen,PSV Eindhoven vs Groningen,3.64,1.9,5.43,3.54,0.587,0.413,⚠️ Confiance faible (47%),1.25,Ouvert
+2025-08-23,Telstar,FC Volendam,Telstar vs FC Volendam,1.96,0.43,3.43,2.99,0.292,0.708,⚠️ Confiance faible (46%),0.52,Fermé
+2025-08-23,Mallorca,Celta Vigo,Mallorca vs Celta Vigo,2.64,0.65,4.58,3.93,0.537,0.463,⚠️ Confiance faible (13%),0.7,Neutre
+2025-08-23,Atletico Madrid,Elche,Atletico Madrid vs Elche,2.71,1.16,3.95,2.79,0.414,0.586,⚠️ Confiance faible (18%),0.88,Fermé
+2025-08-23,Levante,Barcelona,Levante vs Barcelona,2.42,0.93,3.74,2.81,0.618,0.382,⚠️ Confiance faible (18%),0.43,Fermé
+2025-08-23,Hannover 96,1. FC Magdeburg,Hannover 96 vs 1. FC Magdeburg,2.36,0.66,4.36,3.7,0.505,0.495,⚠️ Confiance faible (11%),0.18,Fermé
+2025-08-23,SC Paderborn 07,Fortuna Düsseldorf,SC Paderborn 07 vs Fortuna Düsseldorf,3.16,1.2,4.52,3.32,0.596,0.404,⚠️ Confiance faible (41%),0.84,Ouvert
+2025-08-23,Karlsruher SC,Eintracht Braunschweig,Karlsruher SC vs Eintracht Braunschweig,2.6,0.58,4.82,4.24,0.557,0.443,⚠️ Confiance faible (13%),0.55,Fermé
+2025-08-23,FC Schalke 04,VfL Bochum,FC Schalke 04 vs VfL Bochum,3.18,1.22,4.7,3.49,0.667,0.333,⚠️ Confiance faible (29%),0.42,Ouvert
