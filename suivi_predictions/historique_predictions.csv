@@ -229,3 +229,8 @@ date,home,away,match,prediction_buts,p25,p75,incertitude,prob_over25,prob_under2
 2025-08-24,SpVgg Greuther Fürth,Holstein Kiel,SpVgg Greuther Fürth vs Holstein Kiel,3.9,2.65,5.41,2.76,0.489,0.511,⚠️ Confiance faible (31%),0.7,Ouvert
 2025-08-24,SV Darmstadt 98,Hertha BSC,SV Darmstadt 98 vs Hertha BSC,3.01,1.05,5.15,4.1,0.683,0.317,⚠️ Confiance faible (44%),0.81,Ouvert
 2025-08-24,Arminia Bielefeld,Dynamo Dresden,Arminia Bielefeld vs Dynamo Dresden,2.77,1.2,4.64,3.44,0.522,0.478,⚠️ Confiance faible (30%),1.5,Ouvert
+2025-08-25,Newcastle,Liverpool,Newcastle vs Liverpool,2.67,1.26,4.17,2.91,0.688,0.312,⚠️ Confiance faible (39%),1.0,Neutre
+2025-08-25,Udinese,Verona,Udinese vs Verona,2.5,0.33,4.3,3.98,0.501,0.499,⚠️ Confiance faible (8%),0.17,Fermé
+2025-08-25,Inter,Torino,Inter vs Torino,2.21,0.62,3.93,3.31,0.431,0.569,⚠️ Confiance faible (17%),1.22,Fermé
+2025-08-25,Athletic Club,Rayo Vallecano,Athletic Club vs Rayo Vallecano,2.5,0.95,4.41,3.46,0.486,0.514,⚠️ Confiance faible (9%),0.45,Fermé
+2025-08-25,Sevilla,Getafe,Sevilla vs Getafe,1.33,-0.08,3.01,3.09,0.092,0.908,ℹ️ Confiance modérée (67%),0.31,Fermé
