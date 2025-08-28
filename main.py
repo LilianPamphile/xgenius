@@ -1051,7 +1051,6 @@ def build_table(title_emoji: str, title_text: str, rows, is_under: bool = False)
         lines.append(
             f"{pad(short_name(name, W_MATCH), W_MATCH)} | "
             f"{pad(f'{pred:.2f}', W_GEXP,'right')} | "
-            f"{pad(intervalle, W_CI)} | "
             f"{pad(f'{int(round(o25*100)):>3d}%', W_O25,'right')} | "
             f"{pad(f'{int(round(u25*100)):>3d}%', W_U25,'right')} | "
             f"{pad(f'{int(round(xgs*100)):>3d}%', W_XGS,'right')} | "
