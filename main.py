@@ -1011,7 +1011,6 @@ def build_table(title_emoji: str, title_text: str, rows, is_under: bool = False)
     # Largeurs calibrées pour tenir sur iPhone/Android
     W_MATCH = 23
     W_GEXP  = 5
-    W_CI    = 11
     W_O25   = 4
     W_U25   = 4
     W_XGS   = 4
@@ -1022,7 +1021,6 @@ def build_table(title_emoji: str, title_text: str, rows, is_under: bool = False)
     lines.append(
         f"{pad('Match', W_MATCH)} | "
         f"{pad('G', W_GEXP,'right')} | "
-        f"{pad('CI', W_CI)} | "
         f"{pad('O2.5', W_O25,'right')} | "
         f"{pad('U2.5', W_U25,'right')} | "
         f"{pad('XGS', W_XGS,'right')} | "
@@ -1030,7 +1028,6 @@ def build_table(title_emoji: str, title_text: str, rows, is_under: bool = False)
     )
     lines.append("".ljust(W_MATCH, "─") + "─┼─" +
                  "".rjust(W_GEXP, "─")    + "─┼─" +
-                 "".ljust(W_CI, "─")      + "─┼─" +
                  "".rjust(W_O25, "─")     + "─┼─" +
                  "".rjust(W_U25, "─")     + "─┼─" +
                  "".rjust(W_XGS, "─")     + "─┼─" +
