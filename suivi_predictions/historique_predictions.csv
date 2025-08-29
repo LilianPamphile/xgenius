@@ -281,3 +281,15 @@ date,home,away,match,prediction_buts,p25,p75,incertitude,prob_over25,prob_under2
 2025-08-28,Damac,Al-Hazm,Damac vs Al-Hazm,2.69,0.94,3.96,3.03,0.547,0.453,⚠️ Confiance faible (14%),0.34,Fermé
 2025-08-28,Al-Ahli Jeddah,NEOM,Al-Ahli Jeddah vs NEOM,2.53,1.03,4.4,3.36,0.543,0.457,⚠️ Confiance faible (28%),1.08,Neutre
 2025-08-28,Al-Ettifaq,Al Kholood,Al-Ettifaq vs Al Kholood,2.94,0.8,4.88,4.08,0.73,0.27,⚠️ Confiance faible (29%),0.39,Ouvert
+2025-08-29,Lens,Stade Brestois 29,Lens vs Stade Brestois 29,3.42,1.52,5.39,3.87,0.504,0.496,⚠️ Confiance faible (22%),0.52,Ouvert
+2025-08-29,Hamburger SV,FC St. Pauli,Hamburger SV vs FC St. Pauli,2.54,0.99,4.48,3.48,0.466,0.534,⚠️ Confiance faible (11%),0.64,Fermé
+2025-08-29,Cremonese,Sassuolo,Cremonese vs Sassuolo,1.81,-0.02,3.82,3.83,0.272,0.728,⚠️ Confiance faible (49%),0.1,Fermé
+2025-08-29,Lecce,AC Milan,Lecce vs AC Milan,2.76,0.82,4.54,3.72,0.625,0.375,⚠️ Confiance faible (20%),0.41,Fermé
+2025-08-29,Groningen,Heracles,Groningen vs Heracles,2.89,1.08,4.42,3.33,0.57,0.43,⚠️ Confiance faible (35%),0.81,Neutre
+2025-08-29,Elche,Levante,Elche vs Levante,1.5,0.17,3.5,3.33,0.2,0.8,ℹ️ Confiance modérée (58%),0.4,Fermé
+2025-08-29,Valencia,Getafe,Valencia vs Getafe,1.9,0.58,3.21,2.63,0.455,0.545,⚠️ Confiance faible (39%),0.45,Fermé
+2025-08-29,Hertha BSC,SV Elversberg,Hertha BSC vs SV Elversberg,2.77,0.75,4.21,3.46,0.587,0.413,⚠️ Confiance faible (18%),0.31,Fermé
+2025-08-29,1. FC Nürnberg,SC Paderborn 07,1. FC Nürnberg vs SC Paderborn 07,2.19,0.65,4.01,3.36,0.482,0.518,⚠️ Confiance faible (31%),0.31,Fermé
+2025-08-29,Al-Hilal Saudi FC,Al Riyadh,Al-Hilal Saudi FC vs Al Riyadh,3.47,1.57,5.39,3.82,0.748,0.252,ℹ️ Confiance modérée (54%),0.81,Ouvert
+2025-08-29,Al Taawon,Al-Nassr,Al Taawon vs Al-Nassr,2.87,1.1,4.44,3.35,0.547,0.453,⚠️ Confiance faible (17%),0.6,Fermé
+2025-08-29,Al Shabab,Al Khaleej Saihat,Al Shabab vs Al Khaleej Saihat,3.64,1.33,5.62,4.29,0.787,0.213,ℹ️ Confiance modérée (59%),1.37,Ouvert
