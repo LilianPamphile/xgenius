@@ -326,3 +326,30 @@ date,home,away,match,prediction_buts,p25,p75,incertitude,prob_over25,prob_under2
 2025-08-30,Al-Fateh,Al-Fayha,Al-Fateh vs Al-Fayha,3.32,1.2,5.01,3.81,0.773,0.227,ℹ️ Confiance modérée (54%),0.8,Ouvert
 2025-08-30,Al-Qadisiyah FC,Al Najma,Al-Qadisiyah FC vs Al Najma,2.14,0.15,4.09,3.94,0.302,0.698,⚠️ Confiance faible (42%),0.61,Fermé
 2025-08-30,Al Akhdoud,Al-Ittihad FC,Al Akhdoud vs Al-Ittihad FC,2.77,0.96,4.31,3.35,0.665,0.335,⚠️ Confiance faible (22%),0.44,Fermé
+2025-08-31,Angers,Rennes,Angers vs Rennes,1.85,0.06,3.22,3.17,0.465,0.535,⚠️ Confiance faible (20%),1.46,Ouvert
+2025-08-31,Monaco,Strasbourg,Monaco vs Strasbourg,2.71,0.84,4.4,3.56,0.556,0.444,⚠️ Confiance faible (32%),1.3,Ouvert
+2025-08-31,Le Havre,Nice,Le Havre vs Nice,3.38,1.31,5.29,3.98,0.707,0.293,ℹ️ Confiance modérée (51%),1.5,Ouvert
+2025-08-31,Paris FC,Metz,Paris FC vs Metz,2.99,1.35,5.06,3.71,0.544,0.456,⚠️ Confiance faible (35%),1.5,Ouvert
+2025-08-31,Lyon,Marseille,Lyon vs Marseille,2.79,1.5,4.9,3.4,0.694,0.306,⚠️ Confiance faible (41%),1.5,Ouvert
+2025-08-31,Brighton,Manchester City,Brighton vs Manchester City,3.09,0.65,5.11,4.46,0.559,0.441,⚠️ Confiance faible (37%),1.5,Ouvert
+2025-08-31,Nottingham Forest,West Ham,Nottingham Forest vs West Ham,2.45,0.66,3.93,3.27,0.45,0.55,⚠️ Confiance faible (12%),1.5,Ouvert
+2025-08-31,Liverpool,Arsenal,Liverpool vs Arsenal,2.47,0.58,4.25,3.67,0.483,0.517,⚠️ Confiance faible (10%),1.33,Ouvert
+2025-08-31,Aston Villa,Crystal Palace,Aston Villa vs Crystal Palace,1.94,0.32,4.0,3.68,0.441,0.559,⚠️ Confiance faible (20%),1.24,Fermé
+2025-08-31,VfL Wolfsburg,FSV Mainz 05,VfL Wolfsburg vs FSV Mainz 05,3.47,1.33,5.12,3.78,0.627,0.373,⚠️ Confiance faible (47%),1.5,Ouvert
+2025-08-31,Borussia Dortmund,Union Berlin,Borussia Dortmund vs Union Berlin,3.07,0.59,4.63,4.04,0.563,0.437,⚠️ Confiance faible (37%),1.5,Ouvert
+2025-08-31,1.FC Köln,SC Freiburg,1.FC Köln vs SC Freiburg,3.17,0.81,4.65,3.84,0.519,0.481,⚠️ Confiance faible (36%),1.5,Ouvert
+2025-08-31,Genoa,Juventus,Genoa vs Juventus,2.08,0.5,3.83,3.33,0.492,0.508,⚠️ Confiance faible (15%),1.34,Ouvert
+2025-08-31,Torino,Fiorentina,Torino vs Fiorentina,1.81,0.33,3.99,3.66,0.468,0.532,⚠️ Confiance faible (21%),1.36,Ouvert
+2025-08-31,Lazio,Verona,Lazio vs Verona,2.75,0.8,4.8,4.0,0.521,0.479,⚠️ Confiance faible (30%),1.5,Ouvert
+2025-08-31,Inter,Udinese,Inter vs Udinese,3.14,1.03,4.55,3.52,0.458,0.542,⚠️ Confiance faible (21%),1.5,Ouvert
+2025-08-31,Fortuna Sittard,NEC Nijmegen,Fortuna Sittard vs NEC Nijmegen,2.88,1.38,4.76,3.38,0.611,0.389,⚠️ Confiance faible (37%),1.5,Ouvert
+2025-08-31,PEC Zwolle,Utrecht,PEC Zwolle vs Utrecht,2.08,0.74,3.63,2.89,0.497,0.503,⚠️ Confiance faible (15%),1.44,Ouvert
+2025-08-31,Sparta Rotterdam,Feyenoord,Sparta Rotterdam vs Feyenoord,2.06,0.28,3.39,3.11,0.403,0.597,⚠️ Confiance faible (21%),1.5,Ouvert
+2025-08-31,NAC Breda,AZ Alkmaar,NAC Breda vs AZ Alkmaar,1.87,-0.06,3.6,3.66,0.479,0.521,⚠️ Confiance faible (19%),1.5,Ouvert
+2025-08-31,Celta Vigo,Villarreal,Celta Vigo vs Villarreal,3.0,1.1,4.63,3.53,0.568,0.432,⚠️ Confiance faible (37%),1.33,Ouvert
+2025-08-31,Real Betis,Athletic Club,Real Betis vs Athletic Club,1.84,0.42,3.38,2.96,0.281,0.719,⚠️ Confiance faible (32%),1.38,Ouvert
+2025-08-31,Espanyol,Osasuna,Espanyol vs Osasuna,2.17,0.72,3.73,3.01,0.45,0.55,⚠️ Confiance faible (16%),1.24,Fermé
+2025-08-31,Rayo Vallecano,Barcelona,Rayo Vallecano vs Barcelona,2.39,0.65,3.92,3.26,0.557,0.443,⚠️ Confiance faible (13%),1.5,Ouvert
+2025-08-31,1. FC Magdeburg,SpVgg Greuther Fürth,1. FC Magdeburg vs SpVgg Greuther Fürth,2.45,0.63,5.14,4.5,0.525,0.475,⚠️ Confiance faible (11%),1.5,Ouvert
+2025-08-31,Dynamo Dresden,FC Schalke 04,Dynamo Dresden vs FC Schalke 04,3.16,1.37,4.54,3.17,0.584,0.416,⚠️ Confiance faible (40%),1.5,Ouvert
+2025-08-31,1. FC Kaiserslautern,SV Darmstadt 98,1. FC Kaiserslautern vs SV Darmstadt 98,2.24,0.68,4.36,3.68,0.517,0.483,⚠️ Confiance faible (13%),1.46,Ouvert
