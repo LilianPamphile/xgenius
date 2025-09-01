@@ -1,48 +1,44 @@
-# === Standard Libraries ===
-import os
-import pickle
+# ===== Standard libs =====
+import os, pickle, shutil, time
 from datetime import date
 from decimal import Decimal
-import time
-import shutil
 
-# === Data & Math ===
+# ===== Data / Math =====
 import numpy as np
 import pandas as pd
 
-# === Database ===
+# ===== DB =====
 import psycopg2
 
-# === Scikit-learn ===
-from sklearn.model_selection import KFold
+# ===== ML =====
+from sklearn.model_selection import TimeSeriesSplit, train_test_split, KFold
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score, accuracy_score, brier_score_loss
-from sklearn.ensemble import HistGradientBoostingRegressor, GradientBoostingClassifier
 from sklearn.linear_model import RidgeCV
+from sklearn.ensemble import HistGradientBoostingRegressor, GradientBoostingClassifier
 from sklearn.calibration import CalibratedClassifierCV
 
-# === Other Regressors ===
+# Regressors
 from catboost import CatBoostRegressor
 from lightgbm import LGBMRegressor
 
-# === Optuna ===
+# Hyperopt (sobre)
 import optuna
 from optuna.integration import OptunaSearchCV
 from optuna.distributions import IntDistribution, FloatDistribution
 
-
-# --- Connexion BDD ---
+# ====== BDD ======
 DATABASE_URL = "postgresql://postgres:jDDqfaqpspVDBBwsqxuaiSDNXjTxjMmP@shortline.proxy.rlwy.net:36536/railway"
 conn = psycopg2.connect(DATABASE_URL)
 cursor = conn.cursor()
 
-# === Features finales utilisées pour la régression de buts (inchangées) ===
+# ====== Features pour régression de buts ======
 FEATURES_TOTAL_BUTS = [
     # Forme split
     "forme_home_buts_marques", "forme_home_buts_encaisses", "forme_home_over25",
     "forme_away_buts_marques", "forme_away_buts_encaisses", "forme_away_over25",
 
-    # Variabilité
+    # Variabilité (5 derniers)
     "std_marq_dom", "std_enc_dom", "std_marq_ext", "std_enc_ext",
 
     # Clean sheets réels (compte sur 5)
@@ -59,7 +55,7 @@ FEATURES_TOTAL_BUTS = [
     "corners_dom", "corners_ext", "cartons_total"
 ]
 
-# === Requête (identique à ta version) ===
+# ====== Extraction historique (identique à ton schéma) ======
 query = """
     SELECT
         m.game_id, m.date::date AS date_match, m.equipe_domicile, m.equipe_exterieur,
@@ -86,23 +82,15 @@ query = """
     WHERE s.buts_dom IS NOT NULL AND s.buts_ext IS NOT NULL
 """
 cursor.execute(query)
-df = pd.DataFrame(cursor.fetchall(), columns=[desc[0] for desc in cursor.description])
+df = pd.DataFrame(cursor.fetchall(), columns=[d.name for d in cursor.description])
 conn.close()
 
-# --- Convertir Decimal en float si nécessaire ---
-for col in df.columns:
-    if df[col].dtype == 'object' and not df[col].dropna().empty and isinstance(df[col].dropna().iloc[0], Decimal):
-        df[col] = df[col].astype(float)
+# Convertir Decimal -> float
+for c in df.columns:
+    if df[c].dtype == "object" and df[c].notna().any() and isinstance(df[c].dropna().iloc[0], Decimal):
+        df[c] = df[c].astype(float)
 
-# === Historique pour forme (identique à ta logique) ===
-df_hist = df.rename(columns={
-    "date_match": "date_match",
-    "equipe_domicile": "equipe_domicile",
-    "equipe_exterieur": "equipe_exterieur",
-    "buts_m_dom": "buts_m_dom",
-    "buts_m_ext": "buts_m_ext",
-})
-
+# ====== Fonctions de forme (identiques à ton main/train) ======
 def calculer_forme_train(df_hist, equipe, date_ref, n=5, role=None, decay=0.85):
     q = (df_hist["date_match"] < date_ref)
     if role is None:
@@ -153,7 +141,15 @@ def enrichir_forme_complet_train(df_hist, equipe, date_ref, n=5):
         int(np.sum(be == 0)),
     )
 
-# === Construction des colonnes de FEATURES_TOTAL_BUTS ===
+# ====== Construction des features ======
+df_hist = df.rename(columns={
+    "date_match": "date_match",
+    "equipe_domicile": "equipe_domicile",
+    "equipe_exterieur": "equipe_exterieur",
+    "buts_m_dom": "buts_m_dom",
+    "buts_m_ext": "buts_m_ext",
+})
+
 cols_new = {k: [] for k in FEATURES_TOTAL_BUTS}
 
 for _, r in df.iterrows():
@@ -209,122 +205,167 @@ for _, r in df.iterrows():
 for k, v in cols_new.items():
     df[k] = v
 
-# === Dataset régression (y = total_buts) ===
-X = df[FEATURES_TOTAL_BUTS].copy()
-y = df["total_buts"].astype(float).copy()
+# ====== Dataset ======
+X = df[FEATURES_TOTAL_BUTS].astype(float).values
+y = df["total_buts"].astype(float).values
+dates = pd.to_datetime(df["date_match"]).values
 
-# === Split chronologique (anti-fuite) ===
-order = np.argsort(df["date_match"].values)
-X_sorted = X.values[order]
-y_sorted = y.values[order]
+# ====== Split chronologique : 5 folds, dernier = test final ======
+order = np.argsort(dates)
+X, y = X[order], y[order]
 
-split_idx = int(0.80 * len(y_sorted))
-X_tr, X_te = X_sorted[:split_idx], X_sorted[split_idx:]
-y_tr, y_te = y_sorted[:split_idx], y_sorted[split_idx:]
+n_splits = 5 if len(y) >= 500 else 4  # robuste si petit dataset
+tscv = TimeSeriesSplit(n_splits=n_splits)
 
-# === Standardisation (fit uniquement sur train) ===
+fold_idx = list(tscv.split(X))
+trainval_idx, test_idx = fold_idx[-1]          # dernier split = Test final
+X_trainval, y_trainval = X[trainval_idx], y[trainval_idx]
+X_test, y_test         = X[test_idx], y[test_idx]
+
+# ====== Standardisation (fit uniquement sur trainval) ======
 scaler = StandardScaler()
-X_tr_sc = scaler.fit_transform(X_tr)
-X_te_sc = scaler.transform(X_te)
+X_trainval_sc = scaler.fit_transform(X_trainval)
+X_test_sc      = scaler.transform(X_test)
+
+# ====== OOF pour CatBoost & HGB sur les folds (hors test final) ======
+# On re-splite trainval en 3 folds chronologiques pour OOF/meta
+inner_tscv = TimeSeriesSplit(n_splits=3 if len(y_trainval) >= 300 else 2)
+
+oof_cat = np.zeros_like(y_trainval, dtype=float)
+oof_hgb = np.zeros_like(y_trainval, dtype=float)
+
+cat_models, hgb_models = [], []
+
+# Optuna (sobre) pour CatBoost
+param_dist = {
+    "depth": IntDistribution(4, 10),
+    "learning_rate": FloatDistribution(0.02, 0.12),
+    "iterations": IntDistribution(250, 600),
+    "l2_leaf_reg": FloatDistribution(1.0, 8.0)
+}
+
+for tr_idx, va_idx in inner_tscv.split(X_trainval):
+    X_tr, X_va = X_trainval_sc[tr_idx], X_trainval_sc[va_idx]
+    y_tr, y_va = y_trainval[tr_idx], y_trainval[va_idx]
+
+    # --- CatBoost + Optuna ---
+    cat_search = OptunaSearchCV(
+        estimator=CatBoostRegressor(
+            verbose=0, random_seed=42, loss_function="RMSE", subsample=0.8, rsm=0.8
+        ),
+        param_distributions=param_dist,
+        n_trials=25,
+        cv=KFold(n_splits=3, shuffle=True, random_state=42),
+        scoring="neg_mean_absolute_error",
+        n_jobs=-1
+    )
+    cat_search.fit(X_tr, y_tr)
+    cat = cat_search.best_estimator_
+    oof_cat[va_idx] = cat.predict(X_va)
+    cat_models.append(cat)
+
+    # --- HistGradientBoosting (grille sobre) ---
+    hgb = HistGradientBoostingRegressor(
+        max_iter=350, learning_rate=0.06, max_depth=6,
+        l2_regularization=0.0, min_samples_leaf=20, random_state=42
+    )
+    hgb.fit(X_tr, y_tr)
+    oof_hgb[va_idx] = hgb.predict(X_va)
+    hgb_models.append(hgb)
+
+# --- Entraîne des modèles "full" sur tout trainval pour le déploiement ---
+best_cat_full = CatBoostRegressor(verbose=0, random_seed=42, loss_function="RMSE",
+                                  depth=8, learning_rate=0.06, iterations=500, subsample=0.8, rsm=0.8)
+best_cat_full.fit(X_trainval_sc, y_trainval)
+
+hgb_full = HistGradientBoostingRegressor(max_iter=350, learning_rate=0.06, max_depth=6,
+                                         l2_regularization=0.0, min_samples_leaf=20, random_state=42)
+hgb_full.fit(X_trainval_sc, y_trainval)
+
+# ====== Méta-modèle (stacking) entraîné sur OOF ======
+stack_X_train = np.vstack([oof_cat, oof_hgb]).T
+meta = RidgeCV(alphas=[0.1, 1.0, 10.0])
+meta.fit(stack_X_train, y_trainval)
+
+# ====== Évaluation sur le test final ======
+# Prédictions test final via les modèles "full"
+pred_cat_test = best_cat_full.predict(X_test_sc)
+pred_hgb_test = hgb_full.predict(X_test_sc)
+stack_X_test = np.vstack([pred_cat_test, pred_hgb_test]).T
+pred_stack_test = meta.predict(stack_X_test)
+
+def metrics_block(y_true, y_pred):
+    return {
+        "mae": float(mean_absolute_error(y_true, y_pred)),
+        "rmse": float(np.sqrt(mean_squared_error(y_true, y_pred))),
+        "r2": float(r2_score(y_true, y_pred))
+    }
 
 results = {}
+results["catboost_optuna"]        = metrics_block(y_test, pred_cat_test)
+results["hist_gradient_boosting"] = metrics_block(y_test, pred_hgb_test)
+results["stacking"]               = metrics_block(y_test, pred_stack_test)
 
-# === CatBoost (Optuna) sur train ===
-param_distributions = {
-    "depth": IntDistribution(4, 10),
-    "learning_rate": FloatDistribution(0.01, 0.1),
-    "iterations": IntDistribution(200, 500)
-}
-catboost_search = OptunaSearchCV(
-    estimator=CatBoostRegressor(verbose=0, random_seed=42),
-    param_distributions=param_distributions,
-    n_trials=10,
-    cv=KFold(n_splits=3, shuffle=True, random_state=42),
-    scoring="neg_mean_absolute_error",
-    n_jobs=-1
-)
-catboost_search.fit(X_tr_sc, y_tr)
-best_cat = catboost_search.best_estimator_
-pred_cat_te = best_cat.predict(X_te_sc)
+# ====== Quantiles conformaux (p25–p75 calibrés ~50%) ======
+# 1) On entraîne deux modèles quantiles sur TRAINVAL
+params_q = dict(n_estimators=400, learning_rate=0.06, num_leaves=31,
+                min_data_in_leaf=30, subsample=0.9, feature_fraction=0.9, random_state=42)
+q25 = LGBMRegressor(objective="quantile", alpha=0.25, **params_q)
+q75 = LGBMRegressor(objective="quantile", alpha=0.75, **params_q)
+q25.fit(X_trainval_sc, y_trainval); q75.fit(X_trainval_sc, y_trainval)
 
-results["catboost_optuna"] = {
-    "mae": mean_absolute_error(y_te, pred_cat_te),
-    "rmse": np.sqrt(mean_squared_error(y_te, pred_cat_te)),
-    "r2": r2_score(y_te, pred_cat_te)
-}
+# 2) Calibration d'un décalage Δ sur TRAINVAL via split interne (20% pour calib)
+X_tr_c, X_cal_c, y_tr_c, y_cal_c = train_test_split(X_trainval_sc, y_trainval, test_size=0.2, shuffle=False)
+q25_c = LGBMRegressor(objective="quantile", alpha=0.25, **params_q).fit(X_tr_c, y_tr_c)
+q75_c = LGBMRegressor(objective="quantile", alpha=0.75, **params_q).fit(X_tr_c, y_tr_c)
 
-# === HistGradientBoosting ===
-hgb = HistGradientBoostingRegressor(max_iter=300, learning_rate=0.05, max_depth=6, random_state=42)
-hgb.fit(X_tr_sc, y_tr)
-pred_hgb_te = hgb.predict(X_te_sc)
+p25_cal = q25_c.predict(X_cal_c)
+p75_cal = q75_c.predict(X_cal_c)
 
-results["hist_gradient_boosting"] = {
-    "mae": mean_absolute_error(y_te, pred_hgb_te),
-    "rmse": np.sqrt(mean_squared_error(y_te, pred_hgb_te)),
-    "r2": r2_score(y_te, pred_hgb_te)
-}
+# Δ tel que coverage ~ 50% sur calib
+def find_delta(y_true, lo, hi, target=0.50):
+    deltas = np.linspace(0.0, 1.2, 25)  # de 0 à +1.2 buts
+    best = 0.0; best_diff = 1e9
+    for d in deltas:
+        cover = np.mean((y_true >= (lo - d)) & (y_true <= (hi + d)))
+        if abs(cover - target) < best_diff:
+            best, best_diff = d, abs(cover - target)
+    return float(best)
 
-# === STACKING (RidgeCV) ===
-pred_cat_tr = best_cat.predict(X_tr_sc)
-pred_hgb_tr = hgb.predict(X_tr_sc)
-stack_X_tr = np.vstack([pred_cat_tr, pred_hgb_tr]).T
-stack_X_te = np.vstack([pred_cat_te, pred_hgb_te]).T
+OFFSET = find_delta(y_cal_c, p25_cal, p75_cal, target=0.50)
 
-meta = RidgeCV(alphas=[0.1, 1.0, 10.0])
-meta.fit(stack_X_tr, y_tr)
-pred_stack_te = meta.predict(stack_X_te)
+# 3) Option "normalized" simple : largeur locale ~ |résidu| (modèle MAE)
+res_model = LGBMRegressor(objective="regression_l1", n_estimators=300, random_state=42)
+# résidus sur trainval (avec catboost_full comme baseline)
+res_train = np.abs(y_trainval - best_cat_full.predict(X_trainval_sc))
+res_model.fit(X_trainval_sc, res_train)
 
-results["stacking"] = {
-    "mae": mean_absolute_error(y_te, pred_stack_te),
-    "rmse": np.sqrt(mean_squared_error(y_te, pred_stack_te)),
-    "r2": r2_score(y_te, pred_stack_te)
-}
+# 4) Test final
+p25_test = q25.predict(X_test_sc) - OFFSET
+p75_test = q75.predict(X_test_sc) + OFFSET
 
-# === Quantiles p25/p75 (fit sur train uniquement) ===
-params_base = {"n_estimators": 300, "max_depth": 6, "learning_rate": 0.05, "random_state": 42}
-q25_model = LGBMRegressor(objective="quantile", alpha=0.25, **params_base)
-q75_model = LGBMRegressor(objective="quantile", alpha=0.75, **params_base)
+# ajustement multiplicatif selon variabilité locale (bornes plus serrées si résidu attendu faible)
+scale_test = np.clip(res_model.predict(X_test_sc), 0.5, 2.5)  # bornes pour éviter extrêmes
+p25_test = pred_stack_test - (pred_stack_test - p25_test) * (1.0 / scale_test)
+p75_test = pred_stack_test + (p75_test - pred_stack_test) * (1.0 / scale_test)
 
-q25_model.fit(X_tr_sc, y_tr)
-q75_model.fit(X_tr_sc, y_tr)
-
-p25_te = q25_model.predict(X_te_sc)
-p75_te = q75_model.predict(X_te_sc)
-
-# OFFSET dynamique basé sur la largeur des intervalles sur TRAIN
-p25_tr = q25_model.predict(X_tr_sc)
-p75_tr = q75_model.predict(X_tr_sc)
-train_width = p75_tr - p25_tr
-OFFSET = float(np.percentile(train_width, 75) / 2.0)
-
-p25_adj = p25_te - OFFSET
-p75_adj = p75_te + OFFSET
-coverage = np.mean((y_te >= p25_adj) & (y_te <= p75_adj))
-width = float(np.mean(p75_adj - p25_adj))
-
+coverage = float(np.mean((y_test >= p25_test) & (y_test <= p75_test)))
+width    = float(np.mean(p75_test - p25_test))
 results["conformal"] = {"coverage": coverage, "width": width}
 
-# === Heuristique non linéaire (CatBoost reg) ===
-# Variables heuristiques (identiques à ta version + cohérence main.py)
+# ====== Heuristique non linéaire (CatBoost) — entraînée hors test ======
 df_heur = df.copy()
 df_heur["tirs_cadres_total"] = df_heur["tirs_cadres_dom"] + df_heur["tirs_cadres_ext"]
-df_heur["forme_dom_marq"] = df_heur["forme_home_buts_marques"]
-df_heur["forme_ext_marq"] = df_heur["forme_away_buts_marques"]
-df_heur["solidite_dom"] = 1 / (df_heur["buts_encaissés_dom"] + 0.1)
-df_heur["solidite_ext"] = 1 / (df_heur["buts_encaissés_ext"] + 0.1)
-df_heur["corners"] = df_heur["corners_dom"] + df_heur["corners_ext"]
-
-# fautes + cartons + poss : robustesse aux colonnes manquantes
-df_heur["fautes"] = (df_heur.get("fautes", 0).fillna(0) +
-                     df_heur.get("fautes_ext", 0).fillna(0))
-df_heur["cartons"] = (df_heur.get("cartons_jaunes", 0).fillna(0) +
-                      df_heur.get("cartons_rouges", 0).fillna(0) +
-                      df_heur.get("cj_ext", 0).fillna(0) +
-                      df_heur.get("cr_ext", 0).fillna(0))
-df_heur["poss"] = pd.DataFrame({
-    "p1": df_heur.get("possession", np.nan),
-    "p2": df_heur.get("poss_ext", np.nan)
-}).mean(axis=1)
+df_heur["forme_dom_marq"]    = df_heur["forme_home_buts_marques"]
+df_heur["forme_ext_marq"]    = df_heur["forme_away_buts_marques"]
+df_heur["solidite_dom"]      = 1 / (df_heur["buts_encaissés_dom"] + 0.1)
+df_heur["solidite_ext"]      = 1 / (df_heur["buts_encaissés_ext"] + 0.1)
+df_heur["corners"]           = df_heur["corners_dom"] + df_heur["corners_ext"]
+df_heur["fautes"]            = (df_heur.get("fautes", 0).fillna(0) + df_heur.get("fautes_ext", 0).fillna(0))
+df_heur["cartons"]           = (df_heur.get("cartons_jaunes", 0).fillna(0) + df_heur.get("cartons_rouges", 0).fillna(0) +
+                                df_heur.get("cj_ext", 0).fillna(0) + df_heur.get("cr_ext", 0).fillna(0))
+df_heur["poss"]              = pd.DataFrame({"a": df_heur.get("possession", np.nan),
+                                             "b": df_heur.get("poss_ext",   np.nan)}).mean(axis=1)
 
 FEATURES_HEURISTIQUE = [
     "buts_dom", "buts_ext",
@@ -339,52 +380,41 @@ FEATURES_HEURISTIQUE = [
     "poss"
 ]
 
-X_score = df_heur[FEATURES_HEURISTIQUE].values
-y_score = df_heur["total_buts"].astype(float).values
+X_score_all = df_heur[FEATURES_HEURISTIQUE].astype(float).values
+y_score_all = df_heur["total_buts"].astype(float).values
+
+# split temporel aligné : trainval/test
+X_score_tr, X_score_te = X_score_all[trainval_idx], X_score_all[test_idx]
+y_score_tr, y_score_te = y_score_all[trainval_idx], y_score_all[test_idx]
 
 heur = CatBoostRegressor(
-    depth=6, iterations=400, learning_rate=0.05,
-    loss_function="MAE", random_seed=42, verbose=0
+    depth=6, iterations=500, learning_rate=0.05, loss_function="MAE",
+    random_seed=42, verbose=0
 )
-heur.fit(X_score, y_score)
+heur.fit(X_score_tr, y_score_tr)
+preds_score_te = heur.predict(X_score_te)
 
-preds_score = heur.predict(X_score)
-results["score_heuristique"] = {
-    "mae": mean_absolute_error(y_score, preds_score),
-    "rmse": np.sqrt(mean_squared_error(y_score, preds_score)),
-    "r2": r2_score(y_score, preds_score)
-}
+results["score_heuristique"] = metrics_block(y_score_te, preds_score_te)
 
-# === Classifieur Over 2.5 + Calibration Isotonic ===
-df["label_over_25"] = (df["total_buts"] > 2.5).astype(int)
-X_class = X_sorted  # mêmes features que régression, déjà ordonnées
-y_class = df["label_over_25"].values[order]
+# ====== Classifieur Over 2.5 calibré (isotonic) ======
+label_over = (y > 2.5).astype(int)
+y_class_tr, y_class_te = label_over[trainval_idx], label_over[test_idx]
 
-X_trc, X_tec = X_class[:split_idx], X_class[split_idx:]
-y_trc, y_tec = y_class[:split_idx], y_class[split_idx:]
+# re-use scaler (cohérence)
+X_class_tr, X_class_te = X_trainval_sc, X_test_sc
 
-# On réutilise le scaler régression pour rester cohérent
-X_trc_sc = scaler.transform(X_trc)
-X_tec_sc = scaler.transform(X_tec)
-
-base_clf = GradientBoostingClassifier(
-    n_estimators=200, learning_rate=0.05, max_depth=4, random_state=42
-)
-base_clf.fit(X_trc_sc, y_trc)
+base_clf = GradientBoostingClassifier(n_estimators=250, learning_rate=0.06, max_depth=4, random_state=42)
+base_clf.fit(X_class_tr, y_class_tr)
 
 cal_clf = CalibratedClassifierCV(base_clf, method="isotonic", cv=5)
-cal_clf.fit(X_trc_sc, y_trc)
+cal_clf.fit(X_class_tr, y_class_tr)
 
-yprob_te = cal_clf.predict_proba(X_tec_sc)[:, 1]
-acc_over25 = accuracy_score(y_tec, (yprob_te >= 0.5).astype(int))
-brier = brier_score_loss(y_tec, yprob_te)
+yprob_te = cal_clf.predict_proba(X_class_te)[:, 1]
+acc_te   = float(accuracy_score(y_class_te, (yprob_te >= 0.5).astype(int)))
+brier_te = float(brier_score_loss(y_class_te, yprob_te))
+results["over25_classifier"] = {"accuracy": acc_te, "brier": brier_te}
 
-results["over25_classifier"] = {
-    "accuracy": acc_over25,
-    "brier": brier
-}
-
-# === Sauvegarde GitHub ===
+# ====== Sauvegarde Git ======
 os.system("git config --global user.email 'lilian.pamphile.bts@gmail.com'")
 os.system("git config --global user.name 'LilianPamphile'")
 
@@ -394,51 +424,47 @@ if not GITHUB_TOKEN:
 
 GITHUB_REPO = f"https://{GITHUB_TOKEN}@github.com/LilianPamphile/paris-sportifs.git"
 CLONE_DIR = "model_push"
-
 if os.path.exists(CLONE_DIR):
     shutil.rmtree(CLONE_DIR)
 os.system(f"git clone {GITHUB_REPO} {CLONE_DIR}")
-
 model_path = f"{CLONE_DIR}/model_files"
 os.makedirs(model_path, exist_ok=True)
 
-# — Régression: modèles + meta
+# Régressions + méta
 with open(f"{model_path}/model_total_buts_catboost_optuna.pkl", "wb") as f:
-    pickle.dump(best_cat, f)
-
+    pickle.dump(best_cat_full, f)
 with open(f"{model_path}/model_total_buts_hist_gradient_boosting.pkl", "wb") as f:
-    pickle.dump(hgb, f)
-
+    pickle.dump(hgb_full, f)
 with open(f"{model_path}/model_total_buts_stacking.pkl", "wb") as f:
     pickle.dump(meta, f)
 
-# — Quantiles
+# Quantiles
 with open(f"{model_path}/model_total_buts_conformal_p25.pkl", "wb") as f:
-    pickle.dump(q25_model, f)
+    pickle.dump(q25, f)
 with open(f"{model_path}/model_total_buts_conformal_p75.pkl", "wb") as f:
-    pickle.dump(q75_model, f)
+    pickle.dump(q75, f)
 
-# — Scaler & features
+# Scaler + features
 with open(f"{model_path}/scaler_total_buts.pkl", "wb") as f:
     pickle.dump(scaler, f)
 with open(f"{model_path}/features_list.pkl", "wb") as f:
     pickle.dump(FEATURES_TOTAL_BUTS, f)
 
-# — Heuristique non linéaire
+# Heuristique + ses features
 with open(f"{model_path}/regression_score_heuristique.pkl", "wb") as f:
     pickle.dump(heur, f)
 with open(f"{model_path}/features_list_score_heuristique.pkl", "wb") as f:
     pickle.dump(FEATURES_HEURISTIQUE, f)
 
-# — Classifieur calibré
+# Classif calibré
 with open(f"{model_path}/model_over25_classifier.pkl", "wb") as f:
     pickle.dump(cal_clf, f)
 
-# — OFFSET dynamique
+# OFFSET (pour compat avec main.py)
 with open(f"{model_path}/offset_conformal.pkl", "wb") as f:
     pickle.dump(OFFSET, f)
 
-# — MAE modèles de base (pour info)
+# MAE info (pour ancienne pondération si besoin)
 mae_info = {
     "mae_cat": results["catboost_optuna"]["mae"],
     "mae_hgb": results["hist_gradient_boosting"]["mae"]
@@ -447,54 +473,48 @@ with open(f"{model_path}/mae_models.pkl", "wb") as f:
     pickle.dump(mae_info, f)
 
 # Commit & push
-os.system(f"cd {CLONE_DIR} && git add model_files && git commit -m '🔁 Train v4: stacking + calibration + anti-leak' && git push")
-print("✅ Modèles commités et poussés sur GitHub.")
+os.system(f"cd {CLONE_DIR} && git add model_files && git commit -m '🔁 Train v5: chrono backtest + OOF stacking + conformal@50 + calib O/U' && git push")
 
-# === Email de notification ===
+# ====== Rapport par mail (facultatif) ======
 def send_email(subject, body, to_email):
-    from email.mime.text import MIMEText
-    import smtplib
-
-    from_email = "lilian.pamphile.bts@gmail.com"
-    app_password = os.getenv("EMAIL_APP_PASSWORD")  # GitHub Secret
-
-    if not app_password:
-        print("❌ EMAIL_APP_PASSWORD non défini dans l'environnement.")
-        return
-
-    msg = MIMEText(body)
-    msg["Subject"] = subject
-    msg["From"] = from_email
-    msg["To"] = to_email
-
     try:
+        from email.mime.text import MIMEText
+        import smtplib
+        from_email = "lilian.pamphile.bts@gmail.com"
+        app_password = os.getenv("EMAIL_APP_PASSWORD")
+        if not app_password:
+            print("ℹ️ EMAIL_APP_PASSWORD manquant — mail non envoyé.")
+            return
+        msg = MIMEText(body)
+        msg["Subject"] = subject; msg["From"] = from_email; msg["To"] = to_email
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
             server.login(from_email, app_password)
             server.send_message(msg)
         print("📬 Email envoyé.")
     except Exception as e:
-        print("❌ Email erreur :", e)
+        print("❌ Email erreur:", e)
 
-# === Rapport
 today = date.today()
 lines = [f"Les modèles ont été réentraînés le {today}.\n"]
-for name, infos in results.items():
-    lines.append(f"\n🔧 **{name.upper()}**")
-    if "mae" in infos:
+def fmt_block(name, infos):
+    if {"mae","rmse","r2"} <= infos.keys():
         mae, rmse, r2 = infos["mae"], infos["rmse"], infos["r2"]
         perf = "🟢 Excellent" if rmse < 1.5 else ("🟡 Correct" if rmse < 2.0 else "🔴 À surveiller")
-        lines.append(f"• MAE : {mae:.3f}\n• RMSE : {rmse:.3f}\n• R² : {r2:.3f}\n• Interprétation : {perf}")
-    elif "coverage" in infos:
-        lines.append(f"• Coverage (p25–p75) : {infos['coverage']:.2%}\n• Largeur moyenne : {infos['width']:.2f} buts")
-    elif "accuracy" in infos:
-        lines.append(f"• Accuracy : {infos['accuracy']:.3f}")
-        if "brier" in infos:
-            lines.append(f"• Brier : {infos['brier']:.3f}")
+        return f"\n🔧 **{name}**\n• MAE : {mae:.3f}\n• RMSE : {rmse:.3f}\n• R² : {r2:.3f}\n• Interprétation : {perf}"
+    if "coverage" in infos:
+        return f"\n🔧 **{name}**\n• Coverage (p25–p75) : {infos['coverage']:.2%}\n• Largeur moyenne : {infos['width']:.2f} buts"
+    if "accuracy" in infos:
+        brier = infos.get("brier", None)
+        return f"\n🔧 **{name}**\n• Accuracy : {infos['accuracy']:.3f}" + (f"\n• Brier : {brier:.3f}" if brier is not None else "")
+    return ""
+
+for k, v in results.items():
+    lines.append(fmt_block(k.upper(), v))
 
 lines += [
     "\n📁 Fichiers générés : modèles + scaler + meta + quantiles + offset + classif calibré",
     "📤 Upload GitHub : ✅ effectué",
     "🔗 https://github.com/LilianPamphile/paris-sportifs/tree/main/model_files"
 ]
-send_email("📊 Modèles mis à jour (train v4)", "\n".join(lines), "lilian.pamphile.bts@gmail.com")
-print("✅ Fin du train.")
+send_email("📊 Modèles mis à jour (train v5)", "\n".join(lines), "lilian.pamphile.bts@gmail.com")
+print("✅ Fin du train v5.")
