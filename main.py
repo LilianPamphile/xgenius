@@ -546,6 +546,7 @@ try:
         SELECT
           m.game_id,
           m.date::date AS date_match,
+          m.competition,
           m.equipe_domicile, m.equipe_exterieur,
         
           /* ======= ÉQUIPE DOMICILE : agrégée 2 saisons (poids: saison1=2, saison2=1) ======= */
@@ -687,8 +688,8 @@ try:
                 return 0.0, 0.0, 0.0
         
             est_dom = (m["equipe_domicile"].values == equipe)
-            bm = np.where(est_dom, m["buts_m_dom"].values, m["buts_m_ext"].values)
-            be = np.where(est_dom, m["buts_m_ext"].values, m["buts_m_dom"].values)
+            bm = m["buts_m_dom"].values * est_dom + m["buts_m_ext"].values * (~est_dom)
+            be = m["buts_m_ext"].values * est_dom + m["buts_m_dom"].values * (~est_dom)
             tb = m["total_buts"].values
         
             # Pondération temporelle
@@ -740,7 +741,7 @@ try:
         
         for row in rows:
             (
-                game_id, date_match, dom, ext,
+                game_id, date_match, competition, dom, ext,
                 buts_dom, enc_dom, over25_dom, over15_dom, btts_dom, pass_pct_dom, pass_reussies_dom,
                 poss_dom, corners_dom, fautes_dom, cj_dom, cr_dom, xg_dom, tirs_dom, tirs_cadres_dom,
                 clean_sheets_dom, clean_sheets_ext,
@@ -813,6 +814,7 @@ try:
             # --- Stockage match ---
             matchs.append({
                 "match": f"{dom} vs {ext}",
+                "competition": competition,
                 "features": feature_vector,
                 "poss": poss_moyenne,
                 "corners": num(corners_dom) + num(corners_ext),
@@ -852,18 +854,25 @@ try:
     # Prédiction classification over 2.5
     probas_over25 = model_over25.predict_proba(X_live_scaled)[:, 1]  # probabilité que over 2.5
 
-   # === Pondération dynamique selon MAE inverse ===
-    with open("model_files/mae_models.pkl", "rb") as f:
-        mae_dict = pickle.load(f)
-    
-    mae_cat = mae_dict["mae_cat"]
-    mae_hgb = mae_dict["mae_hgb"]
+    # === Pondération par LIGUE (biais de modèles) + micro-biais de buts (baseline ligue)
+    LEAGUE_MODEL_WEIGHTS = {
+        "Ligue 1": (0.60, 0.40),
+        "Bundesliga": (0.40, 0.60),
+        "Eredivisie": (0.45, 0.55),
+        "Premier League": (0.50, 0.50),
+        "Serie A": (0.50, 0.50),
+        "La Liga": (0.55, 0.45),
+    }
+    LEAGUE_GOAL_BIAS = {
+        # petit ajustement de tendance de ligue (en buts)
+        "Bundesliga": +0.10,
+        "Eredivisie": +0.10,
+        "Premier League": +0.05,
+        "Serie A": +0.05,
+        "La Liga": -0.05,
+        "Ligue 1": -0.10,
+    }
 
-    inv_total = 1 / mae_cat + 1 / mae_hgb
-    weight_cat = (1 / mae_cat) / inv_total
-    weight_hgb = (1 / mae_hgb) / inv_total
-    pred_buts = weight_cat * preds_cat + weight_hgb * preds_hgb
-    
     matchs_over, matchs_under, matchs_opps = [], [], []
 
     def clip01(x):
@@ -886,7 +895,10 @@ try:
 
 
     for i, match in enumerate(matchs_jour):
-        pred_total = float(pred_buts[i])
+        comp = match.get("competition", "")
+        w_cat, w_hgb = LEAGUE_MODEL_WEIGHTS.get(comp, (0.50, 0.50))
+        pred_mix = w_cat * float(preds_cat[i]) + w_hgb * float(preds_hgb[i])
+        pred_total = float(pred_mix) + float(LEAGUE_GOAL_BIAS.get(comp, 0.0))
         p25, p75 = float(pred_p25[i]), float(pred_p75[i])
         incertitude = p75 - p25
         prob_over25 = float(probas_over25[i])
@@ -941,7 +953,7 @@ try:
         score_heur = max(0.0, min(score_heur, 1.5))
         match["score_heur"] = score_heur
     
-        # === Confiance composite ===
+        # === Confiance composite (plus de poids à l'intervalle)
         sharp = 1.0 - min(1.0, incertitude / 3.0)
         prob_strength = abs(prob_over25 - 0.5) * 2.0
         margin_strength = min(1.0, abs(pred_total - 2.5) / 2.0)
@@ -953,42 +965,52 @@ try:
         ]
         agreement_ratio = sum(agree_bits) / 3.0
         consistency = abs(agreement_ratio - 0.5) * 2.0
-    
-        # Moins de poids sur l'intervalle, plus sur proba et marge
-        w1, w2, w3, w4 = 0.15, 0.30, 0.30, 0.25
+        # → on renforce l’impact de l’intervalle
+        w1, w2, w3, w4 = 0.25, 0.30, 0.25, 0.20
         confidence_score = w1*sharp + w2*prob_strength + w3*margin_strength + w4*consistency
-
         confidence_pct = int(round(confidence_score * 100))
     
-        if confidence_score >= 0.68:
-            commentaire = f"✅ Confiance élevée ({confidence_pct}%)"
-        elif confidence_score >= 0.50:
-            commentaire = f"ℹ️ Confiance modérée ({confidence_pct}%)"
+        # Catégorie d’intervalle (réintroduit comme signal lisible)
+        if incertitude < 1.2:
+            bucket_ci = "sharp"
+        elif incertitude <= 2.0:
+            bucket_ci = "moyen"
         else:
-            commentaire = f"⚠️ Confiance faible ({confidence_pct}%)"
+            bucket_ci = "flou"
+    
+        # Bandes de proba (seulement interprétation)
+        if prob_over25 >= 0.68:
+            band_proba = "forte"
+        elif prob_over25 >= 0.55:
+            band_proba = "moyenne"
+        else:
+            band_proba = "faible"
+    
+        if confidence_score >= 0.68:
+            commentaire = f"✅ Confiance élevée ({confidence_pct}%) • {bucket_ci} • proba {band_proba}"
+        elif confidence_score >= 0.50:
+            commentaire = f"ℹ️ Confiance modérée ({confidence_pct}%) • {bucket_ci} • proba {band_proba}"
+        else:
+            commentaire = f"⚠️ Confiance faible ({confidence_pct}%) • {bucket_ci} • proba {band_proba}"
     
         match["confiance"] = commentaire
         match["confidence_pct"] = confidence_pct
+        match["bucket_ci"] = bucket_ci
+        match["band_proba"] = band_proba
+        match["pred_total"] = pred_total
     
-        # === Classification par règles OR ===
-        over_rule = (heur_pct >= 0.85) or (prob_over25 >= 0.70) or (pred_total >= 3.0)
-        under_rule = (heur_pct <= 0.425) or (prob_over25 <= 0.50) or (pred_total <= 1.8)
+        # === Score global continu (remplace les règles OR)
+        score_global = 0.50*prob_over25 + 0.30*min(pred_total/4.0, 1.0) + 0.20*heur_pct
+        score_global -= 0.10 * max(0.0, (incertitude - 1.5))  # pénalité si intervalle large
+        score_global = clip01(score_global)
+        match["score_global"] = float(score_global)
     
-        if over_rule and not under_rule:
-            matchs_over.append((
-                prob_over25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}",
-                commentaire, score_heur, 1.0
-            ))
-        elif under_rule and not over_rule:
-            matchs_under.append((
-                prob_under25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}",
-                commentaire, score_heur, 1.0
-            ))
+        if score_global >= 0.68:
+            matchs_over.append((prob_over25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}", commentaire, score_heur, 1.0))
+        elif score_global <= 0.38:
+            matchs_under.append((prob_under25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}", commentaire, score_heur, 1.0))
         else:
-            matchs_opps.append((
-                prob_over25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}",
-                commentaire, score_heur, 1.0
-            ))
+            matchs_opps.append((prob_over25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}", commentaire, score_heur, 1.0))
 
 except Exception as e:
     print("❌ Erreur pendant la génération des prédictions :", e)
@@ -1011,6 +1033,7 @@ def build_table(title_emoji: str, title_text: str, rows, is_under: bool = False)
     # Largeurs calibrées pour tenir sur iPhone/Android
     W_MATCH = 23
     W_GEXP  = 5
+    W_CI    = 11
     W_O25   = 4
     W_U25   = 4
     W_XGS   = 4
@@ -1021,6 +1044,7 @@ def build_table(title_emoji: str, title_text: str, rows, is_under: bool = False)
     lines.append(
         f"{pad('Match', W_MATCH)} | "
         f"{pad('G', W_GEXP,'right')} | "
+        f"{pad('CI', W_CI)} | "
         f"{pad('O2.5', W_O25,'right')} | "
         f"{pad('U2.5', W_U25,'right')} | "
         f"{pad('XGS', W_XGS,'right')} | "
@@ -1028,6 +1052,7 @@ def build_table(title_emoji: str, title_text: str, rows, is_under: bool = False)
     )
     lines.append("".ljust(W_MATCH, "─") + "─┼─" +
                  "".rjust(W_GEXP, "─")    + "─┼─" +
+                 "".ljust(W_CI, "─")      + "─┼─" +
                  "".rjust(W_O25, "─")     + "─┼─" +
                  "".rjust(W_U25, "─")     + "─┼─" +
                  "".rjust(W_XGS, "─")     + "─┼─" +
@@ -1105,16 +1130,34 @@ for i, m in enumerate(matchs_jour):
     prob_o25 = float(probas_over25[i])
     p25 = float(pred_p25[i])
     p75 = float(pred_p75[i])
-    pred_b = float(pred_buts[i])
+    pred_b = float(m.get("pred_total", 0.0))
     heur_pct = float(m.get("score_heur", 0.0)) / 1.5  # normalisé [0,1]
 
-    # Classification OR identique au mail
-    if (heur_pct >= 0.85) or (prob_o25 >= 0.70) or (pred_b >= 3.0):
+    # Décision par score global (même logique que plus haut)
+    incert = p75 - p25
+    score_global = 0.50*prob_o25 + 0.30*min(pred_b/4.0, 1.0) + 0.20*heur_pct
+    score_global -= 0.10 * max(0.0, (incert - 1.5))
+    score_global = max(0.0, min(1.0, float(score_global)))
+    if score_global >= 0.68:
         categorie = "Ouvert"
-    elif (heur_pct <= 0.425) or (prob_o25 <= 0.50) or (pred_b <= 1.8):
+    elif score_global <= 0.38:
         categorie = "Fermé"
     else:
         categorie = "Neutre"
+
+    # Buckets pour analyse hebdo
+    if prob_o25 >= 0.68:
+        prob_band = "forte"
+    elif prob_o25 >= 0.55:
+        prob_band = "moyenne"
+    else:
+        prob_band = "faible"
+    if incert < 1.2:
+        ci_bucket = "sharp"
+    elif incert <= 2.0:
+        ci_bucket = "moyen"
+    else:
+        ci_bucket = "flou"
 
     rows_csv.append({
         "date": today_str,
@@ -1124,12 +1167,16 @@ for i, m in enumerate(matchs_jour):
         "prediction_buts": round(pred_b, 2),
         "p25": round(p25, 2),
         "p75": round(p75, 2),
-        "incertitude": round(p75 - p25, 2),
+        "incertitude": round(incert, 2),
         "prob_over25": round(prob_o25, 3),
         "prob_under25": round(1.0 - prob_o25, 3),
         "confiance": m.get("confiance", ""),
         "score_heuristique": round(float(m.get("score_heur", 0.0)), 2),
-        "categorie": categorie
+        "categorie": categorie,
+        "score_global": round(float(score_global), 3),
+        "prob_band": prob_band,
+        "ci_bucket": ci_bucket,
+        "competition": m.get("competition", "")
     })
 
 df_today = pd.DataFrame(rows_csv)
