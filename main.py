@@ -896,14 +896,28 @@ try:
 
     for i, match in enumerate(matchs_jour):
         comp = match.get("competition", "")
-        w_cat, w_hgb = LEAGUE_MODEL_WEIGHTS.get(comp, (0.50, 0.50))
-        pred_mix = w_cat * float(preds_cat[i]) + w_hgb * float(preds_hgb[i])
-        pred_total = float(pred_mix) + float(LEAGUE_GOAL_BIAS.get(comp, 0.0))
+    
+        # d’abord on calcule l’incertitude
         p25, p75 = float(pred_p25[i]), float(pred_p75[i])
         incertitude = p75 - p25
         prob_over25 = float(probas_over25[i])
         prob_under25 = 1.0 - prob_over25
     
+        # puis on fait la pondération adaptative Cat/HGB
+        w_cat0, w_hgb0 = LEAGUE_MODEL_WEIGHTS.get(comp, (0.50, 0.50))
+        if incertitude <= 1.2:
+            k = 0.0
+        elif incertitude >= 2.0:
+            k = 1.0
+        else:
+            k = (incertitude - 1.2) / (2.0 - 1.2)
+    
+        w_cat = (1.0 - k)*w_cat0 + k*0.50
+        w_hgb = 1.0 - w_cat
+    
+        pred_mix = w_cat * float(preds_cat[i]) + w_hgb * float(preds_hgb[i])
+        pred_total = float(pred_mix) + float(LEAGUE_GOAL_BIAS.get(comp, 0.0))
+
         # ligne propre (non-scalée) pour features heuristiques déjà construite au-dessus
         row = X_live.iloc[i]
         enc_dom_val = float(row.get("buts_encaissés_dom", 0.0))
@@ -998,7 +1012,80 @@ try:
         match["bucket_ci"] = bucket_ci
         match["band_proba"] = band_proba
         match["pred_total"] = pred_total
-    
+
+        # === OpenScore / CloseScore + drivers lisibles (pour Telegram)
+        def nz(x, d=0.0):
+            try:
+                v = float(x)
+                if np.isnan(v):
+                    return d
+                return v
+            except:
+                return d
+        
+        # On réutilise 'row' (déjà défini), 'match', et clip01() existant
+        xg_tot = nz(row.get("moyenne_xg_dom")) + nz(row.get("moyenne_xg_ext"))
+        tc_tot = nz(row.get("tirs_cadres_dom")) + nz(row.get("tirs_cadres_ext"))
+        fm_dom = nz(row.get("forme_home_buts_marques"))
+        fm_ext = nz(row.get("forme_away_buts_marques"))
+        be_dom = nz(row.get("buts_encaissés_dom"))
+        be_ext = nz(row.get("buts_encaissés_ext"))
+        
+        # Composantes normalisées (0–1)
+        SO_xg  = clip01(xg_tot / 3.5)                 # signal offensif via xG
+        SO_tc  = clip01(tc_tot / 10.0)                # signal via tirs cadrés
+        SO_fm  = clip01((fm_dom + fm_ext) / 3.0)      # forme offensive
+        SO     = (SO_xg + SO_tc + SO_fm) / 3.0
+        
+        SDm    = clip01((be_dom + be_ext) / 3.0)      # faiblesse défensive (inverse de solidité)
+        solid  = clip01(((1.0/(be_dom+0.1)) + (1.0/(be_ext+0.1))) / 2.0)
+        
+        pos_moy = nz(match.get("poss"), 50.0)         # déjà moyenne dom/ext plus haut
+        rt_pos  = clip01(abs(pos_moy - 50.0) / 20.0)  # déséquilibre vs neutre 50/50
+        corners = nz(match.get("corners"), 0.0)
+        fautes  = nz(match.get("fautes"),  0.0)
+        rt_int  = clip01((corners/14.0 + fautes/30.0) / 2.0)
+        RT      = (rt_pos + rt_int) / 2.0
+        
+        pen_cartons = clip01(nz(match.get("cartons"), 0.0) / 8.0)
+        
+        Open_raw = (
+            0.35*SO + 0.20*SDm + 0.25*RT
+            + 0.10*prob_over25 + 0.10*clip01(pred_total/4.0)
+            - 0.10*pen_cartons
+        )
+        if incertitude <= 1.2: Open_raw += 0.03
+        if incertitude >  1.5: Open_raw -= min(0.10, 0.05*(incertitude - 1.5))
+        OpenScore = int(round(100 * clip01(Open_raw)))
+        
+        Close_raw = (
+            0.35*solid + 0.20*(1.0 - SO) + 0.15*(1.0 - RT)
+            + 0.20*(1.0 - prob_over25) + 0.10*clip01((2.0 - pred_total)/2.0)
+        )
+        if incertitude <  1.2: Close_raw += 0.04
+        if incertitude >  2.0: Close_raw -= 0.05
+        CloseScore = int(round(100 * clip01(Close_raw)))
+        
+        # Drivers compacts (on en garde 2–3 max)
+        drivers = []
+        if SO_xg >= 0.60: drivers.append("xG↑")
+        if SO_tc >= 0.60: drivers.append("tirs cadrés↑")
+        if rt_pos >= 0.60: drivers.append("déséquilibre pos↑")
+        if rt_int >= 0.60: drivers.append("intensité↑")
+        if SDm   >= 0.60: drivers.append("défenses friables")
+        if solid >= 0.60: drivers.append("solidités↑")
+        if SO    <= 0.40: drivers.append("signal offensif↓")
+        if RT    <= 0.40: drivers.append("rythme↓")
+        
+        drivers_str = ", ".join(drivers[:3])
+        
+        # On enrichit le texte 'commentaire' utilisé dans les tableaux Telegram
+        commentaire = f"{commentaire} • OS:{OpenScore} CS:{CloseScore} • {drivers_str}".strip()
+        match["OpenScore"]  = OpenScore
+        match["CloseScore"] = CloseScore
+        match["drivers"]    = drivers_str
+        match["confiance"]  = commentaire   # <-- pour que le CSV récupère aussi OS/CS/drivers
+
         # === Score global continu (remplace les règles OR)
         score_global = 0.50*prob_over25 + 0.30*min(pred_total/4.0, 1.0) + 0.20*heur_pct
         score_global -= 0.10 * max(0.0, (incertitude - 1.5))  # pénalité si intervalle large
@@ -1006,11 +1093,11 @@ try:
         match["score_global"] = float(score_global)
     
         if score_global >= 0.68:
-            matchs_over.append((prob_over25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}", commentaire, score_heur, 1.0))
+            matchs_over.append((prob_over25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}", commentaire, score_heur, confidence_pct))
         elif score_global <= 0.38:
-            matchs_under.append((prob_under25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}", commentaire, score_heur, 1.0))
+            matchs_under.append((prob_under25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}", commentaire, score_heur, confidence_pct))
         else:
-            matchs_opps.append((prob_over25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}", commentaire, score_heur, 1.0))
+            matchs_opps.append((prob_over25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}", commentaire, score_heur, confidence_pct))
 
 except Exception as e:
     print("❌ Erreur pendant la génération des prédictions :", e)
@@ -1073,6 +1160,7 @@ def build_table(title_emoji: str, title_text: str, rows, is_under: bool = False)
         lines.append(
             f"{pad(short_name(name, W_MATCH), W_MATCH)} | "
             f"{pad(f'{pred:.2f}', W_GEXP,'right')} | "
+            f"{pad(str(intervalle), W_CI)} | "
             f"{pad(f'{int(round(o25*100)):>3d}%', W_O25,'right')} | "
             f"{pad(f'{int(round(u25*100)):>3d}%', W_U25,'right')} | "
             f"{pad(f'{int(round(xgs*100)):>3d}%', W_XGS,'right')} | "
