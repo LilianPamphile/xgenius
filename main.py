@@ -24,6 +24,7 @@ saison2 = annee - 1
 
 # 🏆 Liste des compétitions à récupérer
 COMPETITIONS = {
+    # ——— Clubs (déjà présents) ———
     "Ligue 1": "61",
     "Premier League": "39",
     "Bundesliga": "78",
@@ -34,7 +35,42 @@ COMPETITIONS = {
     "2. Bundesliga": "79",
     "UEFA Europa League": "3",
     "UEFA Europa Conference League": "848",
-    "Saudi Professional League": "307"
+    "Saudi Professional League": "307",
+
+    # ——— Coupes nationales (Top Europe) ———
+    "FA Cup": "45",
+    "League Cup": "48",
+    "DFB Pokal": "81",
+    "Coppa Italia": "137",
+
+    # ——— Sélections & grandes compétitions internationales ———
+    "World Cup": "1",
+    "Euro Championship": "4",
+    "Euro Championship - Qualification": "960",
+    "UEFA Nations League": "5",
+    "UEFA Super Cup": "531",
+    "FIFA Club World Cup": "15",
+    "FIFA Club World Cup - Play-In": "1186",
+
+    # ——— Amicaux ———
+    "Friendlies": "10",
+
+    # ——— Qualifications Coupe du Monde ———
+    "World Cup - Qualification Africa": "29",
+    "World Cup - Qualification Asia": "30",
+    "World Cup - Qualification CONCACAF": "31",
+    "World Cup - Qualification Europe": "32",
+    "World Cup - Qualification Oceania": "33",
+    "World Cup - Qualification South America": "34",
+    "World Cup - Qualification Intercontinental Play-offs": "37",
+
+    # ——— Autres tournois sélections ———
+    "CONCACAF Gold Cup": "22",
+    "Asian Cup - Qualification": "35",
+    "UEFA U21 Championship": "38",
+    "UEFA U21 Championship - Qualification": "850",
+    "World Cup - U20": "490",
+    "CAFA Nations Cup": "1008",
 }
 
 # 🔌 Connexion PostgreSQL Railway
