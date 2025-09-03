@@ -1156,7 +1156,6 @@ def build_table(title_emoji: str, title_text: str, rows, is_under: bool = False)
         u25 = 1.0 - o25
 
         # Conférence : on récupère le % s’il est dans conf_txt
-        import re
         m = re.search(r"(\d+)%", conf_txt or "")
         conf_pct = int(m.group(1)) if m else 0
 
