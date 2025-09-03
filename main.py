@@ -105,13 +105,12 @@ def team_initials(name: str, max_len: int = 4) -> str:
     return abbr[:max_len]
 
 
-def short_name(name: str, n: int = 23) -> str:
-    # On ignore n, on renvoie toujours des sigles compacts
+def short_name(name: str) -> str:
     s = str(name)
     if " vs " in s:
         home, away = s.split(" vs ", 1)
-        return f"{team_initials(home)} – {team_initials(away)}"
-    return team_initials(s)
+        return f"{team_initials(home, 3)}–{team_initials(away, 3)}"  # ex: PSG–OM
+    return team_initials(s, 3)
 
 def num(x, default=0.0):
     """Convertit Decimal/float/int/str en float, remplace None ou NaN par default."""
@@ -1181,7 +1180,7 @@ def build_table(title_emoji: str, title_text: str, rows, is_under: bool = False)
                 drivers = drv
 
         # Lignes compactes (≤ ~35–40 caractères chacune)
-        line1 = f"{short_name(name, 24)}  |  G {pred:.2f}"
+        line1 = f"{short_name(name)} | G {pred:.2f}"
         # intervalle souvent long → on le compacte "CI {p25}-{p75}"
         try:
             p25, p75 = [s.strip() for s in str(intervalle).split("–")]
