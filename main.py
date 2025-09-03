@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 import shutil
 from decimal import Decimal
+import re
 
 from telegram_message import send_telegram_message
 
@@ -80,9 +81,37 @@ def fmt_pct(x):
         return "  ?%"
 
 
+def team_initials(name: str, max_len: int = 4) -> str:
+    """
+    Transforme 'Paris Saint-Germain' -> 'PSG', 'Manchester United' -> 'MU', 'Real Madrid' -> 'RM', etc.
+    Récupère la première lettre de chaque mot (y compris traits d’union).
+    """
+    if not name:
+        return ""
+    # Enlève ce qui est entre parenthèses (ex: "U23", "B")
+    base = re.sub(r"\(.*?\)", "", str(name))
+
+    # Remplace séparateurs par espaces (pour traiter les '-','&','/')
+    base = re.sub(r"[-/&]+", " ", base)
+
+    # Garde uniquement les tokens alphabétiques (mots)
+    tokens = re.findall(r"[A-Za-zÀ-ÖØ-öø-ÿ]+", base)
+    if not tokens:
+        return str(name)[:max_len].upper()
+
+    abbr = "".join(tok[0] for tok in tokens).upper()
+
+    # Limite la longueur si besoin (utile pour affichage mobile)
+    return abbr[:max_len]
+
+
 def short_name(name: str, n: int = 23) -> str:
-    name = str(name).replace(" vs ", " – ")
-    return (name[:n-1] + "…") if len(name) > n else name
+    # On ignore n, on renvoie toujours des sigles compacts
+    s = str(name)
+    if " vs " in s:
+        home, away = s.split(" vs ", 1)
+        return f"{team_initials(home)} – {team_initials(away)}"
+    return team_initials(s)
 
 def num(x, default=0.0):
     """Convertit Decimal/float/int/str en float, remplace None ou NaN par default."""
@@ -1104,73 +1133,83 @@ except Exception as e:
 
 def build_table(title_emoji: str, title_text: str, rows, is_under: bool = False) -> str:
     """
-    rows = [(prob, name, pred, intervalle, commentaire, score_heur, _), ...]
-    - prob = O2.5 (OVER) OU U2.5 (UNDER) selon is_under
-    - intervalle = 'p25 – p75' (déjà au bon format dans ton code)
+    Rend un bloc compact adapté mobile :
+    - 2 lignes par match
+    - Ligne 1 : Match + G (buts attendus)
+    - Ligne 2 : O2.5 / U2.5 / XGS / Conf + OS/CS + drivers
     """
-
+    header = f"*{mdv2_escape(title_emoji + ' ' + title_text)}*"
     if not rows:
-        header = f"{title_emoji} {title_text}"
-        return f"*{mdv2_escape(header)}*\n_Aucun match détecté._\n"
+        return f"{header}\n_Aucun match détecté._\n"
 
-    # Tri par confiance (tu stocks déjà confidence au dernier champ)
-    ordered = sorted(rows, key=lambda x: x[-1], reverse=True)
+    # Tri par le dernier champ (confiance %) si présent, sinon par proba
+    try:
+        ordered = sorted(rows, key=lambda x: x[-1], reverse=True)
+    except Exception:
+        ordered = rows
 
-    # ---- En-tête monospace (colonnes courtes = mobile friendly) ----
-    # Largeurs calibrées pour tenir sur iPhone/Android
-    W_MATCH = 23
-    W_GEXP  = 5
-    W_CI    = 11
-    W_O25   = 4
-    W_U25   = 4
-    W_XGS   = 4
-    W_CONF  = 6
+    lines = [header]
+    lines.append("```")  # bloc monospace pour éviter les retours hasardeux
 
-    lines = []
-    lines.append("```")
-    lines.append(
-        f"{pad('Match', W_MATCH)} | "
-        f"{pad('G', W_GEXP,'right')} | "
-        f"{pad('CI', W_CI)} | "
-        f"{pad('O2.5', W_O25,'right')} | "
-        f"{pad('U2.5', W_U25,'right')} | "
-        f"{pad('XGS', W_XGS,'right')} | "
-        f"{pad('Conf', W_CONF,'right')}"
-    )
-    lines.append("".ljust(W_MATCH, "─") + "─┼─" +
-                 "".rjust(W_GEXP, "─")    + "─┼─" +
-                 "".ljust(W_CI, "─")      + "─┼─" +
-                 "".rjust(W_O25, "─")     + "─┼─" +
-                 "".rjust(W_U25, "─")     + "─┼─" +
-                 "".rjust(W_XGS, "─")     + "─┼─" +
-                 "".rjust(W_CONF, "─"))
-
-    for prob, name, pred, intervalle, conf_txt, heur, *_ in ordered:
-        o25 = float(prob) if not is_under else (1.0 - float(prob))  # sécurité
+    for prob, name, pred, intervalle, conf_txt, heur, *rest in ordered:
+        # O/U
+        o25 = float(prob) if not is_under else (1.0 - float(prob))
         u25 = 1.0 - o25
-        xgs = min(max(float(heur) / 1.5, 0.0), 1.0)
 
-        # Conf % lisible à la fin du texte 'confiance'
-        # (ton code pose déjà confidence_pct dans commentaire)
-        # On récupère le premier entier dans conf_txt si présent
+        # Conférence : on récupère le % s’il est dans conf_txt
         import re
         m = re.search(r"(\d+)%", conf_txt or "")
         conf_pct = int(m.group(1)) if m else 0
 
-        lines.append(
-            f"{pad(short_name(name, W_MATCH), W_MATCH)} | "
-            f"{pad(f'{pred:.2f}', W_GEXP,'right')} | "
-            f"{pad(str(intervalle), W_CI)} | "
-            f"{pad(f'{int(round(o25*100)):>3d}%', W_O25,'right')} | "
-            f"{pad(f'{int(round(u25*100)):>3d}%', W_U25,'right')} | "
-            f"{pad(f'{int(round(xgs*100)):>3d}%', W_XGS,'right')} | "
-            f"{pad(f'{conf_pct:>3d}%', W_CONF,'right')}"
+        # Drivers & OS/CS si présents dans le texte (ils le sont, on tronque à 2)
+        # conf_txt ressemble à "✅ Confiance ... • OS:xx CS:yy • drv1, drv2, ..."
+        OS, CS = None, None
+        m_os = re.search(r"OS:(\d+)", conf_txt or "")
+        m_cs = re.search(r"CS:(\d+)", conf_txt or "")
+        if m_os: OS = int(m_os.group(1))
+        if m_cs: CS = int(m_cs.group(1))
+
+        # On isole les drivers à la fin après le dernier "•"
+        drivers = ""
+        parts = (conf_txt or "").split("•")
+        if len(parts) >= 3:
+            drv = parts[-1].strip()
+            # Tronque à 2 drivers si trop long
+            if "," in drv:
+                drivers = ", ".join([d.strip() for d in drv.split(",")][:2])
+            else:
+                drivers = drv
+
+        # Lignes compactes (≤ ~35–40 caractères chacune)
+        line1 = f"{short_name(name, 24)}  |  G {pred:.2f}"
+        # intervalle souvent long → on le compacte "CI {p25}-{p75}"
+        try:
+            p25, p75 = [s.strip() for s in str(intervalle).split("–")]
+            line1 += f"  |  CI {p25}-{p75}"
+        except Exception:
+            pass
+
+        xgs = min(max(float(heur) / 1.5, 0.0), 1.0)  # 0–1
+        line2 = (
+            f"O2.5 {int(round(o25*100))}%"
+            f"  |  U2.5 {int(round(u25*100))}%"
+            f"  |  XGS {int(round(xgs*100))}%"
+            f"  |  Conf {conf_pct}%"
         )
+        if OS is not None and CS is not None:
+            line2 += f"  |  OS {OS}  CS {CS}"
+        if drivers:
+            # si trop long, on coupe à ~18 chars
+            if len(drivers) > 18:
+                drivers = drivers[:17] + "…"
+            line2 += f"  |  {drivers}"
+
+        lines.append(line1)
+        lines.append(line2)
+        lines.append("")  # espace entre cartes
 
     lines.append("```")
-    # Pas d’escape à l’intérieur d’un bloc ``` ; on escape seulement le titre
-    title_md = f"*{mdv2_escape(title_emoji + ' ' + title_text)}*"
-    return "\n".join([title_md, "\n".join(lines)]) + "\n"
+    return "\n".join(lines)
 
 recap_md = (
     f"*{mdv2_escape('📅 Prévisions du ' + str(today))}*\n"
