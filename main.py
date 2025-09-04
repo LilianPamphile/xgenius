@@ -194,7 +194,7 @@ def get_fixture_with_goals(fixture_id, headers):
 
 # --- Téléchargement des fichiers modèle/scaler depuis GitHub ---
 def telecharger_model_depuis_github():
-    REPO = "LilianPamphile/paris-sportifs"
+    REPO = "LilianPamphile/xgenius"
     BRANCH = "main"
     TOKEN = os.getenv("GITHUB_TOKEN")
 
@@ -1351,7 +1351,7 @@ run(["git", "config", "--global", "user.email", "lilian.pamphile.bts@gmail.com"]
 run(["git", "config", "--global", "user.name", "LilianPamphile"])
 
 REPO_DIR = "main_push"
-REPO_URL = f"https://{GITHUB_TOKEN}@github.com/LilianPamphile/paris-sportifs.git"
+REPO_URL = f"https://{GITHUB_TOKEN}@github.com/LilianPamphile/xgenius.git"
 
 # Nettoyage / clone
 if os.path.exists(REPO_DIR):
