@@ -77,6 +77,13 @@ cursor = conn.cursor()
 
 print("Fin de la défintion de variables")
 
+# --- Défauts safe si une exception survient plus tard ---
+matchs_jour = []
+matchs_over, matchs_under, matchs_opps = [], [], []
+probas_over25 = np.array([])
+pred_p25 = np.array([])
+pred_p75 = np.array([])
+
 ################################### Fontions utiles ###################################
 
 def to_float(x):
@@ -896,14 +903,23 @@ try:
     # ✅ Transformation
     X_live = pd.DataFrame([m["features"] for m in matchs_jour], columns=features)
 
-    X_live = X_live.replace([np.inf, -np.inf], np.nan)
-    for col in list(X_live.columns):
-        miss = X_live[col].isna()
-        if miss.any():
-            X_live[col].fillna(X_live[col].median(), inplace=True)
+    # 1) Tout en numérique + inf -> NaN
+    X_live = X_live.apply(pd.to_numeric, errors="coerce")
+    X_live.replace([np.inf, -np.inf], np.nan, inplace=True)
+    
+    # 2) Médianes colonne par colonne
+    col_medians = X_live.median(numeric_only=True)
+    X_live = X_live.fillna(col_medians)
+    
+    # 3) Filet de sécurité (si une médiane vaut encore NaN → 0.0)
+    X_live = X_live.fillna(0.0)
+    
+    # (optionnel) Sanity check
+    if np.isnan(X_live.values).any():
+        raise ValueError("Still NaN in X_live after imputation.")
     
     X_live_scaled = scaler_ml.transform(X_live)
-    
+
     # prédiction principale
     preds_cat = model_cat.predict(X_live_scaled)
     preds_hgb = model_hgb.predict(X_live_scaled)
@@ -913,7 +929,12 @@ try:
 
 
     # Prédiction classification over 2.5
-    probas_over25 = model_over25.predict_proba(X_live_scaled)[:, 1]  # probabilité que over 2.5
+    try:
+        probas_over25 = model_over25.predict_proba(X_live_scaled)[:, 1]
+    except Exception as e:
+        print("⚠️ Over2.5 classifier failed, fallback to 0.5:", e)
+        probas_over25 = np.full(shape=(len(X_live_scaled),), fill_value=0.5, dtype=float)
+    
 
     # === Pondération par LIGUE (biais de modèles) + micro-biais de buts (baseline ligue)
     LEAGUE_MODEL_WEIGHTS = {
