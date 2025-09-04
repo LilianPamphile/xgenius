@@ -66,11 +66,8 @@ COMPETITIONS = {
 
     # ——— Autres tournois sélections ———
     "CONCACAF Gold Cup": "22",
-    "Asian Cup - Qualification": "35",
     "UEFA U21 Championship": "38",
-    "UEFA U21 Championship - Qualification": "850",
-    "World Cup - U20": "490",
-    "CAFA Nations Cup": "1008",
+    "UEFA U21 Championship - Qualification": "850"
 }
 
 # 🔌 Connexion PostgreSQL Railway
