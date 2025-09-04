@@ -2,14 +2,18 @@ name: train-3days
 
 on:
   schedule:
-    - cron: "0 0 */3 * *"  # 00:00 UTC ≈ 02:00 Paris
+    - cron: "0 0 */3 * *"   # 00:00 UTC ≈ 02:00 Paris
   workflow_dispatch: {}
 
 jobs:
   run-train:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write          # <-- nécessaire pour pousser dans le repo
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0       # <-- utile pour que git push/merge soit propre
 
       - uses: actions/setup-python@v5
         with:
@@ -21,9 +25,7 @@ jobs:
 
       - name: Run train_model.py
         env:
-          GITHUB_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
-          # Si tu as appliqué mes optimisations "light mode", tu peux passer ces vars.
-          # (Pas obligatoire sur GitHub Actions, tu as > 7 Go de RAM.)
+          GITHUB_TOKEN: ${{ secrets.PERSONAL_TOKEN }} # ton PAT, lu par train_model.py
           LIGHT_MODE: "1"
           OPTUNA_TRIALS: "2"
           CV_FOLDS: "2"
