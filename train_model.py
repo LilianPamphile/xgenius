@@ -628,6 +628,43 @@ pd.DataFrame({
 with open(os.path.join(OUT_DIR_ARTIFACTS, "results_summary.json"), "w") as f:
     json.dump(results, f, indent=2, ensure_ascii=False)
 
+import subprocess, shutil
+
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+if not GITHUB_TOKEN:
+    raise ValueError("❌ Le token GitHub (GITHUB_TOKEN) n'est pas défini.")
+
+REPO = "LilianPamphile/xgenius"   # ⚠️ ton nouveau repo
+REPO_DIR = "train_push"
+REPO_URL = f"https://{GITHUB_TOKEN}@github.com/{REPO}.git"
+
+# Nettoyage / clone
+if os.path.exists(REPO_DIR):
+    shutil.rmtree(REPO_DIR)
+subprocess.check_call(["git", "clone", REPO_URL, REPO_DIR])
+
+# Copie des fichiers modèles et artefacts
+import shutil
+dst_models = os.path.join(REPO_DIR, "model_files")
+dst_artifacts = os.path.join(REPO_DIR, "artifacts")
+shutil.rmtree(dst_models, ignore_errors=True)
+shutil.rmtree(dst_artifacts, ignore_errors=True)
+shutil.copytree(OUT_DIR_MODELS, dst_models)
+shutil.copytree(OUT_DIR_ARTIFACTS, dst_artifacts)
+
+# Commit & push
+subprocess.check_call(["git", "config", "user.email", "lilian.pamphile.bts@gmail.com"], cwd=REPO_DIR)
+subprocess.check_call(["git", "config", "user.name", "LilianPamphile"], cwd=REPO_DIR)
+
+subprocess.check_call(["git", "add", "."], cwd=REPO_DIR)
+try:
+    subprocess.check_call(["git", "commit", "-m", f"🤖 Update models {datetime.utcnow().isoformat()}"], cwd=REPO_DIR)
+except subprocess.CalledProcessError:
+    print("ℹ️ Aucun changement à committer.")
+
+subprocess.check_call(["git", "push", "origin", "main"], cwd=REPO_DIR)
+print("✅ Modèles et artefacts poussés sur GitHub.")
+
 print("\n✅ Entraînement terminé.")
 print("— Test final (stacking):", results["stacking"])
 print("— Conformal p25–p75: coverage=%.2f, width=%.2f" % (coverage, width))
