@@ -1029,7 +1029,7 @@ try:
             "forme_ext_marq": getf("forme_away_buts_marques"),
             "solidite_dom": solidite_dom, "solidite_ext": solidite_ext,
             "corners": corners_total, "fautes": fautes_total,
-            "cartons": cartons_total, "poss": poss_moy,
+            "cartons_total": cartons_total, "poss": poss_moy,
         }
     
         # Vérif que toutes les features attendues sont présentes
