@@ -2,7 +2,7 @@ name: daily-main
 
 on:
   schedule:
-    - cron: "0 6 * * *"   # 06:00 UTC ≈ 08:00 Paris (selon l'heure d'été)
+    - cron: "0 6 * * *"   # 06:00 UTC ≈ 08:00 Paris
   workflow_dispatch: {}
 
 jobs:
@@ -24,11 +24,10 @@ jobs:
 
       - name: Run main.py
         env:
-          # --- Secrets requis par main.py ---
-          TOKEN_HUB: ${{ secrets.TOKEN_HUB }}          # PAT utilisé pour: download models + push CSV
-          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}       # si tu modifies main.py pour lire l'env
+          # --- Secrets requis ---
+          TOKEN_HUB: ${{ secrets.TOKEN_HUB }}          # pour train_model.py
+          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
 
-          # --- Telegram ---
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python main.py
