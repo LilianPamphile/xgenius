@@ -630,13 +630,13 @@ with open(os.path.join(OUT_DIR_ARTIFACTS, "results_summary.json"), "w") as f:
 
 import subprocess, shutil
 
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-if not GITHUB_TOKEN:
-    raise ValueError("❌ Le token GitHub (GITHUB_TOKEN) n'est pas défini.")
+TOKEN_HUB = os.getenv("TOKEN_HUB")
+if not TOKEN_HUB:
+    raise ValueError("❌ Le token GitHub (TOKEN_HUB) n'est pas défini.")
 
 REPO = "LilianPamphile/xgenius"   # ⚠️ ton nouveau repo
 REPO_DIR = "train_push"
-REPO_URL = f"https://{GITHUB_TOKEN}@github.com/{REPO}.git"
+REPO_URL = f"https://{TOKEN_HUB}@github.com/{REPO}.git"
 
 # Nettoyage / clone
 if os.path.exists(REPO_DIR):
