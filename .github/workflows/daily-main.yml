@@ -3,11 +3,14 @@ name: daily-main
 on:
   schedule:
     - cron: "0 6 * * *"   # 06:00 UTC ≈ 08:00 Paris (selon l'heure d'été)
-  workflow_dispatch: {}    # bouton "Run workflow" manuel
+  workflow_dispatch: {}
 
 jobs:
   run-main:
     runs-on: ubuntu-latest
+    env:
+      TZ: Europe/Paris
+      PYTHONUNBUFFERED: "1"   # logs en temps réel
     steps:
       - uses: actions/checkout@v4
 
@@ -21,8 +24,11 @@ jobs:
 
       - name: Run main.py
         env:
-          GITHUB_TOKEN: ${{ secrets.TOKEN_HUB }}   # ton PAT, attendu par ton code
+          # --- Secrets requis par main.py ---
+          GITHUB_TOKEN: ${{ secrets.TOKEN_HUB }}          # PAT utilisé pour: download models + push CSV
+          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}       # si tu modifies main.py pour lire l'env
+
+          # --- Telegram ---
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
         run: python main.py
