@@ -196,7 +196,7 @@ def get_fixture_with_goals(fixture_id, headers):
 def telecharger_model_depuis_github():
     REPO = "LilianPamphile/xgenius"
     BRANCH = "main"
-    TOKEN = os.getenv("GITHUB_TOKEN")
+    TOKEN = os.getenv("TOKEN_HUB")
 
     fichiers = {
         "model_files/model_total_buts_catboost_optuna.pkl": "model_files/model_total_buts_catboost_optuna.pkl",
@@ -1342,16 +1342,16 @@ for i, m in enumerate(matchs_jour):
 
 df_today = pd.DataFrame(rows_csv)
 
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-if not GITHUB_TOKEN:
-    raise ValueError("❌ Le token GitHub (GITHUB_TOKEN) n'est pas défini.")
+TOKEN_HUB = os.getenv("TOKEN_HUB")
+if not TOKEN_HUB:
+    raise ValueError("❌ Le token GitHub (TOKEN_HUB) n'est pas défini.")
 
 # --- Git config (comme dans le train) ---
 run(["git", "config", "--global", "user.email", "lilian.pamphile.bts@gmail.com"])
 run(["git", "config", "--global", "user.name", "LilianPamphile"])
 
 REPO_DIR = "main_push"
-REPO_URL = f"https://{GITHUB_TOKEN}@github.com/LilianPamphile/xgenius.git"
+REPO_URL = f"https://{TOKEN_HUB}@github.com/LilianPamphile/xgenius.git"
 
 # Nettoyage / clone
 if os.path.exists(REPO_DIR):
