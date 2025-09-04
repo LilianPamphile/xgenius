@@ -331,7 +331,7 @@ for tr_idx, va_idx in inner_tscv.split(X_trainval_sc):
             verbose=0, random_seed=42, loss_function="RMSE", subsample=0.8, rsm=0.8
         ),
         param_distributions=cat_space,
-        n_trials=60,
+        n_trials=7,
         cv=KFold(n_splits=3, shuffle=True, random_state=42),
         scoring="neg_mean_absolute_error",
         n_jobs=-1
@@ -354,7 +354,7 @@ for tr_idx, va_idx in inner_tscv.split(X_trainval_sc):
     lgb_search = OptunaSearchCV(
         estimator=LGBMRegressor(objective="regression", random_state=42),
         param_distributions=lgb_space,
-        n_trials=60,
+        n_trials=7,
         cv=KFold(n_splits=3, shuffle=True, random_state=42),
         scoring="neg_mean_absolute_error",
         n_jobs=-1
