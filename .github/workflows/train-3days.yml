@@ -25,7 +25,7 @@ jobs:
 
       - name: Run train_model.py
         env:
-          GITHUB_TOKEN: ${{ secrets.PERSONAL_TOKEN }} # ton PAT, lu par train_model.py
+          GITHUB_TOKEN: ${{ secrets.TOKEN_HUB }} # ton PAT, lu par train_model.py
           LIGHT_MODE: "1"
           OPTUNA_TRIALS: "2"
           CV_FOLDS: "2"
