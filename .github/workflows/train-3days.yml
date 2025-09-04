@@ -9,11 +9,21 @@ jobs:
   run-train:
     runs-on: ubuntu-latest
     permissions:
-      contents: write          # <-- nécessaire pour pousser dans le repo
+      contents: write
+
+    env:                      # <<— variables d'env visibles par toutes les étapes
+      TOKEN_HUB: ${{ secrets.TOKEN_HUB }}
+      LIGHT_MODE: "1"
+      OPTUNA_TRIALS: "2"
+      CV_FOLDS: "2"
+      N_JOBS: "1"
+      THREADS: "2"
+      MAX_EST: "350"
+
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0       # <-- utile pour que git push/merge soit propre
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -23,13 +33,8 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Sanity check
+        run: test -n "${TOKEN_HUB}" || (echo "TOKEN_HUB manquant" && exit 1)
+
       - name: Run train_model.py
-        env:
-          GITHUB_TOKEN: ${{ secrets.TOKEN_HUB }} # ton PAT, lu par train_model.py
-          LIGHT_MODE: "1"
-          OPTUNA_TRIALS: "2"
-          CV_FOLDS: "2"
-          N_JOBS: "1"
-          THREADS: "2"
-          MAX_EST: "350"
         run: python train_model.py
