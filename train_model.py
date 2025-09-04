@@ -33,7 +33,7 @@ OUT_DIR_ARTIFACTS = "artifacts"
 os.makedirs(OUT_DIR_MODELS, exist_ok=True)
 os.makedirs(OUT_DIR_ARTIFACTS, exist_ok=True)
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL = "postgresql://postgres:jDDqfaqpspVDBBwsqxuaiSDNXjTxjMmP@shortline.proxy.rlwy.net:36536/railway"
 if not DATABASE_URL:
     raise ValueError("❌ DATABASE_URL manquant dans les variables d'environnement.")
 
