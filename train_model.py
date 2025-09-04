@@ -331,10 +331,10 @@ for tr_idx, va_idx in inner_tscv.split(X_trainval_sc):
             verbose=0, random_seed=42, loss_function="RMSE", subsample=0.8, rsm=0.8
         ),
         param_distributions=cat_space,
-        n_trials=60,
+        n_trials=20,
         cv=KFold(n_splits=3, shuffle=True, random_state=42),
         scoring="neg_mean_absolute_error",
-        n_jobs=-1
+        n_jobs=1
     )
     cat_search.fit(X_tr, y_tr)
     cat = cat_search.best_estimator_
@@ -354,10 +354,10 @@ for tr_idx, va_idx in inner_tscv.split(X_trainval_sc):
     lgb_search = OptunaSearchCV(
         estimator=LGBMRegressor(objective="regression", random_state=42),
         param_distributions=lgb_space,
-        n_trials=60,
+        n_trials=20,
         cv=KFold(n_splits=3, shuffle=True, random_state=42),
         scoring="neg_mean_absolute_error",
-        n_jobs=-1
+        n_jobs=1
     )
     lgb_search.fit(X_tr, y_tr)
     lgb = lgb_search.best_estimator_
