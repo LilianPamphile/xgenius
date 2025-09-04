@@ -25,7 +25,7 @@ jobs:
       - name: Run main.py
         env:
           # --- Secrets requis par main.py ---
-          GITHUB_TOKEN: ${{ secrets.TOKEN_HUB }}          # PAT utilisé pour: download models + push CSV
+          TOKEN_HUB: ${{ secrets.TOKEN_HUB }}          # PAT utilisé pour: download models + push CSV
           RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}       # si tu modifies main.py pour lire l'env
 
           # --- Telegram ---
