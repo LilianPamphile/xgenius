@@ -414,7 +414,7 @@ def evaluate_on_folds(X, y, folds) -> Dict[str, Any]:
         h.fit(Xtr, y[tr])
         l = LGBMRegressor(objective="regression", random_state=42,
                           n_estimators=600, learning_rate=0.06, num_leaves=31,
-                          min_data_in_leaf=30, feature_fraction=0.9, bagging_fraction=0.9)
+                          min_data_in_leaf=30, feature_fraction=0.9, bagging_fraction=0.9, verbosity=-1)
         l.fit(Xtr, y[tr])
 
         pc, ph, pl = c.predict(Xte), h.predict(Xte), l.predict(Xte)
