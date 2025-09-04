@@ -1,0 +1,33 @@
+name: train-3days
+
+on:
+  schedule:
+    - cron: "0 0 */3 * *"  # 00:00 UTC ≈ 02:00 Paris
+  workflow_dispatch: {}
+
+jobs:
+  run-train:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run train_model.py
+        env:
+          GITHUB_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
+          # Si tu as appliqué mes optimisations "light mode", tu peux passer ces vars.
+          # (Pas obligatoire sur GitHub Actions, tu as > 7 Go de RAM.)
+          LIGHT_MODE: "1"
+          OPTUNA_TRIALS: "2"
+          CV_FOLDS: "2"
+          N_JOBS: "1"
+          THREADS: "2"
+          MAX_EST: "350"
+        run: python train_model.py

@@ -1,0 +1,35 @@
+name: daily-main
+
+on:
+  schedule:
+    - cron: "0 6 * * *"   # 06:00 UTC ≈ 08:00 Paris (selon l'heure d'été)
+  workflow_dispatch: {}    # bouton "Run workflow" manuel
+
+jobs:
+  run-main:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run main.py
+        env:
+          GITHUB_TOKEN: ${{ secrets.PERSONAL_TOKEN }}   # ton PAT, attendu par ton code
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+          # TikTok (si utilisés)
+          TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
+          TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
+          TIKTOK_REDIRECT_URI: ${{ secrets.TIKTOK_REDIRECT_URI }}
+          TIKTOK_ACCESS_TOKEN: ${{ secrets.TIKTOK_ACCESS_TOKEN }}
+          TIKTOK_REFRESH_TOKEN: ${{ secrets.TIKTOK_REFRESH_TOKEN }}
+          TIKTOK_ACCESS_EXPIRES_AT: ${{ secrets.TIKTOK_ACCESS_EXPIRES_AT }}
+        run: python main.py
