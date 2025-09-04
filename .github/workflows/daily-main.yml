@@ -21,7 +21,7 @@ jobs:
 
       - name: Run main.py
         env:
-          GITHUB_TOKEN: ${{ secrets.PERSONAL_TOKEN }}   # ton PAT, attendu par ton code
+          GITHUB_TOKEN: ${{ secrets.TOKEN_HUB }}   # ton PAT, attendu par ton code
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
