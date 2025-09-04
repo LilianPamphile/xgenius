@@ -14,7 +14,7 @@ import re
 from telegram_message import send_telegram_message
 
 # 🔑 Clé API SportsData.io
-API_KEY = "b63f99b8e4mshb5383731d310a85p103ea1jsn47e34368f5df"
+API_KEY = os.getenv("RAPIDAPI_KEY")
 
 today = datetime.today().date()
 yesterday = today - timedelta(days=1)
