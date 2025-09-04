@@ -1,0 +1,12 @@
+pandas
+numpy
+psycopg2-binary
+scikit-learn
+xgboost
+lightgbm
+catboost
+optuna
+optuna-integration[sklearn]
+matplotlib
+requests
+streamlit
