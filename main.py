@@ -109,6 +109,35 @@ def num(x, default=0.0):
     except Exception:
         return default
 
+def get_fixtures_with_fallback(url, headers, competition_name, competition_id, date):
+    comp = competition_name.lower()
+    # World Cup (finales + qualifs) ou Euro Championship (finales + qualifs)
+    if "world cup" in comp or "championship" in comp:
+        for saison_try in range(2023, 2027):  # 2023 → 2026 inclus
+            params = {
+                "league": competition_id,
+                "season": saison_try,
+                "date": date,
+                "timezone": "Europe/Paris"
+            }
+            r = requests.get(url, headers=headers, params=params)
+            if r.status_code == 200:
+                resp = r.json().get("response", [])
+                if resp:
+                    return resp, saison_try
+        return [], None
+
+    # Sinon : saison courante
+    params = {
+        "league": competition_id,
+        "season": saison1,
+        "date": date,
+        "timezone": "Europe/Paris"
+    }
+    r = requests.get(url, headers=headers, params=params)
+    if r.status_code == 200:
+        return r.json().get("response", []), saison1
+    return [], None
 
 def extract_stat(stats, stat_name):
     for s in stats.get("statistics", []):
@@ -167,55 +196,43 @@ def telecharger_model_depuis_github():
 # === 📌 1️⃣ Récupération des Matchs ===
 def recuperer_matchs(date, API_KEY):
     url_base = "https://api-football-v1.p.rapidapi.com/v3/fixtures"
-
     headers = {
         "x-rapidapi-key": API_KEY,
         "x-rapidapi-host": "api-football-v1.p.rapidapi.com"
     }
 
-    saison_api = saison1
     total_matchs = 0
-
     print(f"📅 Récupération des matchs pour le {date}")
 
     for competition_name, competition_id in COMPETITIONS.items():
-        saison_api_for_this = 2026 if ("world cup" in competition_name.lower() and "club" not in competition_name.lower()) else saison1
-        params = {
-            "league": competition_id,
-            "season": saison_api_for_this,
-            "date": date,
-            "timezone": "Europe/Paris"
-        }
-        
-        response = requests.get(url_base, headers=headers, params=params)
+        fixtures, saison_use = get_fixtures_with_fallback(
+            url_base, headers, competition_name, competition_id, date
+        )
+        if not fixtures:
+            continue
 
-        if response.status_code == 200:
-            data = response.json().get("response", [])
-            matchs_inseres_competition = 0
+        matchs_inseres_competition = 0
+        for match in fixtures:
+            game_id = match["fixture"]["id"]
+            date_match = match["fixture"]["date"]
+            saison = int(match["league"]["season"])
+            statut = match["fixture"]["status"]["long"]
+            equipe_domicile = match["teams"]["home"]["name"]
+            equipe_exterieur = match["teams"]["away"]["name"]
 
-            for match in data:
-                game_id = match["fixture"]["id"]
-                date_match = match["fixture"]["date"]
-                saison = int(match["league"]["season"])
-                statut = match["fixture"]["status"]["long"]
-                equipe_domicile = match["teams"]["home"]["name"]
-                equipe_exterieur = match["teams"]["away"]["name"]
+            try:
+                cursor.execute("""
+                    INSERT INTO matchs_v2 (game_id, saison, date, statut, equipe_domicile, equipe_exterieur, competition)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (game_id) DO NOTHING
+                """, (game_id, saison, date_match, statut, equipe_domicile, equipe_exterieur, competition_name))
+                matchs_inseres_competition += 1
+                total_matchs += 1
+            except Exception as e:
+                print(f"❌ Erreur insertion match {game_id} : {e}")
 
-                try:
-                    cursor.execute("""
-                        INSERT INTO matchs_v2 (game_id, saison, date, statut, equipe_domicile, equipe_exterieur, competition)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (game_id) DO NOTHING
-                    """, (game_id, saison, date_match, statut, equipe_domicile, equipe_exterieur, competition_name))
-                    matchs_inseres_competition += 1
-                    total_matchs += 1
-                except Exception as e:
-                    print(f"❌ Erreur insertion match {game_id} : {e}")
-
-            if matchs_inseres_competition > 0:
-                print(f"   ✅ {matchs_inseres_competition} matchs insérés pour {competition_name}")
-        else:
-            print(f"❌ Erreur API pour {competition_name} : {response.status_code}")
+        if matchs_inseres_competition > 0:
+            print(f"   ✅ {matchs_inseres_competition} matchs insérés pour {competition_name} (saison {saison_use})")
 
     conn.commit()
     print(f"📊 Total : {total_matchs} matchs insérés pour {date}")
@@ -224,7 +241,6 @@ def recuperer_matchs(date, API_KEY):
 def recuperer_stats_matchs(date, API_KEY):
     url_fixtures = "https://api-football-v1.p.rapidapi.com/v3/fixtures"
     url_stats = "https://api-football-v1.p.rapidapi.com/v3/fixtures/statistics"
-
     headers = {
         "x-rapidapi-key": API_KEY,
         "x-rapidapi-host": "api-football-v1.p.rapidapi.com"
@@ -233,19 +249,9 @@ def recuperer_stats_matchs(date, API_KEY):
     print(f"📅 Stats pour {date}")
 
     for competition_name, competition_id in COMPETITIONS.items():
-        saison_api_for_this = 2026 if ("world cup" in competition_name.lower() and "club" not in competition_name.lower()) else saison1
-        params = {
-            "league": competition_id,
-            "season": saison_api_for_this,
-            "date": date,
-            "timezone": "Europe/Paris"
-        }
-        
-        response = requests.get(url_fixtures, headers=headers, params=params)
-        if response.status_code != 200:
-            continue
-
-        fixtures = response.json().get("response", [])
+        fixtures, _ = get_fixtures_with_fallback(
+            url_fixtures, headers, competition_name, competition_id, date
+        )
         if not fixtures:
             continue
 
@@ -279,9 +285,7 @@ def recuperer_stats_matchs(date, API_KEY):
 
             xg_dom = get_xg(stats_dom)
             xg_ext = get_xg(stats_ext)
-
             buts_dom, buts_ext = get_fixture_with_goals(fixture_id, headers)
-
 
             values = (
                 fixture_id,
@@ -301,7 +305,7 @@ def recuperer_stats_matchs(date, API_KEY):
                 extract_stat(stats_dom, 'Fouls'), extract_stat(stats_ext, 'Fouls'),
                 extract_stat(stats_dom, 'Offsides'), extract_stat(stats_ext, 'Offsides'),
                 extract_stat(stats_dom, 'Yellow Cards'), extract_stat(stats_ext, 'Yellow Cards'),
-                extract_stat(stats_dom, 'Red Cards'), extract_stat(stats_ext, 'Red Cards'), 
+                extract_stat(stats_dom, 'Red Cards'), extract_stat(stats_ext, 'Red Cards'),
                 xg_dom, xg_ext
             )
 
@@ -314,13 +318,12 @@ def recuperer_stats_matchs(date, API_KEY):
                 "buts_dom, buts_ext, passes_dom, passes_ext, passes_reussies_dom, passes_reussies_ext, "
                 "passes_pourcent_dom, passes_pourcent_ext, corners_dom, corners_ext, "
                 "fautes_dom, fautes_ext, hors_jeu_dom, hors_jeu_ext, "
-                "cartons_jaunes_dom, cartons_jaunes_ext, cartons_rouges_dom, cartons_rouges_ext,"
+                "cartons_jaunes_dom, cartons_jaunes_ext, cartons_rouges_dom, cartons_rouges_ext, "
                 "xg_dom, xg_ext"
                 ") VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, "
-                "%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                "%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
                 " ON CONFLICT (game_id) DO NOTHING"
             )
-
             cursor.execute(query, values)
 
     conn.commit()
