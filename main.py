@@ -8,8 +8,7 @@ import pickle
 import pandas as pd
 import numpy as np
 import shutil
-from decimal import Decimal
-import re
+import subprocess
 
 from telegram_message import send_telegram_message
 
@@ -93,11 +92,6 @@ def to_float(x):
     except:
         return np.nan
 
-def esc(x: str) -> str:
-    s = str(x) if x is not None else ""
-    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
-
 # === Helpers MarkdownV2 (monospace) ===
 MD_SPECIAL = r"_*[]()~`>#+-=|{}.!"
 
@@ -107,50 +101,6 @@ def mdv2_escape(s: str) -> str:
     for ch in s:
         out.append("\\" + ch if ch in MD_SPECIAL else ch)
     return "".join(out)
-
-def pad(s, n, align="left"):
-    s = str(s)
-    if len(s) > n:
-        return s[:max(0, n-1)] + "…"
-    return s.ljust(n) if align == "left" else s.rjust(n)
-
-def fmt_pct(x):
-    try:
-        return f"{int(round(float(x)*100)):>3d}%"
-    except:
-        return "  ?%"
-
-
-def team_initials(name: str, max_len: int = 4) -> str:
-    """
-    Transforme 'Paris Saint-Germain' -> 'PSG', 'Manchester United' -> 'MU', 'Real Madrid' -> 'RM', etc.
-    Récupère la première lettre de chaque mot (y compris traits d’union).
-    """
-    if not name:
-        return ""
-    # Enlève ce qui est entre parenthèses (ex: "U23", "B")
-    base = re.sub(r"\(.*?\)", "", str(name))
-
-    # Remplace séparateurs par espaces (pour traiter les '-','&','/')
-    base = re.sub(r"[-/&]+", " ", base)
-
-    # Garde uniquement les tokens alphabétiques (mots)
-    tokens = re.findall(r"[A-Za-zÀ-ÖØ-öø-ÿ]+", base)
-    if not tokens:
-        return str(name)[:max_len].upper()
-
-    abbr = "".join(tok[0] for tok in tokens).upper()
-
-    # Limite la longueur si besoin (utile pour affichage mobile)
-    return abbr[:max_len]
-
-
-def short_name(name: str) -> str:
-    s = str(name)
-    if " vs " in s:
-        home, away = s.split(" vs ", 1)
-        return f"{team_initials(home, 3)}–{team_initials(away, 3)}"  # ex: PSG–OM
-    return team_initials(s, 3)
 
 def num(x, default=0.0):
     """Convertit Decimal/float/int/str en float, remplace None ou NaN par default."""
@@ -163,15 +113,6 @@ def num(x, default=0.0):
         return v
     except Exception:
         return default
-
-
-def convert_to_int(value):
-    try:
-        if isinstance(value, str) and "%" in value:
-            value = value.replace("%", "")
-        return max(int(float(value)), 0)
-    except:
-        return 0
 
 
 def extract_stat(stats, stat_name):
@@ -287,7 +228,6 @@ def recuperer_matchs(date, API_KEY):
 def recuperer_stats_matchs(date, API_KEY):
     url_fixtures = "https://api-football-v1.p.rapidapi.com/v3/fixtures"
     url_stats = "https://api-football-v1.p.rapidapi.com/v3/fixtures/statistics"
-    url_xg = "https://api-football-v1.p.rapidapi.com/v3/fixtures"  # même endpoint, xG inclus dans statistics parfois
 
     headers = {
         "x-rapidapi-key": API_KEY,
@@ -591,20 +531,6 @@ try:
     # Charger le OFFSET dynamique
     with open("model_files/offset_conformal.pkl", "rb") as f:
         OFFSET = pickle.load(f)
-
-
-    # === Récupération historique des anciens matchs ===
-    query_hist = """
-        SELECT m.date::date AS date_match, m.equipe_domicile AS dom, m.equipe_exterieur AS ext,
-               s.buts_dom, s.buts_ext
-        FROM matchs_v2 m
-        JOIN stats_matchs_v2 s ON m.game_id = s.game_id
-        WHERE s.buts_dom IS NOT NULL AND s.buts_ext IS NOT NULL
-    """
-    cursor = conn.cursor()
-    cursor.execute(query_hist)
-    rows_hist = cursor.fetchall()
-    df_all = pd.DataFrame(rows_hist, columns=["date", "dom", "ext", "buts_dom", "buts_ext"])
 
     def get_matchs_jour_for_prediction():
         cursor = conn.cursor()
@@ -960,22 +886,6 @@ try:
     def clip01(x):
         return max(0.0, min(1.0, float(x)))
 
-    def score_over(pred_total, prob_over25, score_heur, incertitude):
-        pred_part = clip01(pred_total / 4.0)
-        prob_part = clip01(prob_over25)
-        heur_part = clip01(min(1.0, score_heur))   # ton heuristique est ~[0,1.5]
-        pen = max(0.0, incertitude - 1.0)          # pénalité si intervalle large
-        return 0.45*pred_part + 0.40*prob_part + 0.15*heur_part - 0.10*pen
-    
-    def score_under(pred_total, prob_over25, score_heur, incertitude):
-        low_goals = clip01((2.0 - pred_total) / 2.0)  # 2.0→0 ; 0.0→1
-        prob_under = clip01(1.0 - prob_over25)
-        heur_low = clip01(1.0 - min(1.0, score_heur)) # “faible potentiel”
-        pen = max(0.0, incertitude - 1.0)
-        return 0.45*low_goals + 0.40*prob_under + 0.15*heur_low - 0.10*pen
-
-
-
     for i, match in enumerate(matchs_jour):
         comp = match.get("competition", "")
     
@@ -1124,29 +1034,9 @@ try:
         
         pos_moy = nz(match.get("poss"), 50.0)         # déjà moyenne dom/ext plus haut
         rt_pos  = clip01(abs(pos_moy - 50.0) / 20.0)  # déséquilibre vs neutre 50/50
-        corners = nz(match.get("corners"), 0.0)
-        fautes  = nz(match.get("fautes"),  0.0)
-        rt_int  = clip01((corners/14.0 + fautes/30.0) / 2.0)
+        rt_int  = clip01((corners_total/14.0 + fautes_total/30.0) / 2.0)
         RT      = (rt_pos + rt_int) / 2.0
         
-        pen_cartons = clip01(nz(match.get("cartons"), 0.0) / 8.0)
-        
-        Open_raw = (
-            0.35*SO + 0.20*SDm + 0.25*RT
-            + 0.10*prob_over25 + 0.10*clip01(pred_total/4.0)
-            - 0.10*pen_cartons
-        )
-        if incertitude <= 1.2: Open_raw += 0.03
-        if incertitude >  1.5: Open_raw -= min(0.10, 0.05*(incertitude - 1.5))
-        OpenScore = int(round(100 * clip01(Open_raw)))
-        
-        Close_raw = (
-            0.35*solid + 0.20*(1.0 - SO) + 0.15*(1.0 - RT)
-            + 0.20*(1.0 - prob_over25) + 0.10*clip01((2.0 - pred_total)/2.0)
-        )
-        if incertitude <  1.2: Close_raw += 0.04
-        if incertitude >  2.0: Close_raw -= 0.05
-        CloseScore = int(round(100 * clip01(Close_raw)))
         
         # Drivers compacts (on en garde 2–3 max)
         drivers = []
@@ -1162,9 +1052,7 @@ try:
         drivers_str = ", ".join(drivers[:3])
         
         # On enrichit le texte 'commentaire' utilisé dans les tableaux Telegram
-        commentaire = f"{commentaire} • OS:{OpenScore} CS:{CloseScore} • {drivers_str}".strip()
-        match["OpenScore"]  = OpenScore
-        match["CloseScore"] = CloseScore
+        commentaire = f"{commentaire} • {drivers_str}".strip()
         match["drivers"]    = drivers_str
         match["confiance"]  = commentaire   # <-- pour que le CSV récupère aussi OS/CS/drivers
 
@@ -1173,13 +1061,25 @@ try:
         score_global -= 0.10 * max(0.0, (incertitude - 1.5))  # pénalité si intervalle large
         score_global = clip01(score_global)
         match["score_global"] = float(score_global)
+
+        META = int(round(100 * score_global))
+        match["META"] = META
     
         if score_global >= 0.68:
-            matchs_over.append((prob_over25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}", commentaire, score_heur, confidence_pct))
+            matchs_over.append((
+                prob_over25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}",
+                commentaire, score_heur, confidence_pct, META
+            ))
         elif score_global <= 0.38:
-            matchs_under.append((prob_under25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}", commentaire, score_heur, confidence_pct))
+            matchs_under.append((
+                prob_under25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}",
+                commentaire, score_heur, confidence_pct, META
+            ))
         else:
-            matchs_opps.append((prob_over25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}", commentaire, score_heur, confidence_pct))
+            matchs_opps.append((
+                prob_over25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}",
+                commentaire, score_heur, confidence_pct, META
+            ))
 
 except Exception as e:
     print("❌ Erreur pendant la génération des prédictions :", e)
@@ -1205,61 +1105,29 @@ def build_table(title_emoji: str, title_text: str, rows, is_under: bool = False)
     lines.append("```")  # bloc monospace pour éviter les retours hasardeux
 
     for prob, name, pred, intervalle, conf_txt, heur, *rest in ordered:
-        # O/U
-        o25 = float(prob) if not is_under else (1.0 - float(prob))
-        u25 = 1.0 - o25
+        prob_pct = int(round(float(prob) * 100))
+        label = "Proba Under2.5" if is_under else "Proba Over2.5"
 
-        # Conférence : on récupère le % s’il est dans conf_txt
-        m = re.search(r"(\d+)%", conf_txt or "")
-        conf_pct = int(m.group(1)) if m else 0
+        try:
+            p25_str, p75_str = [s.strip() for s in str(intervalle).split("–")]
+        except Exception:
+            p25_str, p75_str = "?", "?"
 
-        # Drivers & OS/CS si présents dans le texte (ils le sont, on tronque à 2)
-        # conf_txt ressemble à "✅ Confiance ... • OS:xx CS:yy • drv1, drv2, ..."
-        OS, CS = None, None
-        m_os = re.search(r"OS:(\d+)", conf_txt or "")
-        m_cs = re.search(r"CS:(\d+)", conf_txt or "")
-        if m_os: OS = int(m_os.group(1))
-        if m_cs: CS = int(m_cs.group(1))
+        META = int(rest[-1]) if rest else 0
 
-        # On isole les drivers à la fin après le dernier "•"
         drivers = ""
         parts = (conf_txt or "").split("•")
         if len(parts) >= 3:
             drv = parts[-1].strip()
-            # Tronque à 2 drivers si trop long
-            if "," in drv:
-                drivers = ", ".join([d.strip() for d in drv.split(",")][:2])
-            else:
-                drivers = drv
+            drivers = ", ".join([d.strip() for d in drv.split(",")][:3])
 
-        # Lignes compactes (≤ ~35–40 caractères chacune)
-        line1 = f"{short_name(name)} | G {pred:.2f}"
-        # intervalle souvent long → on le compacte "CI {p25}-{p75}"
-        try:
-            p25, p75 = [s.strip() for s in str(intervalle).split("–")]
-            line1 += f"  |  CI {p25}-{p75}"
-        except Exception:
-            pass
-
-        xgs = min(max(float(heur) / 1.5, 0.0), 1.0)  # 0–1
-        line2 = (
-            f"O2.5 {int(round(o25*100))}%"
-            f"  |  U2.5 {int(round(u25*100))}%"
-            f"  |  XGS {int(round(xgs*100))}%"
-            f"  |  Conf {conf_pct}%"
+        lines.append(f"{name}")
+        lines.append(
+            f"Buts attendus : {pred:.2f} ({p25_str}–{p75_str}) | META {META} | {label} : {prob_pct}%"
         )
-        if OS is not None and CS is not None:
-            line2 += f"  |  OS {OS}  CS {CS}"
-        if drivers:
-            # si trop long, on coupe à ~18 chars
-            if len(drivers) > 18:
-                drivers = drivers[:17] + "…"
-            line2 += f"  |  {drivers}"
-
-        lines.append(line1)
-        lines.append(line2)
-        lines.append("")  # espace entre cartes
-
+        lines.append(f"Drivers : {drivers}")
+        lines.append("")
+        
     lines.append("```")
     return "\n".join(lines)
 
@@ -1284,13 +1152,6 @@ for chunk in messages:
     if len(chunk) > 3800:
         chunk = chunk[:3800] + "\n_" + mdv2_escape("(troncature…)") + "_"
     send_telegram_message(BOT_TOKEN, CHAT_ID, chunk, parse_mode="MarkdownV2")
-
-# === Sauvegarde dans un unique fichier historique CSV ===
-import os
-import pandas as pd
-from datetime import datetime
-import shutil
-import subprocess
 
 today_str = datetime.now().strftime("%Y-%m-%d")
 
