@@ -61,12 +61,7 @@ COMPETITIONS = {
     "World Cup - Qualification Europe": "32",
     "World Cup - Qualification Oceania": "33",
     "World Cup - Qualification South America": "34",
-    "World Cup - Qualification Intercontinental Play-offs": "37",
-
-    # ——— Autres tournois sélections ———
-    "CONCACAF Gold Cup": "22",
-    "UEFA U21 Championship": "38",
-    "UEFA U21 Championship - Qualification": "850"
+    "World Cup - Qualification Intercontinental Play-offs": "37"
 }
 
 # 🔌 Connexion PostgreSQL Railway
@@ -184,13 +179,14 @@ def recuperer_matchs(date, API_KEY):
     print(f"📅 Récupération des matchs pour le {date}")
 
     for competition_name, competition_id in COMPETITIONS.items():
+        saison_api_for_this = 2026 if ("world cup" in competition_name.lower() and "club" not in competition_name.lower()) else saison1
         params = {
             "league": competition_id,
-            "season": saison_api,
+            "season": saison_api_for_this,
             "date": date,
             "timezone": "Europe/Paris"
         }
-
+        
         response = requests.get(url_base, headers=headers, params=params)
 
         if response.status_code == 200:
@@ -237,13 +233,14 @@ def recuperer_stats_matchs(date, API_KEY):
     print(f"📅 Stats pour {date}")
 
     for competition_name, competition_id in COMPETITIONS.items():
+        saison_api_for_this = 2026 if ("world cup" in competition_name.lower() and "club" not in competition_name.lower()) else saison1
         params = {
             "league": competition_id,
-            "season": saison1,
+            "season": saison_api_for_this,
             "date": date,
             "timezone": "Europe/Paris"
         }
-
+        
         response = requests.get(url_fixtures, headers=headers, params=params)
         if response.status_code != 200:
             continue
