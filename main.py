@@ -241,10 +241,6 @@ def recuperer_stats_matchs(date, API_KEY):
         }
 
         rf = requests.get(url_fixtures, headers=headers, params=params)
-        if rf.status_code != 200:
-            print(f"❌ API fixtures {competition_name} (s{ s aison_api_for_this }): {rf.status_code} -> {rf.text[:180]}")
-            continue
-
         fixtures = rf.json().get("response", [])
         if not fixtures:
             continue
