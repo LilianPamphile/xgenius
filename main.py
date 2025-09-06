@@ -111,7 +111,7 @@ def num(x, default=0.0):
 
 def get_fixtures_with_fallback(url, headers, competition_name, competition_id, date):
     # 1) Qualifs Coupe du Monde : on essaie 2023..2026
-    if "World Cup - Qualification" in competition_name:
+    if "World Cup" in competition_name:
         for saison_api in range(2023, 2027):
             params = {"league": competition_id, "season": saison_api, "date": date, "timezone": "Europe/Paris"}
             r = requests.get(url, headers=headers, params=params)
