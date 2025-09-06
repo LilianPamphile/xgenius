@@ -158,6 +158,7 @@ def telecharger_model_depuis_github():
         else:
             print(f"❌ {local} ({r.status_code})")
 
+# --- mapping saisons fixes ---
 def get_saison_api(competition_name: str) -> int:
     cname = competition_name.lower()
     if "world cup - qualification africa" in cname:
@@ -191,13 +192,7 @@ def recuperer_matchs(date, API_KEY):
             "timezone": "Europe/Paris"
         }
 
-        response = requests.get(url_fixtures, headers=headers, params=params)
-        if response.status_code != 200:
-            print(f"❌ API fixtures {competition_name} (s{saison_api_for_this}): {response.status_code} -> {response.text[:180]}")
-            continue
-
-
-
+        r = requests.get(url_base, headers=headers, params=params)
         fixtures = r.json().get("response", [])
         matchs_inseres_competition = 0
 
@@ -246,11 +241,9 @@ def recuperer_stats_matchs(date, API_KEY):
         }
 
         rf = requests.get(url_fixtures, headers=headers, params=params)
-        # dans recuperer_stats_matchs(...)
         if rf.status_code != 200:
-            print(f"❌ API fixtures {competition_name} (s{saison_api_for_this}): {rf.status_code} -> {rf.text[:180]}")
+            print(f"❌ API fixtures {competition_name} (s{ s aison_api_for_this }): {rf.status_code} -> {rf.text[:180]}")
             continue
-
 
         fixtures = rf.json().get("response", [])
         if not fixtures:
@@ -262,10 +255,6 @@ def recuperer_stats_matchs(date, API_KEY):
             equipe_ext = match["teams"]["away"]["name"]
 
             rs = requests.get(url_stats, headers=headers, params={"fixture": fixture_id})
-            if rs.status_code != 200:
-                print(f"❌ API stats fixture={fixture_id}: {rs.status_code} -> {rs.text[:180]}")
-                continue
-
             stats_data = rs.json().get("response", [])
             if len(stats_data) != 2:
                 continue
@@ -329,6 +318,7 @@ def recuperer_stats_matchs(date, API_KEY):
 
     conn.commit()
     print(f"✅ Stats enrichies insérées avec succès pour {date}")
+
     
 ### Mettre a jout table stats globals
 
