@@ -92,8 +92,7 @@ pip install -r requirements.txt
 python train_model.py   # Entraînement + push artefacts
 python main.py          # Prédictions quotidiennes + export + Telegram
 ```
-📂 Sorties
-📊 Telegram Bot → résumé quotidien des matchs
+📂 Sorties : Telegram Bot → résumé quotidien des matchs
 
 💾 CSV → suivi_predictions/historique_predictions.csv
 📁 Models & artefacts → model_files/, artifacts/
