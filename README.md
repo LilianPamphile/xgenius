@@ -85,19 +85,18 @@ Les prédictions combinent :
 git clone https://github.com/LilianPamphile/xgenius.git
 cd xgenius
 pip install -r requirements.txt
+```
+
 ▶️ Exécution
-bash
-Copier le code
+```bash
 python train_model.py   # Entraînement + push artefacts
 python main.py          # Prédictions quotidiennes + export + Telegram
+```
 📂 Sorties
 📊 Telegram Bot → résumé quotidien des matchs
 
 💾 CSV → suivi_predictions/historique_predictions.csv
-
 📁 Models & artefacts → model_files/, artifacts/
-
-🎥 TikTok (optionnel) → publication auto de vidéos
 
 👤 Auteur
 Lilian Pamphile
