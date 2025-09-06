@@ -1,100 +1,104 @@
 # ⚽ Soccer Match Prediction Pipeline
 
 **Projet personnel - 2025**  
-Pipeline complet et automatisé de **prédiction quotidienne du profil offensif ou défensif** des matchs de football européens.
+Pipeline complet et automatisé de **prédiction quotidienne du profil offensif ou défensif** des matchs de football.
 
-
+---
 
 ## 🚀 Objectif du projet
 
-Ce projet a pour but de prédire le **nombre total de buts** attendus pour chaque match de football (compétitions européennes majeures), en combinant :
-- des modèles de machine learning avancés (CatBoost, LightGBM, etc.)
-- des données enrichies (forme, xG, statistiques défensives...)
-- un score heuristique & prédictif : **GMOS**
+Prédire le **nombre de buts attendus** par match et classer les rencontres en :
 
+- **Ouvertes** (offensives, ≥ 2.5 buts probables)  
+- **Fermées** (défensives, ≤ 2.5 buts)  
+- **Neutres** (équilibrées)  
+
+Les prédictions combinent :  
+- modèles ML empilés (CatBoost, LightGBM, HGB)  
+- intervalles conformaux calibrés  
+- un modèle heuristique (forme, xG, tirs, discipline)  
+- ajustements par ligue  
+
+---
 
 ## 🧱 Architecture du pipeline
 
-1. **Collecte des données**
-   - API : [RapidAPI - API-Football](https://rapidapi.com/api-sports/api/api-football)
-   - Stockage : PostgreSQL (Railway)
+### 1. Collecte
+- API : [API-Football](https://rapidapi.com/api-sports/api/api-football)  
+- Stockage : PostgreSQL (Railway)
 
-2. **Enrichissement des données**
-   - Calcul de la forme des équipes (5 derniers matchs)
-   - Statistiques moyennes globales : tirs, possession, passes, xG, etc.
-   - Création de variables croisées (e.g. diff_xG, total tirs cadrés)
+### 2. Enrichissement
+- Forme récente (5 derniers matchs)  
+- Stats globales par équipe (xG, tirs, possession, clean sheets)  
+- Variables croisées + macros ligue (moyenne buts 60j, avantage domicile)  
 
-3. **Modélisation et entraînement**
-   - Régression : `CatBoost` (Optuna), `HistGradientBoosting`, `LightGBM` (quantile)
-   - Estimation d’intervalles (p25–p75) avec modèles conformaux
-   - Sauvegarde des modèles sur GitHub
+### 3. Modélisation
+- **Stacking** : CatBoost + HistGradientBoosting + LightGBM  
+- **Conformal quantiles** (p25–p75, coverage calibré)  
+- **Classif Over2.5 calibrée** (isotonic)  
+- **Score heuristique** (proxy basé sur stats brutes)  
 
-4. **Scoring et prédiction**
-   - Score **GMOS** = 40% prédiction ML + 30% heuristique + 30% incertitude
-   - Classement des matchs : `ouverts` / `fermés` / `neutres`
-   - Envoi automatisé quotidien par email 📩
+### 4. Prédictions & diffusion
+- Classement **Over / Under / Opps**  
+- Export **CSV** : `suivi_predictions/historique_predictions.csv`  
+- Envoi automatique sur **Telegram** 📲  
+- (Optionnel) Publication vidéo sur **TikTok** 🎥  
 
-## 🧠 Modèles ML utilisés
+---
 
-| Modèle                  | Description                          |
-|-------------------------|--------------------------------------|
-| CatBoost + Optuna       | Modèle principal optimisé (RMSE < 1.5) |
-| HistGradientBoosting    | Modèle secondaire d’ensemble         |
-| LightGBM quantile       | Estimation de l’intervalle de buts   |
+## 🧠 Modèles ML
 
+| Modèle                 | Rôle                                     |
+|------------------------|------------------------------------------|
+| **CatBoost (Optuna)**  | Learner principal                        |
+| **HistGradientBoosting** | Learner secondaire                     |
+| **LightGBM (quantile)** | Intervalles de confiance                |
+| **Ridge Stacking**      | Meta-modèle final                       |
+| **Classif GBC calibrée** | Prédiction Over 2.5 (proba calibrée)   |
+| **CatBoost heuristique** | Score basé sur signaux explicites      |
 
-## 🧬 Features extraites
+---
 
-- **Historique :** moyenne buts, xG, % BTTS, over 2.5  
-- **Défensif :** solidité, clean sheets, std buts encaissés  
-- **Forme récente :** marqués/encaissés sur les 5 derniers matchs  
-- **Profil match :** fautes, cartons, corners, possession  
+## 📊 Scores & indicateurs
 
-## 📊 GMOS Score
+- **Prédiction buts attendus** (continu)  
+- **Intervalle conformal** (incertitude)  
+- **Probabilité Over 2.5** calibrée  
+- **META score** (0–100) = indice global de match ouvert  
+- **Drivers** (ex. `xG↑`, `tirs cadrés↑`, `défenses friables`, `solidité↑`)  
 
-Le **GMOS (Global Match Open Score)** est un score hybride (0 à 100) qui indique si un match a un fort potentiel offensif.
-
-> **≥ 65 :** Match ouvert 🔓  
-> **≤ 50 :** Match fermé 🔒  
-> Entre 51–64 : Match neutre ⚪
-
-Il combine :
-- la prédiction du total de buts (ML)
-- les intervalles de confiance (p25–p75)
-- des facteurs heuristiques (forme, xG, tirs, etc.)
-
+---
 
 ## ⚙️ Lancement du projet
 
 ### 🔧 Prérequis
-- Python 3.9+
-- PostgreSQL (Railway recommandé)
-- Variables d'environnement :  
-  - `GITHUB_TOKEN`  
-  - Clé API `x-rapidapi-key`
+- Python 3.10+  
+- PostgreSQL (Railway recommandé)  
+- Variables d’environnement :
+  - `RAPIDAPI_KEY`  
+  - `TOKEN_HUB` (push GitHub)  
+  - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`  
+  - (optionnel) `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`, `TIKTOK_ACCESS_TOKEN`  
 
 ### 📦 Installation
-
 ```bash
-git clone https://github.com/LilianPamphile/paris-sportifs.git
-cd paris-sportifs
+git clone https://github.com/LilianPamphile/xgenius.git
+cd xgenius
 pip install -r requirements.txt
-```
+▶️ Exécution
+bash
+Copier le code
+python train_model.py   # Entraînement + push artefacts
+python main.py          # Prédictions quotidiennes + export + Telegram
+📂 Sorties
+📊 Telegram Bot → résumé quotidien des matchs
 
-### ▶️ Exécution
-```bash
-python train_model.py   # Pour entraîner les modèles
-python main.py          # Pour lancer la prédiction quotidienne
-```
+💾 CSV → suivi_predictions/historique_predictions.csv
 
-### 📥 Exemple de sortie (email quotidien)
-<img width="857" height="498" alt="image" src="https://github.com/user-attachments/assets/d7ea5f0c-858c-4006-a754-e29187002903" />
+📁 Models & artefacts → model_files/, artifacts/
 
-### 📁 Modèles sauvegardés
-📂 Dossier model_files
-Contient : modèles .pkl, scaler, features.
+🎥 TikTok (optionnel) → publication auto de vidéos
 
-### 👤 Auteur
+👤 Auteur
 Lilian Pamphile
-
 📧 lilian.pamphile.bts@gmail.com
