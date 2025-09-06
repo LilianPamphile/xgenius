@@ -191,10 +191,12 @@ def recuperer_matchs(date, API_KEY):
             "timezone": "Europe/Paris"
         }
 
-        r = requests.get(url_base, headers=headers, params=params)
-        if rf.status_code != 200:
-            print(f"❌ API fixtures {competition_name} (s{saison_api_for_this}): {rf.status_code} -> {rf.text[:180]}")
+        response = requests.get(url_fixtures, headers=headers, params=params)
+        if response.status_code != 200:
+            print(f"❌ API fixtures {competition_name} (s{saison_api_for_this}): {response.status_code} -> {response.text[:180]}")
             continue
+
+
 
         fixtures = r.json().get("response", [])
         matchs_inseres_competition = 0
