@@ -95,8 +95,7 @@ python main.py          # Prédictions quotidiennes + export + Telegram
 📂 Sorties : Telegram Bot → résumé quotidien des matchs
 
 💾 CSV → suivi_predictions/historique_predictions.csv
-📁 Models & artefacts → model_files/, artifacts/
 
-👤 Auteur
+### 👤 Auteur
 Lilian Pamphile
-📧 lilian.pamphile.bts@gmail.com
+📧 lilian.pamphile@gmail.com
