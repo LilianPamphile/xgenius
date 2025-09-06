@@ -110,33 +110,23 @@ def num(x, default=0.0):
         return default
 
 def get_fixtures_with_fallback(url, headers, competition_name, competition_id, date):
-    comp = competition_name.lower()
-    # World Cup (finales + qualifs) ou Euro Championship (finales + qualifs)
-    if "world cup" in comp or "championship" in comp:
-        for saison_try in range(2023, 2027):  # 2023 → 2026 inclus
-            params = {
-                "league": competition_id,
-                "season": saison_try,
-                "date": date,
-                "timezone": "Europe/Paris"
-            }
-            r = requests.get(url, headers=headers, params=params)
+    # Cas 2: toutes les autres qualifs Coupe du Monde -> essai 2023..2026
+    if "World Cup - Qualification" in competition_name:
+        for saison_api in range(2023, 2027):
+            params = {"league": competition_id, "season": saison_api, "date": date, "timezone": "Europe/Paris"}
+            r = requests.get(url_base, headers=headers, params=params)
             if r.status_code == 200:
                 resp = r.json().get("response", [])
                 if resp:
-                    return resp, saison_try
+                    return resp, saison_api
         return [], None
 
-    # Sinon : saison courante
-    params = {
-        "league": competition_id,
-        "season": saison1,
-        "date": date,
-        "timezone": "Europe/Paris"
-    }
-    r = requests.get(url, headers=headers, params=params)
+    # Cas 3: défaut -> saison courante
+    saison_api = saison1
+    params = {"league": competition_id, "season": saison_api, "date": date, "timezone": "Europe/Paris"}
+    r = requests.get(url_base, headers=headers, params=params)
     if r.status_code == 200:
-        return r.json().get("response", []), saison1
+        return r.json().get("response", []), saison_api
     return [], None
 
 def extract_stat(stats, stat_name):
