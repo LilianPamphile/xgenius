@@ -114,7 +114,7 @@ def get_fixtures_with_fallback(url, headers, competition_name, competition_id, d
     if "World Cup - Qualification" in competition_name:
         for saison_api in range(2023, 2027):
             params = {"league": competition_id, "season": saison_api, "date": date, "timezone": "Europe/Paris"}
-            r = requests.get(url_base, headers=headers, params=params)
+            r = requests.get(url, headers=headers, params=params)
             if r.status_code == 200:
                 resp = r.json().get("response", [])
                 if resp:
@@ -124,7 +124,7 @@ def get_fixtures_with_fallback(url, headers, competition_name, competition_id, d
     # Cas 3: défaut -> saison courante
     saison_api = saison1
     params = {"league": competition_id, "season": saison_api, "date": date, "timezone": "Europe/Paris"}
-    r = requests.get(url_base, headers=headers, params=params)
+    r = requests.get(url, headers=headers, params=params)
     if r.status_code == 200:
         return r.json().get("response", []), saison_api
     return [], None
