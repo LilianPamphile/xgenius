@@ -1080,16 +1080,15 @@ def build_table(title_emoji: str, title_text: str, rows, is_under: bool = False)
     """
     header = f"*{mdv2_escape(title_emoji + ' ' + title_text)}*"
     if not rows:
-        return f"{header}\n_Aucun match détecté._\n"
+        return f"{header}\n_{mdv2_escape('Aucun match détecté.')}_\n"
 
-    # Tri par le dernier champ (confiance %) si présent, sinon par proba
+    # Tri par le dernier champ (META) si présent, sinon par proba
     try:
         ordered = sorted(rows, key=lambda x: x[-1], reverse=True)
     except Exception:
         ordered = rows
 
-    lines = [header]
-    lines.append("```")  # bloc monospace pour éviter les retours hasardeux
+    lines = [header]  # ✅ pas de bloc ``` (pre) → on évite les erreurs Telegram
 
     for prob, name, pred, intervalle, conf_txt, heur, *rest in ordered:
         prob_pct = int(round(float(prob) * 100))
@@ -1102,20 +1101,24 @@ def build_table(title_emoji: str, title_text: str, rows, is_under: bool = False)
 
         META = int(rest[-1]) if rest else 0
 
+        # Drivers (on garde 3 max)
         drivers = ""
         parts = (conf_txt or "").split("•")
         if len(parts) >= 3:
             drv = parts[-1].strip()
             drivers = ", ".join([d.strip() for d in drv.split(",")][:3])
 
-        lines.append(f"{name}")
-        lines.append(
+        # ✅ Échapper chaque ligne complète (les points, tirets, etc. seront safe)
+        line1 = mdv2_escape(name)
+        line2 = mdv2_escape(
             f"Buts attendus : {pred:.2f} ({p25_str}–{p75_str}) | META {META} | {label} : {prob_pct}%"
         )
-        lines.append(f"Drivers : {drivers}")
-        lines.append("")
-        
-    lines.append("```")
+        lines.append(line1)
+        lines.append(line2)
+        if drivers:
+            lines.append(mdv2_escape(f"Drivers : {drivers}"))
+        lines.append("")  # ligne vide entre matchs
+
     return "\n".join(lines)
 
 recap_md = (
