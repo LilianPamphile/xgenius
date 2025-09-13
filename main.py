@@ -295,22 +295,29 @@ def recuperer_stats_matchs(date, API_KEY):
                 xg_dom, xg_ext
             )
 
-            cursor.execute(
-                "INSERT INTO stats_matchs_v2 ("
-                "game_id, possession_dom, possession_ext, tirs_dom, tirs_ext, "
-                "tirs_cadres_dom, tirs_cadres_ext, tirs_hors_cadre_dom, tirs_hors_cadre_ext, "
-                "tirs_bloques_dom, tirs_bloques_ext, tirs_dans_boite_dom, tirs_dans_boite_ext, "
-                "tirs_hors_boite_dom, tirs_hors_boite_ext, arrets_dom, arrets_ext, "
-                "buts_dom, buts_ext, passes_dom, passes_ext, passes_reussies_dom, passes_reussies_ext, "
-                "passes_pourcent_dom, passes_pourcent_ext, corners_dom, corners_ext, "
-                "fautes_dom, fautes_ext, hors_jeu_dom, hors_jeu_ext, "
-                "cartons_jaunes_dom, cartons_jaunes_ext, cartons_rouges_dom, cartons_rouges_ext, "
-                "xg_dom, xg_ext"
-                ") VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, "
-                "%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                " ON CONFLICT (game_id) DO NOTHING",
-                values
-            )
+            cols = [
+                "game_id",
+                "possession_dom","possession_ext","tirs_dom","tirs_ext",
+                "tirs_cadres_dom","tirs_cadres_ext","tirs_hors_cadre_dom","tirs_hors_cadre_ext",
+                "tirs_bloques_dom","tirs_bloques_ext","tirs_dans_boite_dom","tirs_dans_boite_ext",
+                "tirs_hors_boite_dom","tirs_hors_boite_ext","arrets_dom","arrets_ext",
+                "buts_dom","buts_ext","passes_dom","passes_ext","passes_reussies_dom","passes_reussies_ext",
+                "passes_pourcent_dom","passes_pourcent_ext","corners_dom","corners_ext",
+                "fautes_dom","fautes_ext","hors_jeu_dom","hors_jeu_ext",
+                "cartons_jaunes_dom","cartons_jaunes_ext","cartons_rouges_dom","cartons_rouges_ext",
+                "xg_dom","xg_ext"
+            ]
+            placeholders = ", ".join(["%s"] * len(cols))
+            
+            if len(values) != len(cols):
+                raise ValueError(f"Mismatch INSERT stats_matchs_v2: {len(values)} values for {len(cols)} columns")
+            
+            sql_insert = f"""
+                INSERT INTO stats_matchs_v2 ({", ".join(cols)})
+                VALUES ({placeholders})
+                ON CONFLICT (game_id) DO NOTHING
+            """
+            cursor.execute(sql_insert, values)
 
     conn.commit()
     print(f"✅ Stats enrichies insérées avec succès pour {date}")
