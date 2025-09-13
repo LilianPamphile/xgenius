@@ -37,10 +37,10 @@ COMPETITIONS = {
     "Saudi Professional League": "307",
 
     # ——— Coupes nationales (Top Europe) ———
-    "FA Cup": "45",
-    "League Cup": "48",
-    "DFB Pokal": "81",
-    "Coppa Italia": "137",
+    #"FA Cup": "45",
+    #"League Cup": "48",
+    #"DFB Pokal": "81",
+    #"Coppa Italia": "137",
 
     # ——— Sélections & grandes compétitions internationales ———
     "World Cup": "1",
