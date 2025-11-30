@@ -1,10 +1,10 @@
-# ========================= train_model.py — vSegPoisson ==========================
+# ========================= train_model.py — vSeg2_ADPoisson ==========================
 # Objectif :
 #   - prédire le total de buts
-#   - baseline Poisson attaque/défense
-#   - 1 modèle global HGB
-#   - 3 modèles HGB spécialisés via segmentation (low / medium / high)
-#   - backtest chrono + test final, sauvegarde artefacts
+#   - baseline Poisson attaque/défense (non entraînée)
+#   - modèle global HGB
+#   - segmentation 2 classes (≤2 buts / >2 buts)
+#   - modèles spécialisés low / high + fallback si incertitude
 # ================================================================================
 
 import os
@@ -34,7 +34,7 @@ if not DATABASE_URL:
 
 # -------------------------- UTILS ---------------------------
 
-def np_rmse(y_true, y_pred):
+def np_rmse(y_true, y_pred) -> float:
     return float(np.sqrt(mean_squared_error(y_true, y_pred)))
 
 
@@ -48,17 +48,11 @@ def metrics_block(y_true, y_pred) -> Dict[str, float]:
 
 def segment_from_y(y: float) -> int:
     """
-    Segmentation des matchs selon le total de buts réel :
-      - 0 : low  (<= 1 but)
-      - 1 : medium (2 ou 3 buts)
-      - 2 : high (>= 4 buts)
+    Segmentation simplifiée :
+        0 -> match "low" (≤ 2 buts)
+        1 -> match "high" (> 2 buts)
     """
-    if y <= 1:
-        return 0
-    elif y <= 3:
-        return 1
-    else:
-        return 2
+    return 0 if y <= 2.0 else 1
 
 
 # ----------------------- DATA LOADING -----------------------
@@ -104,14 +98,14 @@ conn.close()
 
 df = pd.DataFrame(rows, columns=cols)
 
-# Convert Decimal -> float si nécessaire
+# Convertir Decimal → float si besoin
 for c in df.columns:
     if df[c].notna().any() and isinstance(df[c].dropna().iloc[0], Decimal):
         df[c] = df[c].astype(float)
 
 df["date_match"] = pd.to_datetime(df["date_match"])
 
-# (Optionnel) Filtrer sur dernières saisons si besoin (exemple : à partir de 2019)
+# (Optionnel) filtrer sur les dernières saisons si tu veux
 # df = df[df["date_match"] >= pd.to_datetime("2019-08-01")].reset_index(drop=True)
 
 
@@ -167,11 +161,16 @@ FEATURES: List[str] = [
     "forme_home_buts_encaisses",
     "forme_away_buts_marques",
     "forme_away_buts_encaisses",
+    "attaque_home",
+    "defense_home",
+    "attaque_away",
+    "defense_away",
     "xg_dom",
     "xg_ext",
     "tirs_dom",
     "tirs_ext",
     "league_avg_goals_60d",
+    "xg_exp_total",
 ]
 
 records: List[Dict[str, Any]] = []
@@ -184,6 +183,16 @@ for _, r in df.sort_values("date_match").iterrows():
 
     bm_home, be_home = forme_split(dom, dref, role="home")
     bm_away, be_away = forme_split(ext, dref, role="away")
+
+    # Attaque/défense basées sur buts récents
+    attaque_home = bm_home
+    defense_home = be_home
+    attaque_away = bm_away
+    defense_away = be_away
+
+    # "xg" attendu à partir de ces forces
+    xg_exp_total = attaque_home * defense_away + attaque_away * defense_home
+
     league_avg = league_avg_goals(comp, dref, window=60)
 
     rec = {
@@ -192,18 +201,31 @@ for _, r in df.sort_values("date_match").iterrows():
         "competition": comp,
         "y_total": float(r["total_buts"]),
 
+        # forme buts bruts
         "forme_home_buts_marques": bm_home,
         "forme_home_buts_encaisses": be_home,
         "forme_away_buts_marques": bm_away,
         "forme_away_buts_encaisses": be_away,
 
+        # attaque / défense
+        "attaque_home": attaque_home,
+        "defense_home": defense_home,
+        "attaque_away": attaque_away,
+        "defense_away": defense_away,
+
+        # xG "macro" (saison) depuis stats_globales
         "xg_dom": float(r["xg_dom"] or 0.3),
         "xg_ext": float(r["xg_ext"] or 0.3),
 
+        # rythme
         "tirs_dom": float(r["tirs_dom"] or 0.0),
         "tirs_ext": float(r["tirs_ext"] or 0.0),
 
+        # ligue
         "league_avg_goals_60d": league_avg,
+
+        # xg attendu à partir d'attaque/défense
+        "xg_exp_total": xg_exp_total,
     }
 
     records.append(rec)
@@ -224,9 +246,9 @@ y_seg_all = np.array([segment_from_y(y) for y in y_all], dtype=int)
 
 def baseline_poisson_row(row: pd.Series) -> float:
     """
-    Baseline Poisson attaque/défense :
-      λ_home ≈ moyenne buts marqués dom + moyenne buts encaissés ext
-      λ_away ≈ moyenne buts marqués ext + moyenne buts encaissés dom
+    Poisson attaque/défense simple :
+        λ_home ≈ (bm_home + be_away) / 2
+        λ_away ≈ (bm_away + be_home) / 2
     """
     bm_home = row["forme_home_buts_marques"]
     be_home = row["forme_home_buts_encaisses"]
@@ -263,7 +285,13 @@ baseline_test = baseline_all[test_idx]
 
 # --------------------------- BACKTEST MODELS ---------------------------
 
-def backtest_models():
+def backtest_models(proba_threshold: float = 0.6):
+    """
+    Backtest :
+      - baseline Poisson
+      - global HGB
+      - HGB segmenté (low/high) avec fallback global si proba max < threshold
+    """
     rows = []
 
     for fold_i, (tr, val) in enumerate(folds[:-1]):  # exclut le dernier (test final)
@@ -272,7 +300,7 @@ def backtest_models():
         seg_tr, seg_val = y_seg_all[tr], y_seg_all[val]
         base_val = baseline_all[val]
 
-        # 1) modèle global HGB (tous segments confondus)
+        # 1) modèle global HGB (tous matchs)
         model_global = HistGradientBoostingRegressor(
             max_depth=6,
             max_leaf_nodes=31,
@@ -283,7 +311,7 @@ def backtest_models():
         model_global.fit(X_tr, y_tr)
         pred_global_val = model_global.predict(X_val)
 
-        # 2) classifier segmentation
+        # 2) classifier segmentation (2 classes)
         seg_clf = HistGradientBoostingClassifier(
             max_depth=4,
             max_leaf_nodes=31,
@@ -292,13 +320,15 @@ def backtest_models():
             random_state=42
         )
         seg_clf.fit(X_tr, seg_tr)
-        seg_pred_val = seg_clf.predict(X_val)
+        seg_proba_val = seg_clf.predict_proba(X_val)  # shape (n, 2)
+        seg_pred_val = seg_proba_val.argmax(axis=1)
+        seg_conf_val = seg_proba_val.max(axis=1)
 
         # 3) modèles spécialisés par segment
         seg_models: Dict[int, HistGradientBoostingRegressor] = {}
-        for seg_label in [0, 1, 2]:
+        for seg_label in [0, 1]:
             idx_seg_tr = np.where(seg_tr == seg_label)[0]
-            if len(idx_seg_tr) < 50:
+            if len(idx_seg_tr) < 80:
                 # trop peu de données -> on utilisera le modèle global comme fallback
                 seg_models[seg_label] = None
                 continue
@@ -313,19 +343,17 @@ def backtest_models():
             model_seg.fit(X_tr[idx_seg_tr], y_tr[idx_seg_tr])
             seg_models[seg_label] = model_seg
 
-        # prédictions segmentées
+        # prédictions segmentées avec fallback global
         pred_seg_val = np.zeros_like(y_val, dtype=float)
+        for i_row in range(len(y_val)):
+            label = seg_pred_val[i_row]
+            conf = seg_conf_val[i_row]
 
-        for seg_label in [0, 1, 2]:
-            idx = np.where(seg_pred_val == seg_label)[0]
-            if len(idx) == 0:
-                continue
-
-            if seg_models[seg_label] is not None:
-                pred_seg_val[idx] = seg_models[seg_label].predict(X_val[idx])
+            if conf < proba_threshold or seg_models[label] is None:
+                # pas assez sûr ou pas de modèle spécialisé -> fallback global
+                pred_seg_val[i_row] = pred_global_val[i_row]
             else:
-                # fallback : modèle global si pas assez de data pour ce segment
-                pred_seg_val[idx] = model_global.predict(X_val[idx])
+                pred_seg_val[i_row] = seg_models[label].predict(X_val[i_row : i_row + 1])[0]
 
         rows.append({
             "fold": fold_i,
@@ -353,12 +381,13 @@ def backtest_models():
             "rmse": avg("segmented_hgb", "rmse"),
         },
         "n_folds": len(rows),
+        "proba_threshold": proba_threshold,
     }
 
     return rows, summary
 
 
-back_rows, back_summary = backtest_models()
+back_rows, back_summary = backtest_models(proba_threshold=0.6)
 
 print("\n=== Backtest (moyenne des folds, hors test final) ===")
 print(json.dumps(back_summary, indent=2, ensure_ascii=False))
@@ -388,9 +417,9 @@ seg_clf_final.fit(X_trainval, y_seg_trainval)
 
 # 3) modèles spécialisés finaux
 seg_models_final: Dict[int, HistGradientBoostingRegressor] = {}
-for seg_label in [0, 1, 2]:
+for seg_label in [0, 1]:
     idx_seg = np.where(y_seg_trainval == seg_label)[0]
-    if len(idx_seg) < 50:
+    if len(idx_seg) < 80:
         seg_models_final[seg_label] = None
         continue
     m_seg = HistGradientBoostingRegressor(
@@ -406,21 +435,28 @@ for seg_label in [0, 1, 2]:
 
 # --------------------------- TEST FINAL ---------------------------
 
+# baseline
 pred_base_test = baseline_test
 
+# global
 pred_global_test = model_global_final.predict(X_test)
 
-seg_pred_test = seg_clf_final.predict(X_test)
-pred_seg_test = np.zeros_like(y_test, dtype=float)
+# segmenté avec fallback
+seg_proba_test = seg_clf_final.predict_proba(X_test)
+seg_pred_test = seg_proba_test.argmax(axis=1)
+seg_conf_test = seg_proba_test.max(axis=1)
 
-for seg_label in [0, 1, 2]:
-    idx = np.where(seg_pred_test == seg_label)[0]
-    if len(idx) == 0:
-        continue
-    if seg_models_final[seg_label] is not None:
-        pred_seg_test[idx] = seg_models_final[seg_label].predict(X_test[idx])
+pred_seg_test = np.zeros_like(y_test, dtype=float)
+threshold_final = 0.6
+
+for i_row in range(len(y_test)):
+    label = seg_pred_test[i_row]
+    conf = seg_conf_test[i_row]
+
+    if conf < threshold_final or seg_models_final[label] is None:
+        pred_seg_test[i_row] = pred_global_test[i_row]
     else:
-        pred_seg_test[idx] = model_global_final.predict(X_test[idx])
+        pred_seg_test[i_row] = seg_models_final[label].predict(X_test[i_row : i_row + 1])[0]
 
 test_metrics = {
     "baseline": metrics_block(y_test, pred_base_test),
@@ -438,7 +474,7 @@ print(json.dumps(test_metrics, indent=2, ensure_ascii=False))
 joblib.dump(model_global_final, os.path.join(OUT_DIR, "model_global_total_goals.pkl"))
 joblib.dump(seg_clf_final, os.path.join(OUT_DIR, "segment_classifier.pkl"))
 
-for seg_label in [0, 1, 2]:
+for seg_label in [0, 1]:
     m = seg_models_final[seg_label]
     if m is not None:
         joblib.dump(m, os.path.join(OUT_DIR, f"model_segment_{seg_label}.pkl"))
