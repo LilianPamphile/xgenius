@@ -1,7 +1,11 @@
-# ========================= train_model.py — vFINAL ==========================
-# Objectif : prédire le total de buts avec 3 modèles (baseline, CatBoost, HGB)
-# Pipeline simple, fiable, chrono, sans modèles inutiles
-# ============================================================================
+# ========================= train_model.py — vSegPoisson ==========================
+# Objectif :
+#   - prédire le total de buts
+#   - baseline Poisson attaque/défense
+#   - 1 modèle global HGB
+#   - 3 modèles HGB spécialisés via segmentation (low / medium / high)
+#   - backtest chrono + test final, sauvegarde artefacts
+# ================================================================================
 
 import os
 import json
@@ -14,8 +18,7 @@ import psycopg2
 
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import mean_absolute_error, mean_squared_error
-from sklearn.ensemble import HistGradientBoostingRegressor
-from catboost import CatBoostRegressor
+from sklearn.ensemble import HistGradientBoostingRegressor, HistGradientBoostingClassifier
 import joblib
 
 
@@ -25,6 +28,8 @@ OUT_DIR = "models"
 os.makedirs(OUT_DIR, exist_ok=True)
 
 DATABASE_URL = "postgresql://postgres:jDDqfaqpspVDBBwsqxuaiSDNXjTxjMmP@shortline.proxy.rlwy.net:36536/railway"
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL manquant.")
 
 
 # -------------------------- UTILS ---------------------------
@@ -32,12 +37,28 @@ DATABASE_URL = "postgresql://postgres:jDDqfaqpspVDBBwsqxuaiSDNXjTxjMmP@shortline
 def np_rmse(y_true, y_pred):
     return float(np.sqrt(mean_squared_error(y_true, y_pred)))
 
-def metrics_block(y_true, y_pred):
+
+def metrics_block(y_true, y_pred) -> Dict[str, float]:
     return {
         "mae": float(mean_absolute_error(y_true, y_pred)),
         "rmse": np_rmse(y_true, y_pred),
-        "n": int(len(y_true))
+        "n": int(len(y_true)),
     }
+
+
+def segment_from_y(y: float) -> int:
+    """
+    Segmentation des matchs selon le total de buts réel :
+      - 0 : low  (<= 1 but)
+      - 1 : medium (2 ou 3 buts)
+      - 2 : high (>= 4 buts)
+    """
+    if y <= 1:
+        return 0
+    elif y <= 3:
+        return 1
+    else:
+        return 2
 
 
 # ----------------------- DATA LOADING -----------------------
@@ -64,9 +85,13 @@ query = """
         s.buts_dom + s.buts_ext AS total_buts
     FROM matchs_v2 m
     JOIN stats_globales_v2 sg1
-      ON m.equipe_domicile = sg1.equipe AND m.competition = sg1.competition AND m.saison = sg1.saison
+      ON m.equipe_domicile = sg1.equipe
+     AND m.competition = sg1.competition
+     AND m.saison = sg1.saison
     JOIN stats_globales_v2 sg2
-      ON m.equipe_exterieur = sg2.equipe AND m.competition = sg2.competition AND m.saison = sg2.saison
+      ON m.equipe_exterieur = sg2.equipe
+     AND m.competition = sg2.competition
+     AND m.saison = sg2.saison
     JOIN stats_matchs_v2 s
       ON m.game_id = s.game_id
     WHERE s.buts_dom IS NOT NULL
@@ -79,11 +104,15 @@ conn.close()
 
 df = pd.DataFrame(rows, columns=cols)
 
+# Convert Decimal -> float si nécessaire
 for c in df.columns:
-    if isinstance(df[c].dropna().iloc[0], Decimal):
+    if df[c].notna().any() and isinstance(df[c].dropna().iloc[0], Decimal):
         df[c] = df[c].astype(float)
 
 df["date_match"] = pd.to_datetime(df["date_match"])
+
+# (Optionnel) Filtrer sur dernières saisons si besoin (exemple : à partir de 2019)
+# df = df[df["date_match"] >= pd.to_datetime("2019-08-01")].reset_index(drop=True)
 
 
 # ----------------------- FEATURE ENGINEERING -----------------------
@@ -96,20 +125,23 @@ df_hist = df[[
 df_hist["total_buts"] = df_hist["buts_dom"] + df_hist["buts_ext"]
 
 
-def forme_split(equipe, date_ref, role):
-    """On calcule forme buts marqués/encaissés (5 derniers matchs)."""
-    q = df_hist["date_match"] < date_ref
+def forme_split(equipe: str, date_ref, role: str, n: int = 5):
+    """
+    Forme buts marqués / encaissés sur les n derniers matchs avant date_ref.
+    role = "home" ou "away"
+    """
+    q = (df_hist["date_match"] < date_ref)
 
-    if role:  # domicile
+    if role == "home":
         q &= (df_hist["equipe_domicile"] == equipe)
-    else:      # extérieur
+    else:
         q &= (df_hist["equipe_exterieur"] == equipe)
 
-    m = df_hist.loc[q].sort_values("date_match", ascending=False).head(5)
+    m = df_hist.loc[q].sort_values("date_match", ascending=False).head(n)
     if len(m) == 0:
-        return 0., 0.
+        return 0.0, 0.0
 
-    if role:
+    if role == "home":
         bm = m["buts_dom"].values
         be = m["buts_ext"].values
     else:
@@ -119,15 +151,18 @@ def forme_split(equipe, date_ref, role):
     return float(np.mean(bm)), float(np.mean(be))
 
 
-def league_avg_goals(competition, date_ref):
+def league_avg_goals(competition: str, date_ref, window: int = 60) -> float:
+    """
+    Moyenne de buts par match dans la ligue sur les 'window' derniers matchs avant date_ref.
+    """
     q = (df_hist["competition"] == competition) & (df_hist["date_match"] < date_ref)
-    m = df_hist.loc[q].tail(60)
+    m = df_hist.loc[q].sort_values("date_match", ascending=False).head(window)
     if len(m) == 0:
         return 2.5
     return float(m["total_buts"].mean())
 
 
-FEATURES = [
+FEATURES: List[str] = [
     "forme_home_buts_marques",
     "forme_home_buts_encaisses",
     "forme_away_buts_marques",
@@ -136,23 +171,25 @@ FEATURES = [
     "xg_ext",
     "tirs_dom",
     "tirs_ext",
-    "league_avg_goals_60d"
+    "league_avg_goals_60d",
 ]
-
 
 records: List[Dict[str, Any]] = []
 
 for _, r in df.sort_values("date_match").iterrows():
+    dom = r["equipe_domicile"]
+    ext = r["equipe_exterieur"]
+    dref = r["date_match"]
+    comp = r["competition"]
 
-    bm_home, be_home = forme_split(r["equipe_domicile"], r["date_match"], role=True)
-    bm_away, be_away = forme_split(r["equipe_exterieur"], r["date_match"], role=False)
-
-    league_avg = league_avg_goals(r["competition"], r["date_match"])
+    bm_home, be_home = forme_split(dom, dref, role="home")
+    bm_away, be_away = forme_split(ext, dref, role="away")
+    league_avg = league_avg_goals(comp, dref, window=60)
 
     rec = {
         "game_id": r["game_id"],
-        "date_match": r["date_match"],
-        "competition": r["competition"],
+        "date_match": dref,
+        "competition": comp,
         "y_total": float(r["total_buts"]),
 
         "forme_home_buts_marques": bm_home,
@@ -166,147 +203,260 @@ for _, r in df.sort_values("date_match").iterrows():
         "tirs_dom": float(r["tirs_dom"] or 0.0),
         "tirs_ext": float(r["tirs_ext"] or 0.0),
 
-        "league_avg_goals_60d": league_avg
+        "league_avg_goals_60d": league_avg,
     }
 
     records.append(rec)
 
 dfX = pd.DataFrame(records)
 
-# clamp tirs (sécurité anti-outliers)
+# clamp tirs (anti outliers)
 dfX["tirs_dom"] = dfX["tirs_dom"].clip(0, 25)
 dfX["tirs_ext"] = dfX["tirs_ext"].clip(0, 25)
-
-
-# ----------------------------- DATASET -----------------------------
 
 X_all = dfX[FEATURES].astype(float).values
 y_all = dfX["y_total"].astype(float).values
 dates = dfX["date_match"].values
+y_seg_all = np.array([segment_from_y(y) for y in y_all], dtype=int)
 
 
-# ----------------------------- BASELINE -----------------------------
+# ----------------------------- BASELINE POISSON -----------------------------
 
-def baseline_poisson(r):
-    lam_home = 0.5 * (r["forme_home_buts_marques"] + r["forme_away_buts_encaisses"])
-    lam_away = 0.5 * (r["forme_away_buts_marques"] + r["forme_home_buts_encaisses"])
-    return max(0., lam_home + lam_away)
+def baseline_poisson_row(row: pd.Series) -> float:
+    """
+    Baseline Poisson attaque/défense :
+      λ_home ≈ moyenne buts marqués dom + moyenne buts encaissés ext
+      λ_away ≈ moyenne buts marqués ext + moyenne buts encaissés dom
+    """
+    bm_home = row["forme_home_buts_marques"]
+    be_home = row["forme_home_buts_encaisses"]
+    bm_away = row["forme_away_buts_marques"]
+    be_away = row["forme_away_buts_encaisses"]
 
-baseline_all = dfX.apply(baseline_poisson, axis=1).values
+    lam_home = 0.5 * (bm_home + be_away)
+    lam_away = 0.5 * (bm_away + be_home)
+    lam_total = max(0.0, lam_home + lam_away)
+    return lam_total
+
+baseline_all = dfX.apply(baseline_poisson_row, axis=1).values
 
 
-# --------------------------- SPLITS ---------------------------
+# --------------------------- SPLITS CHRONO ---------------------------
+
+order = np.argsort(dates)
+X_all = X_all[order]
+y_all = y_all[order]
+y_seg_all = y_seg_all[order]
+baseline_all = baseline_all[order]
+dfX = dfX.iloc[order].reset_index(drop=True)
 
 tscv = TimeSeriesSplit(n_splits=5)
 folds = list(tscv.split(X_all))
 
 trainval_idx, test_idx = folds[-1]
 X_trainval, y_trainval = X_all[trainval_idx], y_all[trainval_idx]
+y_seg_trainval = y_seg_all[trainval_idx]
 X_test, y_test = X_all[test_idx], y_all[test_idx]
+y_seg_test = y_seg_all[test_idx]
 baseline_test = baseline_all[test_idx]
 
 
-# --------------------------- BACKTEST ---------------------------
+# --------------------------- BACKTEST MODELS ---------------------------
 
 def backtest_models():
-
     rows = []
 
-    for fold_i, (tr, val) in enumerate(folds[:-1]):
+    for fold_i, (tr, val) in enumerate(folds[:-1]):  # exclut le dernier (test final)
         X_tr, X_val = X_all[tr], X_all[val]
         y_tr, y_val = y_all[tr], y_all[val]
-        b_val = baseline_all[val]
+        seg_tr, seg_val = y_seg_all[tr], y_seg_all[val]
+        base_val = baseline_all[val]
 
-        model_cat = CatBoostRegressor(
-            depth=6, learning_rate=0.06, iterations=600,
-            loss_function="RMSE", random_seed=42, verbose=False
+        # 1) modèle global HGB (tous segments confondus)
+        model_global = HistGradientBoostingRegressor(
+            max_depth=6,
+            max_leaf_nodes=31,
+            learning_rate=0.05,
+            min_samples_leaf=20,
+            random_state=42
         )
-        model_cat.fit(X_tr, y_tr)
-        p_cat = model_cat.predict(X_val)
+        model_global.fit(X_tr, y_tr)
+        pred_global_val = model_global.predict(X_val)
 
-        model_hgb = HistGradientBoostingRegressor(
-            max_depth=6, max_leaf_nodes=31, learning_rate=0.05,
-            min_samples_leaf=20, random_state=42
+        # 2) classifier segmentation
+        seg_clf = HistGradientBoostingClassifier(
+            max_depth=4,
+            max_leaf_nodes=31,
+            learning_rate=0.05,
+            min_samples_leaf=20,
+            random_state=42
         )
-        model_hgb.fit(X_tr, y_tr)
-        p_hgb = model_hgb.predict(X_val)
+        seg_clf.fit(X_tr, seg_tr)
+        seg_pred_val = seg_clf.predict(X_val)
+
+        # 3) modèles spécialisés par segment
+        seg_models: Dict[int, HistGradientBoostingRegressor] = {}
+        for seg_label in [0, 1, 2]:
+            idx_seg_tr = np.where(seg_tr == seg_label)[0]
+            if len(idx_seg_tr) < 50:
+                # trop peu de données -> on utilisera le modèle global comme fallback
+                seg_models[seg_label] = None
+                continue
+
+            model_seg = HistGradientBoostingRegressor(
+                max_depth=6,
+                max_leaf_nodes=31,
+                learning_rate=0.05,
+                min_samples_leaf=20,
+                random_state=42
+            )
+            model_seg.fit(X_tr[idx_seg_tr], y_tr[idx_seg_tr])
+            seg_models[seg_label] = model_seg
+
+        # prédictions segmentées
+        pred_seg_val = np.zeros_like(y_val, dtype=float)
+
+        for seg_label in [0, 1, 2]:
+            idx = np.where(seg_pred_val == seg_label)[0]
+            if len(idx) == 0:
+                continue
+
+            if seg_models[seg_label] is not None:
+                pred_seg_val[idx] = seg_models[seg_label].predict(X_val[idx])
+            else:
+                # fallback : modèle global si pas assez de data pour ce segment
+                pred_seg_val[idx] = model_global.predict(X_val[idx])
 
         rows.append({
             "fold": fold_i,
-            "baseline": metrics_block(y_val, b_val),
-            "catboost": metrics_block(y_val, p_cat),
-            "hgb": metrics_block(y_val, p_hgb)
+            "baseline": metrics_block(y_val, base_val),
+            "global_hgb": metrics_block(y_val, pred_global_val),
+            "segmented_hgb": metrics_block(y_val, pred_seg_val),
         })
 
-    return rows
+    # résumé moyenne des folds
+    def avg(model_key: str, metric_key: str) -> float:
+        vals = [r[model_key][metric_key] for r in rows]
+        return float(np.mean(vals)) if vals else float("nan")
 
-
-back_rows = backtest_models()
-
-# résumé
-summary = {
-    "baseline": {
-        "mae": float(np.mean([r["baseline"]["mae"] for r in back_rows])),
-        "rmse": float(np.mean([r["baseline"]["rmse"] for r in back_rows])),
-    },
-    "catboost": {
-        "mae": float(np.mean([r["catboost"]["mae"] for r in back_rows])),
-        "rmse": float(np.mean([r["catboost"]["rmse"] for r in back_rows])),
-    },
-    "hgb": {
-        "mae": float(np.mean([r["hgb"]["mae"] for r in back_rows])),
-        "rmse": float(np.mean([r["hgb"]["rmse"] for r in back_rows])),
+    summary = {
+        "baseline": {
+            "mae": avg("baseline", "mae"),
+            "rmse": avg("baseline", "rmse"),
+        },
+        "global_hgb": {
+            "mae": avg("global_hgb", "mae"),
+            "rmse": avg("global_hgb", "rmse"),
+        },
+        "segmented_hgb": {
+            "mae": avg("segmented_hgb", "mae"),
+            "rmse": avg("segmented_hgb", "rmse"),
+        },
+        "n_folds": len(rows),
     }
-}
 
-print("\n=== Backtest (moyenne folds) ===")
-print(json.dumps(summary, indent=2, ensure_ascii=False))
+    return rows, summary
+
+
+back_rows, back_summary = backtest_models()
+
+print("\n=== Backtest (moyenne des folds, hors test final) ===")
+print(json.dumps(back_summary, indent=2, ensure_ascii=False))
 
 
 # --------------------------- TRAIN FINAL ---------------------------
 
-model_cat = CatBoostRegressor(
-    depth=6, learning_rate=0.06, iterations=800,
-    loss_function="RMSE", random_seed=42, verbose=False
+# 1) modèle global
+model_global_final = HistGradientBoostingRegressor(
+    max_depth=6,
+    max_leaf_nodes=31,
+    learning_rate=0.05,
+    min_samples_leaf=20,
+    random_state=42
 )
-model_cat.fit(X_trainval, y_trainval)
+model_global_final.fit(X_trainval, y_trainval)
 
-model_hgb = HistGradientBoostingRegressor(
-    max_depth=6, max_leaf_nodes=31, learning_rate=0.05,
-    min_samples_leaf=20, random_state=42
+# 2) classifier segmentation final
+seg_clf_final = HistGradientBoostingClassifier(
+    max_depth=4,
+    max_leaf_nodes=31,
+    learning_rate=0.05,
+    min_samples_leaf=20,
+    random_state=42
 )
-model_hgb.fit(X_trainval, y_trainval)
+seg_clf_final.fit(X_trainval, y_seg_trainval)
+
+# 3) modèles spécialisés finaux
+seg_models_final: Dict[int, HistGradientBoostingRegressor] = {}
+for seg_label in [0, 1, 2]:
+    idx_seg = np.where(y_seg_trainval == seg_label)[0]
+    if len(idx_seg) < 50:
+        seg_models_final[seg_label] = None
+        continue
+    m_seg = HistGradientBoostingRegressor(
+        max_depth=6,
+        max_leaf_nodes=31,
+        learning_rate=0.05,
+        min_samples_leaf=20,
+        random_state=42
+    )
+    m_seg.fit(X_trainval[idx_seg], y_trainval[idx_seg])
+    seg_models_final[seg_label] = m_seg
 
 
 # --------------------------- TEST FINAL ---------------------------
 
-p_cat = model_cat.predict(X_test)
-p_hgb = model_hgb.predict(X_test)
-p_mean = 0.5 * (p_cat + p_hgb)
+pred_base_test = baseline_test
+
+pred_global_test = model_global_final.predict(X_test)
+
+seg_pred_test = seg_clf_final.predict(X_test)
+pred_seg_test = np.zeros_like(y_test, dtype=float)
+
+for seg_label in [0, 1, 2]:
+    idx = np.where(seg_pred_test == seg_label)[0]
+    if len(idx) == 0:
+        continue
+    if seg_models_final[seg_label] is not None:
+        pred_seg_test[idx] = seg_models_final[seg_label].predict(X_test[idx])
+    else:
+        pred_seg_test[idx] = model_global_final.predict(X_test[idx])
 
 test_metrics = {
-    "baseline": metrics_block(y_test, baseline_test),
-    "catboost": metrics_block(y_test, p_cat),
-    "hgb": metrics_block(y_test, p_hgb),
-    "mean_ensemble": metrics_block(y_test, p_mean)
+    "baseline": metrics_block(y_test, pred_base_test),
+    "global_hgb": metrics_block(y_test, pred_global_test),
+    "segmented_hgb": metrics_block(y_test, pred_seg_test),
 }
 
 print("\n=== Test final ===")
 print(json.dumps(test_metrics, indent=2, ensure_ascii=False))
 
 
-# --------------------------- SAVE ---------------------------
+# --------------------------- SAVE ARTEFACTS ---------------------------
 
-joblib.dump(model_cat, f"{OUT_DIR}/model_cat_total_goals.pkl")
-joblib.dump(model_hgb, f"{OUT_DIR}/model_hgb_total_goals.pkl")
+# modèles
+joblib.dump(model_global_final, os.path.join(OUT_DIR, "model_global_total_goals.pkl"))
+joblib.dump(seg_clf_final, os.path.join(OUT_DIR, "segment_classifier.pkl"))
 
-with open(f"{OUT_DIR}/FEATURES_TOTAL_BUTS.json", "w") as f:
+for seg_label in [0, 1, 2]:
+    m = seg_models_final[seg_label]
+    if m is not None:
+        joblib.dump(m, os.path.join(OUT_DIR, f"model_segment_{seg_label}.pkl"))
+
+# features
+with open(os.path.join(OUT_DIR, "FEATURES_TOTAL_BUTS.json"), "w", encoding="utf-8") as f:
     json.dump(FEATURES, f, indent=2, ensure_ascii=False)
 
-with open(f"{OUT_DIR}/training_metrics_total_goals.json", "w") as f:
-    json.dump({
-        "backtest": summary,
-        "test_final": test_metrics
-    }, f, indent=2, ensure_ascii=False)
+# métriques
+with open(os.path.join(OUT_DIR, "training_metrics_total_goals.json"), "w", encoding="utf-8") as f:
+    json.dump(
+        {
+            "backtest_summary": back_summary,
+            "test_final": test_metrics,
+        },
+        f,
+        indent=2,
+        ensure_ascii=False,
+    )
 
 print("\n=== DONE: modèles & métriques sauvegardés dans ./models ===")
