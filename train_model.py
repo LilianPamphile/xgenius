@@ -1,16 +1,16 @@
-# ========================= train_model.py — vSeg2_ADPoisson ==========================
+# ========================= train_model.py — vEnsemble_ADPoisson ==========================
 # Objectif :
 #   - prédire le total de buts
 #   - baseline Poisson attaque/défense (non entraînée)
-#   - modèle global HGB
-#   - segmentation 2 classes (≤2 buts / >2 buts)
-#   - modèles spécialisés low / high + fallback si incertitude
+#   - modèle global ML (CatBoost + HGB)
+#   - ensemble final = combinaison optimale (ML + Poisson + xg_exp_total)
+#   - backtest chrono + test final, sauvegarde artefacts
 # ================================================================================
 
 import os
 import json
 from decimal import Decimal
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -18,7 +18,8 @@ import psycopg2
 
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import mean_absolute_error, mean_squared_error
-from sklearn.ensemble import HistGradientBoostingRegressor, HistGradientBoostingClassifier
+from sklearn.ensemble import HistGradientBoostingRegressor
+from catboost import CatBoostRegressor
 import joblib
 
 
@@ -46,13 +47,39 @@ def metrics_block(y_true, y_pred) -> Dict[str, float]:
     }
 
 
-def segment_from_y(y: float) -> int:
+def best_ensemble_weights(
+    y: np.ndarray,
+    pred_ml: np.ndarray,
+    pred_poisson: np.ndarray,
+    xg_exp: np.ndarray,
+    grid: List[float] = None,
+) -> Tuple[float, float, float, float]:
     """
-    Segmentation simplifiée :
-        0 -> match "low" (≤ 2 buts)
-        1 -> match "high" (> 2 buts)
+    Cherche (w1, w2, w3) qui minimisent la MAE de :
+        pred = w1 * pred_ml + w2 * pred_poisson + w3 * xg_exp
+    via une petite grid-search sur les poids.
+    Les poids sont normalisés pour que w1 + w2 + w3 = 1.
     """
-    return 0 if y <= 2.0 else 1
+    if grid is None:
+        grid = [0.0, 0.25, 0.5, 0.75, 1.0]
+
+    best_mae = 1e9
+    best_weights = (1.0, 0.0, 0.0)
+
+    for w1 in grid:
+        for w2 in grid:
+            for w3 in grid:
+                if w1 + w2 + w3 == 0:
+                    continue
+                s = w1 + w2 + w3
+                w1n, w2n, w3n = w1 / s, w2 / s, w3 / s
+                pred = w1n * pred_ml + w2n * pred_poisson + w3n * xg_exp
+                mae = mean_absolute_error(y, pred)
+                if mae < best_mae:
+                    best_mae = mae
+                    best_weights = (w1n, w2n, w3n)
+
+    return best_weights[0], best_weights[1], best_weights[2], float(best_mae)
 
 
 # ----------------------- DATA LOADING -----------------------
@@ -105,7 +132,7 @@ for c in df.columns:
 
 df["date_match"] = pd.to_datetime(df["date_match"])
 
-# (Optionnel) filtrer sur les dernières saisons si tu veux
+# (Optionnel) filtrer sur dernières saisons
 # df = df[df["date_match"] >= pd.to_datetime("2019-08-01")].reset_index(drop=True)
 
 
@@ -184,13 +211,11 @@ for _, r in df.sort_values("date_match").iterrows():
     bm_home, be_home = forme_split(dom, dref, role="home")
     bm_away, be_away = forme_split(ext, dref, role="away")
 
-    # Attaque/défense basées sur buts récents
     attaque_home = bm_home
     defense_home = be_home
     attaque_away = bm_away
     defense_away = be_away
 
-    # "xg" attendu à partir de ces forces
     xg_exp_total = attaque_home * defense_away + attaque_away * defense_home
 
     league_avg = league_avg_goals(comp, dref, window=60)
@@ -201,30 +226,23 @@ for _, r in df.sort_values("date_match").iterrows():
         "competition": comp,
         "y_total": float(r["total_buts"]),
 
-        # forme buts bruts
         "forme_home_buts_marques": bm_home,
         "forme_home_buts_encaisses": be_home,
         "forme_away_buts_marques": bm_away,
         "forme_away_buts_encaisses": be_away,
 
-        # attaque / défense
         "attaque_home": attaque_home,
         "defense_home": defense_home,
         "attaque_away": attaque_away,
         "defense_away": defense_away,
 
-        # xG "macro" (saison) depuis stats_globales
         "xg_dom": float(r["xg_dom"] or 0.3),
         "xg_ext": float(r["xg_ext"] or 0.3),
 
-        # rythme
         "tirs_dom": float(r["tirs_dom"] or 0.0),
         "tirs_ext": float(r["tirs_ext"] or 0.0),
 
-        # ligue
         "league_avg_goals_60d": league_avg,
-
-        # xg attendu à partir d'attaque/défense
         "xg_exp_total": xg_exp_total,
     }
 
@@ -232,14 +250,14 @@ for _, r in df.sort_values("date_match").iterrows():
 
 dfX = pd.DataFrame(records)
 
-# clamp tirs (anti outliers)
+# clamp tirs (anti-outliers)
 dfX["tirs_dom"] = dfX["tirs_dom"].clip(0, 25)
 dfX["tirs_ext"] = dfX["tirs_ext"].clip(0, 25)
 
 X_all = dfX[FEATURES].astype(float).values
 y_all = dfX["y_total"].astype(float).values
 dates = dfX["date_match"].values
-y_seg_all = np.array([segment_from_y(y) for y in y_all], dtype=int)
+xg_exp_vec = dfX["xg_exp_total"].astype(float).values
 
 
 # ----------------------------- BASELINE POISSON -----------------------------
@@ -268,7 +286,7 @@ baseline_all = dfX.apply(baseline_poisson_row, axis=1).values
 order = np.argsort(dates)
 X_all = X_all[order]
 y_all = y_all[order]
-y_seg_all = y_seg_all[order]
+xg_exp_vec = xg_exp_vec[order]
 baseline_all = baseline_all[order]
 dfX = dfX.iloc[order].reset_index(drop=True)
 
@@ -277,92 +295,54 @@ folds = list(tscv.split(X_all))
 
 trainval_idx, test_idx = folds[-1]
 X_trainval, y_trainval = X_all[trainval_idx], y_all[trainval_idx]
-y_seg_trainval = y_seg_all[trainval_idx]
 X_test, y_test = X_all[test_idx], y_all[test_idx]
-y_seg_test = y_seg_all[test_idx]
+baseline_trainval = baseline_all[trainval_idx]
 baseline_test = baseline_all[test_idx]
+xg_exp_trainval = xg_exp_vec[trainval_idx]
+xg_exp_test = xg_exp_vec[test_idx]
 
 
-# --------------------------- BACKTEST MODELS ---------------------------
+# --------------------------- BACKTEST (GLOBAL ML) ---------------------------
 
-def backtest_models(proba_threshold: float = 0.6):
-    """
-    Backtest :
-      - baseline Poisson
-      - global HGB
-      - HGB segmenté (low/high) avec fallback global si proba max < threshold
-    """
+def backtest_ml_global():
     rows = []
 
-    for fold_i, (tr, val) in enumerate(folds[:-1]):  # exclut le dernier (test final)
+    for fold_i, (tr, val) in enumerate(folds[:-1]):  # on exclut le dernier (test final)
         X_tr, X_val = X_all[tr], X_all[val]
         y_tr, y_val = y_all[tr], y_all[val]
-        seg_tr, seg_val = y_seg_all[tr], y_seg_all[val]
         base_val = baseline_all[val]
 
-        # 1) modèle global HGB (tous matchs)
-        model_global = HistGradientBoostingRegressor(
+        # CatBoost
+        model_cat = CatBoostRegressor(
+            depth=6,
+            learning_rate=0.06,
+            iterations=700,
+            loss_function="RMSE",
+            random_seed=42,
+            verbose=False,
+        )
+        model_cat.fit(X_tr, y_tr)
+        pred_cat_val = model_cat.predict(X_val)
+
+        # HGB
+        model_hgb = HistGradientBoostingRegressor(
             max_depth=6,
             max_leaf_nodes=31,
             learning_rate=0.05,
             min_samples_leaf=20,
-            random_state=42
+            random_state=42,
         )
-        model_global.fit(X_tr, y_tr)
-        pred_global_val = model_global.predict(X_val)
+        model_hgb.fit(X_tr, y_tr)
+        pred_hgb_val = model_hgb.predict(X_val)
 
-        # 2) classifier segmentation (2 classes)
-        seg_clf = HistGradientBoostingClassifier(
-            max_depth=4,
-            max_leaf_nodes=31,
-            learning_rate=0.05,
-            min_samples_leaf=20,
-            random_state=42
-        )
-        seg_clf.fit(X_tr, seg_tr)
-        seg_proba_val = seg_clf.predict_proba(X_val)  # shape (n, 2)
-        seg_pred_val = seg_proba_val.argmax(axis=1)
-        seg_conf_val = seg_proba_val.max(axis=1)
-
-        # 3) modèles spécialisés par segment
-        seg_models: Dict[int, HistGradientBoostingRegressor] = {}
-        for seg_label in [0, 1]:
-            idx_seg_tr = np.where(seg_tr == seg_label)[0]
-            if len(idx_seg_tr) < 80:
-                # trop peu de données -> on utilisera le modèle global comme fallback
-                seg_models[seg_label] = None
-                continue
-
-            model_seg = HistGradientBoostingRegressor(
-                max_depth=6,
-                max_leaf_nodes=31,
-                learning_rate=0.05,
-                min_samples_leaf=20,
-                random_state=42
-            )
-            model_seg.fit(X_tr[idx_seg_tr], y_tr[idx_seg_tr])
-            seg_models[seg_label] = model_seg
-
-        # prédictions segmentées avec fallback global
-        pred_seg_val = np.zeros_like(y_val, dtype=float)
-        for i_row in range(len(y_val)):
-            label = seg_pred_val[i_row]
-            conf = seg_conf_val[i_row]
-
-            if conf < proba_threshold or seg_models[label] is None:
-                # pas assez sûr ou pas de modèle spécialisé -> fallback global
-                pred_seg_val[i_row] = pred_global_val[i_row]
-            else:
-                pred_seg_val[i_row] = seg_models[label].predict(X_val[i_row : i_row + 1])[0]
+        pred_ml_val = 0.5 * (pred_cat_val + pred_hgb_val)
 
         rows.append({
             "fold": fold_i,
             "baseline": metrics_block(y_val, base_val),
-            "global_hgb": metrics_block(y_val, pred_global_val),
-            "segmented_hgb": metrics_block(y_val, pred_seg_val),
+            "ml_global": metrics_block(y_val, pred_ml_val),
         })
 
-    # résumé moyenne des folds
     def avg(model_key: str, metric_key: str) -> float:
         vals = [r[model_key][metric_key] for r in rows]
         return float(np.mean(vals)) if vals else float("nan")
@@ -372,96 +352,81 @@ def backtest_models(proba_threshold: float = 0.6):
             "mae": avg("baseline", "mae"),
             "rmse": avg("baseline", "rmse"),
         },
-        "global_hgb": {
-            "mae": avg("global_hgb", "mae"),
-            "rmse": avg("global_hgb", "rmse"),
-        },
-        "segmented_hgb": {
-            "mae": avg("segmented_hgb", "mae"),
-            "rmse": avg("segmented_hgb", "rmse"),
+        "ml_global": {
+            "mae": avg("ml_global", "mae"),
+            "rmse": avg("ml_global", "rmse"),
         },
         "n_folds": len(rows),
-        "proba_threshold": proba_threshold,
     }
 
     return rows, summary
 
 
-back_rows, back_summary = backtest_models(proba_threshold=0.6)
+back_rows, back_summary = backtest_ml_global()
 
-print("\n=== Backtest (moyenne des folds, hors test final) ===")
+print("\n=== Backtest ML Global (moyenne des folds, hors test final) ===")
 print(json.dumps(back_summary, indent=2, ensure_ascii=False))
 
 
-# --------------------------- TRAIN FINAL ---------------------------
+# --------------------------- TRAIN FINAL (ML GLOBAL) ---------------------------
 
-# 1) modèle global
-model_global_final = HistGradientBoostingRegressor(
+# CatBoost final
+model_cat_final = CatBoostRegressor(
+    depth=6,
+    learning_rate=0.06,
+    iterations=900,
+    loss_function="RMSE",
+    random_seed=42,
+    verbose=False,
+)
+model_cat_final.fit(X_trainval, y_trainval)
+
+# HGB final
+model_hgb_final = HistGradientBoostingRegressor(
     max_depth=6,
     max_leaf_nodes=31,
     learning_rate=0.05,
     min_samples_leaf=20,
-    random_state=42
+    random_state=42,
 )
-model_global_final.fit(X_trainval, y_trainval)
+model_hgb_final.fit(X_trainval, y_trainval)
 
-# 2) classifier segmentation final
-seg_clf_final = HistGradientBoostingClassifier(
-    max_depth=4,
-    max_leaf_nodes=31,
-    learning_rate=0.05,
-    min_samples_leaf=20,
-    random_state=42
+pred_cat_trainval = model_cat_final.predict(X_trainval)
+pred_hgb_trainval = model_hgb_final.predict(X_trainval)
+pred_ml_trainval = 0.5 * (pred_cat_trainval + pred_hgb_trainval)
+
+
+# --------------------------- ENSEMBLE WEIGHTS ---------------------------
+
+w1, w2, w3, mae_ensemble_trainval = best_ensemble_weights(
+    y_trainval,
+    pred_ml_trainval,
+    baseline_trainval,
+    xg_exp_trainval,
+    grid=[0.0, 0.25, 0.5, 0.75, 1.0],
 )
-seg_clf_final.fit(X_trainval, y_seg_trainval)
 
-# 3) modèles spécialisés finaux
-seg_models_final: Dict[int, HistGradientBoostingRegressor] = {}
-for seg_label in [0, 1]:
-    idx_seg = np.where(y_seg_trainval == seg_label)[0]
-    if len(idx_seg) < 80:
-        seg_models_final[seg_label] = None
-        continue
-    m_seg = HistGradientBoostingRegressor(
-        max_depth=6,
-        max_leaf_nodes=31,
-        learning_rate=0.05,
-        min_samples_leaf=20,
-        random_state=42
-    )
-    m_seg.fit(X_trainval[idx_seg], y_trainval[idx_seg])
-    seg_models_final[seg_label] = m_seg
+print("\n=== Poids ensemble optimaux sur trainval ===")
+print(json.dumps({
+    "w_ml": w1,
+    "w_poisson": w2,
+    "w_xg_exp": w3,
+    "mae_ensemble_trainval": mae_ensemble_trainval,
+}, indent=2, ensure_ascii=False))
 
 
 # --------------------------- TEST FINAL ---------------------------
 
-# baseline
-pred_base_test = baseline_test
+pred_cat_test = model_cat_final.predict(X_test)
+pred_hgb_test = model_hgb_final.predict(X_test)
+pred_ml_test = 0.5 * (pred_cat_test + pred_hgb_test)
 
-# global
-pred_global_test = model_global_final.predict(X_test)
-
-# segmenté avec fallback
-seg_proba_test = seg_clf_final.predict_proba(X_test)
-seg_pred_test = seg_proba_test.argmax(axis=1)
-seg_conf_test = seg_proba_test.max(axis=1)
-
-pred_seg_test = np.zeros_like(y_test, dtype=float)
-threshold_final = 0.6
-
-for i_row in range(len(y_test)):
-    label = seg_pred_test[i_row]
-    conf = seg_conf_test[i_row]
-
-    if conf < threshold_final or seg_models_final[label] is None:
-        pred_seg_test[i_row] = pred_global_test[i_row]
-    else:
-        pred_seg_test[i_row] = seg_models_final[label].predict(X_test[i_row : i_row + 1])[0]
+pred_ensemble_test = w1 * pred_ml_test + w2 * baseline_test + w3 * xg_exp_test
 
 test_metrics = {
-    "baseline": metrics_block(y_test, pred_base_test),
-    "global_hgb": metrics_block(y_test, pred_global_test),
-    "segmented_hgb": metrics_block(y_test, pred_seg_test),
+    "baseline": metrics_block(y_test, baseline_test),
+    "ml_global": metrics_block(y_test, pred_ml_test),
+    "ensemble": metrics_block(y_test, pred_ensemble_test),
 }
 
 print("\n=== Test final ===")
@@ -471,23 +436,24 @@ print(json.dumps(test_metrics, indent=2, ensure_ascii=False))
 # --------------------------- SAVE ARTEFACTS ---------------------------
 
 # modèles
-joblib.dump(model_global_final, os.path.join(OUT_DIR, "model_global_total_goals.pkl"))
-joblib.dump(seg_clf_final, os.path.join(OUT_DIR, "segment_classifier.pkl"))
-
-for seg_label in [0, 1]:
-    m = seg_models_final[seg_label]
-    if m is not None:
-        joblib.dump(m, os.path.join(OUT_DIR, f"model_segment_{seg_label}.pkl"))
+joblib.dump(model_cat_final, os.path.join(OUT_DIR, "model_cat_total_goals.pkl"))
+joblib.dump(model_hgb_final, os.path.join(OUT_DIR, "model_hgb_total_goals.pkl"))
 
 # features
 with open(os.path.join(OUT_DIR, "FEATURES_TOTAL_BUTS.json"), "w", encoding="utf-8") as f:
     json.dump(FEATURES, f, indent=2, ensure_ascii=False)
 
-# métriques
-with open(os.path.join(OUT_DIR, "training_metrics_total_goals.json"), "w", encoding="utf-8") as f:
+# poids ensemble + métriques
+with open(os.path.join(OUT_DIR, "ensemble_weights_and_metrics.json"), "w", encoding="utf-8") as f:
     json.dump(
         {
+            "weights": {
+                "w_ml": w1,
+                "w_poisson": w2,
+                "w_xg_exp": w3,
+            },
             "backtest_summary": back_summary,
+            "mae_ensemble_trainval": mae_ensemble_trainval,
             "test_final": test_metrics,
         },
         f,
