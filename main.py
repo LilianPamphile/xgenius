@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 import requests
 import psycopg2
-# Fonction de conversion sécurisée
 from datetime import datetime, timedelta
 import os
-import pickle
 import pandas as pd
 import numpy as np
 import shutil
 import subprocess
+import json
+import joblib
 
 from telegram_message import send_telegram_message
 
@@ -23,7 +23,6 @@ saison2 = annee - 1
 
 # 🏆 Liste des compétitions à récupérer
 COMPETITIONS = {
-    # ——— Clubs (déjà présents) ———
     "Ligue 1": "61",
     "Premier League": "39",
     "Bundesliga": "78",
@@ -35,14 +34,6 @@ COMPETITIONS = {
     "UEFA Europa League": "3",
     "UEFA Europa Conference League": "848",
     "Saudi Professional League": "307",
-
-    # ——— Coupes nationales (Top Europe) ———
-    #"FA Cup": "45",
-    #"League Cup": "48",
-    #"DFB Pokal": "81",
-    #"Coppa Italia": "137",
-
-    # ——— Sélections & grandes compétitions internationales ———
     "World Cup": "1",
     "Euro Championship": "4",
     "Euro Championship - Qualification": "960",
@@ -50,15 +41,11 @@ COMPETITIONS = {
     "UEFA Super Cup": "531",
     "FIFA Club World Cup": "15",
     "FIFA Club World Cup - Play-In": "1186",
-
-    # ——— Amicaux ———
     "Friendlies": "10",
-
-    # ——— Qualifications Coupe du Monde ———
     "World Cup - Qualification Africa": "29",
     "World Cup - Qualification Europe": "32",
     "World Cup - Qualification South America": "34",
-    "World Cup - Qualification Intercontinental Play-offs": "37"
+    "World Cup - Qualification Intercontinental Play-offs": "37",
 }
 
 # 🔌 Connexion PostgreSQL Railway
@@ -70,21 +57,17 @@ print("Fin de la défintion de variables")
 
 # --- Défauts safe si une exception survient plus tard ---
 matchs_jour = []
-matchs_over, matchs_under, matchs_opps = [], [], []
-probas_over25 = np.array([])
-pred_p25 = np.array([])
-pred_p75 = np.array([])
+matchs_low, matchs_mid, matchs_high = [], [], []
 
-################################### Fontions utiles ###################################
+################################### Fonctions utiles ###################################
 
 def to_float(x):
     try:
         v = float(x)
         return v
     except:
-        return np.nan
+        return 0.0
 
-# === Helpers MarkdownV2 (monospace) ===
 MD_SPECIAL = r"_*[]()~`>#+-=|{}.!"
 
 def mdv2_escape(s: str) -> str:
@@ -95,7 +78,6 @@ def mdv2_escape(s: str) -> str:
     return "".join(out)
 
 def num(x, default=0.0):
-    """Convertit Decimal/float/int/str en float, remplace None ou NaN par default."""
     if x is None:
         return default
     try:
@@ -105,7 +87,7 @@ def num(x, default=0.0):
         return v
     except Exception:
         return default
-        
+
 def extract_stat(stats, stat_name):
     for s in stats.get("statistics", []):
         if s["type"] == stat_name:
@@ -128,37 +110,6 @@ def get_fixture_with_goals(fixture_id, headers):
             return goals["home"], goals["away"]
     return 0, 0
 
-# --- Téléchargement des fichiers modèle/scaler depuis GitHub ---
-def telecharger_model_depuis_github():
-    REPO = "LilianPamphile/xgenius"
-    BRANCH = "main"
-    TOKEN = os.getenv("TOKEN_HUB")
-
-    fichiers = {
-        "model_files/model_total_buts_catboost_optuna.pkl": "model_files/model_total_buts_catboost_optuna.pkl",
-        "model_files/model_total_buts_hist_gradient_boosting.pkl": "model_files/model_total_buts_hist_gradient_boosting.pkl",
-        "model_files/model_total_buts_conformal_p25.pkl": "model_files/model_total_buts_conformal_p25.pkl",
-        "model_files/model_total_buts_conformal_p75.pkl": "model_files/model_total_buts_conformal_p75.pkl",
-        "model_files/scaler_total_buts.pkl": "model_files/scaler_total_buts.pkl",
-        "model_files/features_list.pkl": "model_files/features_list.pkl",
-        "model_files/regression_score_heuristique.pkl": "model_files/regression_score_heuristique.pkl",
-        "model_files/features_list_score_heuristique.pkl": "model_files/features_list_score_heuristique.pkl",
-        "model_files/model_over25_classifier.pkl": "model_files/model_over25_classifier.pkl",
-        "model_files/offset_conformal.pkl": "model_files/offset_conformal.pkl",
-        "model_files/mae_models.pkl": "model_files/mae_models.pkl",
-    }
-    for dist, local in fichiers.items():
-        url = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/{dist}"
-        headers = {"Authorization": f"token {TOKEN}"} if TOKEN else {}
-        os.makedirs(os.path.dirname(local), exist_ok=True)
-        r = requests.get(url, headers=headers)
-        if r.status_code == 200:
-            with open(local, "wb") as f: f.write(r.content)
-            print(f"✅ {local}")
-        else:
-            print(f"❌ {local} ({r.status_code})")
-
-# --- mapping saisons fixes ---
 def get_saison_api(competition_name: str) -> int:
     cname = competition_name.lower()
     if "world cup - qualification africa" in cname:
@@ -255,7 +206,6 @@ def recuperer_stats_matchs(date, API_KEY):
             if len(stats_data) != 2:
                 continue
 
-            # attribuer correctement côté dom/ext
             stats_dom = stats_data[0] if stats_data[0]["team"]["name"] == equipe_dom else stats_data[1]
             stats_ext = stats_data[1] if stats_dom == stats_data[0] else stats_data[0]
 
@@ -308,10 +258,10 @@ def recuperer_stats_matchs(date, API_KEY):
                 "xg_dom","xg_ext"
             ]
             placeholders = ", ".join(["%s"] * len(cols))
-            
+
             if len(values) != len(cols):
-                raise ValueError(f"Mismatch INSERT stats_matchs_v2: {len(values)} values for {len(cols)} columns")
-            
+                raise ValueError(f"Mismatch INSERT stats_matchs_v2: {len(values)} values pour {len(cols)} colonnes")
+
             sql_insert = f"""
                 INSERT INTO stats_matchs_v2 ({", ".join(cols)})
                 VALUES ({placeholders})
@@ -322,9 +272,7 @@ def recuperer_stats_matchs(date, API_KEY):
     conn.commit()
     print(f"✅ Stats enrichies insérées avec succès pour {date}")
 
-    
-### Mettre a jout table stats globals
-
+### Mettre à jour table stats_globales
 def mettre_a_jour_stats_globales(date_reference):
     print("📊 Mise à jour des stats globales des équipes ayant joué le", date_reference)
 
@@ -354,7 +302,6 @@ def mettre_a_jour_stats_globales(date_reference):
         if not matchs:
             continue
 
-        # Initialise tous les champs à 0
         total = {field: 0 for field in [
             "matchs_joues", "victoires", "nuls", "defaites", "buts_marques", "buts_encaisse",
             "difference_buts", "tirs", "tirs_cadres", "tirs_hors_cadre", "tirs_bloques",
@@ -377,11 +324,9 @@ def mettre_a_jour_stats_globales(date_reference):
                     return data.get(ext_key) or 0
 
             buts_marques = get("buts")
-
             buts_dom = data.get("buts_dom") or 0
             buts_ext = data.get("buts_ext") or 0
             buts_encaisse = buts_ext if est_domicile else buts_dom
-
 
             total["matchs_joues"] += 1
             total["buts_marques"] += buts_marques
@@ -399,9 +344,6 @@ def mettre_a_jour_stats_globales(date_reference):
             ]:
                 total[f] += get(f)
 
-            buts_dom = data.get("buts_dom") or 0
-            buts_ext = data.get("buts_ext") or 0
-
             if buts_dom > 0 and buts_ext > 0:
                 total["btts"] += 1
             if (buts_dom + buts_ext) > 2.5:
@@ -416,11 +358,11 @@ def mettre_a_jour_stats_globales(date_reference):
             total.setdefault("xg_for", 0);       total["xg_for"] += xg_for
             total.setdefault("xg_against", 0);   total["xg_against"] += xg_against
 
-            def avg(val):
-                return round(val / total["matchs_joues"], 2) if total["matchs_joues"] else 0.0
-            
-            avg_xg_for = avg(total.get("xg_for", 0))
-            avg_xg_against = avg(total.get("xg_against", 0))
+        def avg(val):
+            return round(val / total["matchs_joues"], 2) if total["matchs_joues"] else 0.0
+
+        avg_xg_for = avg(total.get("xg_for", 0))
+        avg_xg_against = avg(total.get("xg_against", 0))
 
         values = (
             equipe, competition, saison,
@@ -436,7 +378,6 @@ def mettre_a_jour_stats_globales(date_reference):
             round(100 * total["over_1_5"] / total["matchs_joues"], 2),
             round(100 * total["clean_sheets"] / total["matchs_joues"], 2),
             avg_xg_for, avg_xg_against
-
         )
 
         cursor.execute("""
@@ -488,56 +429,58 @@ def mettre_a_jour_stats_globales(date_reference):
 
 #################################################################################################
 
+# === Fonctions pour le modèle vEnsemble_ADPoisson ===
+
+def league_avg_goals(df_hist: pd.DataFrame, competition: str, date_ref, window: int = 60) -> float:
+    q = (df_hist["competition"] == competition) & (df_hist["date_match"] < date_ref)
+    m = df_hist.loc[q].sort_values("date_match", ascending=False).head(window)
+    if len(m) == 0:
+        return 2.5
+    return float(m["total_buts"].mean())
+
+def baseline_poisson_row(row: pd.Series) -> float:
+    bm_home = float(row.get("forme_home_buts_marques", 0.0))
+    be_home = float(row.get("forme_home_buts_encaisses", 0.0))
+    bm_away = float(row.get("forme_away_buts_marques", 0.0))
+    be_away = float(row.get("forme_away_buts_encaisses", 0.0))
+    lam_home = 0.5 * (bm_home + be_away)
+    lam_away = 0.5 * (bm_away + be_home)
+    lam_total = max(0.0, lam_home + lam_away)
+    return lam_total
+
 try:
+    # 1) Mise à jour des données
     recuperer_matchs(today, API_KEY)
     recuperer_stats_matchs(yesterday, API_KEY)
     mettre_a_jour_stats_globales(yesterday)
-
-    telecharger_model_depuis_github()
-
     conn.commit()
-
     print("✅ Récupération des données terminée !")
 
-    # === Chargement du modèle ML et scaler ===
-    with open("model_files/model_total_buts_catboost_optuna.pkl", "rb") as f:
-        model_cat = pickle.load(f)
-    with open("model_files/model_total_buts_hist_gradient_boosting.pkl", "rb") as f:
-        model_hgb = pickle.load(f)
-    with open("model_files/model_total_buts_conformal_p25.pkl", "rb") as f:
-        model_p25 = pickle.load(f)
-    with open("model_files/model_total_buts_conformal_p75.pkl", "rb") as f:
-        model_p75 = pickle.load(f)
-    with open("model_files/scaler_total_buts.pkl", "rb") as f:
-        scaler_ml = pickle.load(f)
-    with open("model_files/features_list.pkl", "rb") as f:
-        features = pickle.load(f)
-    with open("model_files/regression_score_heuristique.pkl", "rb") as f:
-        model_heuristique = pickle.load(f)
-        
-    # Charger les features spécifiques au modèle heuristique
-    with open("model_files/features_list_score_heuristique.pkl", "rb") as f:
-        features_heur = pickle.load(f)
+    # 2) Chargement des modèles et features (nouveau train)
+    model_cat = joblib.load("models/model_cat_total_goals.pkl")
+    model_hgb = joblib.load("models/model_hgb_total_goals.pkl")
 
-    with open("model_files/model_over25_classifier.pkl", "rb") as f:
-        model_over25 = pickle.load(f)
+    with open("models/FEATURES_TOTAL_BUTS.json", "r", encoding="utf-8") as f:
+        FEATURES = json.load(f)
 
-    # Charger le OFFSET dynamique
-    with open("model_files/offset_conformal.pkl", "rb") as f:
-        OFFSET = pickle.load(f)
+    with open("models/ensemble_weights_and_metrics.json", "r", encoding="utf-8") as f:
+        conf = json.load(f)
+    w_ml = float(conf["weights"]["w_ml"])
+    w_poisson = float(conf["weights"]["w_poisson"])
+    w_xg_exp = float(conf["weights"]["w_xg_exp"])
 
     def get_matchs_jour_for_prediction():
         cursor = conn.cursor()
 
-        # 1. Récupère les stats globales nécessaires
+        # 1. Stats agrégées pour les équipes du jour
         query = """
         SELECT
           m.game_id,
           m.date::date AS date_match,
           m.competition,
           m.equipe_domicile, m.equipe_exterieur,
-        
-          /* ======= ÉQUIPE DOMICILE : agrégée 2 saisons (poids: saison1=2, saison2=1) ======= */
+
+          /* DOMICILE agrégé (2 saisons) */
           sg1.moyenne_buts,
           sg1.encaisse_pm,
           sg1.pourcentage_over_2_5,
@@ -555,8 +498,8 @@ try:
           sg1.tirs_cadres,
           sg1.pourcentage_clean_sheets,
           sg2.pourcentage_clean_sheets,
-        
-          /* ======= ÉQUIPE EXTÉRIEUR : agrégée 2 saisons (poids: saison1=2, saison2=1) ======= */
+
+          /* EXTERIEUR agrégé (2 saisons) */
           sg2.moyenne_buts,
           sg2.encaisse_pm,
           sg2.pourcentage_over_2_5,
@@ -572,10 +515,9 @@ try:
           sg2.moyenne_xg_ext,
           sg2.tirs,
           sg2.tirs_cadres
-        
+
         FROM matchs_v2 m
-        
-        /* ---------- Agrégat pondéré pour l'équipe domicile ---------- */
+
         LEFT JOIN LATERAL (
           SELECT
             SUM(w * s.moyenne_buts) / NULLIF(SUM(w), 0)                               AS moyenne_buts,
@@ -604,8 +546,7 @@ try:
               AND g.saison IN (%s, %s)
           ) s
         ) sg1 ON TRUE
-        
-        /* ---------- Agrégat pondéré pour l'équipe extérieur ---------- */
+
         LEFT JOIN LATERAL (
           SELECT
             SUM(w * s.moyenne_buts) / NULLIF(SUM(w), 0)                               AS moyenne_buts,
@@ -634,99 +575,69 @@ try:
               AND g.saison IN (%s, %s)
           ) s
         ) sg2 ON TRUE
-        
+
         WHERE DATE(m.date) = %s
         """
 
         cursor.execute(
             query,
             (
-                # sg1 (domicile)
+                # sg1
                 saison1, saison2, saison1, saison2,
-                # sg2 (extérieur)
+                # sg2
                 saison1, saison2, saison1, saison2,
-                # filtre de date
+                # date
                 today,
             ),
         )
         rows = cursor.fetchall()
 
-        # 2. Récupère l'historique pour forme récente
+        # 2. Historique match par match (pour forme & ligue)
         cursor.execute("""
-            SELECT m.date::date AS date_match, m.equipe_domicile, m.equipe_exterieur,
-                  s.buts_dom AS buts_m_dom, s.buts_ext AS buts_m_ext,
-                  s.buts_dom + s.buts_ext AS total_buts
+            SELECT
+              m.date::date AS date_match,
+              m.competition,
+              m.equipe_domicile,
+              m.equipe_exterieur,
+              s.buts_dom AS buts_m_dom,
+              s.buts_ext AS buts_m_ext,
+              s.buts_dom + s.buts_ext AS total_buts
             FROM matchs_v2 m
             JOIN stats_matchs_v2 s ON m.game_id = s.game_id
             WHERE s.buts_dom IS NOT NULL AND s.buts_ext IS NOT NULL
         """)
-        df_hist = pd.DataFrame(cursor.fetchall(), columns=["date_match", "equipe_domicile", "equipe_exterieur", "buts_m_dom", "buts_m_ext", "total_buts"])
-        
-        def calculer_forme(equipe, date_ref, n=5, role=None, decay=0.85):
+        df_hist = pd.DataFrame(
+            cursor.fetchall(),
+            columns=[
+                "date_match", "competition",
+                "equipe_domicile", "equipe_exterieur",
+                "buts_m_dom", "buts_m_ext", "total_buts"
+            ],
+        )
+
+        def calculer_forme(equipe, date_ref, role: str, n=5):
             q = (df_hist["date_match"] < date_ref)
-            if role is None:
-                q &= ((df_hist["equipe_domicile"] == equipe) | (df_hist["equipe_exterieur"] == equipe))
-            elif role is True:
+            if role == "home":
                 q &= (df_hist["equipe_domicile"] == equipe)
-            elif role is False:
+            else:
                 q &= (df_hist["equipe_exterieur"] == equipe)
-        
+
             m = df_hist.loc[q].sort_values("date_match", ascending=False).head(n)
             if m.empty:
-                return 0.0, 0.0, 0.0
-        
-            est_dom = (m["equipe_domicile"].values == equipe)
-            bm = m["buts_m_dom"].values * est_dom + m["buts_m_ext"].values * (~est_dom)
-            be = m["buts_m_ext"].values * est_dom + m["buts_m_dom"].values * (~est_dom)
-            tb = m["total_buts"].values
-        
-            # Pondération temporelle
-            w = decay ** np.arange(len(m))
-            w /= w.sum()
-        
-            return (
-                float(np.average(bm, weights=w)),
-                float(np.average(be, weights=w)),
-                float(np.average((tb > 2.5).astype(float), weights=w))
-            )
-        
-        
-        def enrichir_forme_complet(equipe, date_ref):
+                return 0.0, 0.0
 
-            matchs = df_hist[
-                ((df_hist["equipe_domicile"] == equipe) | (df_hist["equipe_exterieur"] == equipe)) &
-                (df_hist["date_match"] < date_ref)
-            ].sort_values("date_match", ascending=False).head(5)
-        
-            if matchs.empty:
-                return 0, 0, 0, 0, 0, 0
-        
-            weights = np.linspace(1.0, 2.0, len(matchs))
-            buts_marques, buts_encaisses, over25, clean_sheets = [], [], [], []
-        
-            for _, row in matchs.iterrows():
-                est_dom = (row["equipe_domicile"] == equipe)
-                bm = row["buts_m_dom"] if est_dom else row["buts_m_ext"]
-                be = row["buts_m_ext"] if est_dom else row["buts_m_dom"]
-        
-                buts_marques.append(bm)
-                buts_encaisses.append(be)
-                over25.append(int(row["total_buts"] > 2.5))
-                clean_sheets.append(int(be == 0))
-        
-            return (
-                np.average(buts_marques, weights=weights),
-                np.average(buts_encaisses, weights=weights),
-                np.average(over25, weights=weights),
-                np.std(buts_marques),
-                np.std(buts_encaisses),
-                np.sum(clean_sheets)
-            )
-        
-        
+            if role == "home":
+                bm = m["buts_m_dom"].values
+                be = m["buts_m_ext"].values
+            else:
+                bm = m["buts_m_ext"].values
+                be = m["buts_m_dom"].values
+
+            return float(np.mean(bm)), float(np.mean(be))
+
         matchs = []
         seen_game_ids = set()
-        
+
         for row in rows:
             (
                 game_id, date_match, competition, dom, ext,
@@ -736,424 +647,146 @@ try:
                 buts_ext, enc_ext, over25_ext, over15_ext, btts_ext, pass_pct_ext, pass_reussies_ext,
                 poss_ext, corners_ext, fautes_ext, cj_ext, cr_ext, xg_ext, tirs_ext, tirs_cadres_ext
             ) = row
-        
+
             if game_id in seen_game_ids:
                 continue
             seen_game_ids.add(game_id)
-        
-            # --- Forme split domicile / extérieur ---
-            bm_home, be_home, o25_home = calculer_forme(dom, date_match, role=True)
-            bm_away, be_away, o25_away = calculer_forme(ext, date_match, role=False)
-            
-            # --- Forme complète (pour std & clean sheets réels) ---
-            _, _, _, std_marq_dom, std_enc_dom, clean_dom = enrichir_forme_complet(dom, date_match)
-            _, _, _, std_marq_ext, std_enc_ext, clean_ext = enrichir_forme_complet(ext, date_match)
-            
-            # --- Possession moyenne ---
-            poss_moyenne = (num(poss_dom) + num(poss_ext)) / 2.0
-            
-            # --- Cartons total ---
-            cartons_total = num(cj_dom) + num(cr_dom) + num(cj_ext) + num(cr_ext)
-            
-            # --- Construction du dictionnaire optimisé ---
+
+            # forme attaque / défense
+            bm_home, be_home = calculer_forme(dom, date_match, role="home")
+            bm_away, be_away = calculer_forme(ext, date_match, role="away")
+
+            attaque_home = bm_home
+            defense_home = be_home
+            attaque_away = bm_away
+            defense_away = be_away
+
+            xg_exp_total = attaque_home * defense_away + attaque_away * defense_home
+            league_avg = league_avg_goals(df_hist, competition, date_match, window=60)
+
             features_dict = {
-                # Forme split
                 "forme_home_buts_marques": to_float(bm_home),
                 "forme_home_buts_encaisses": to_float(be_home),
-                "forme_home_over25": to_float(o25_home),
                 "forme_away_buts_marques": to_float(bm_away),
                 "forme_away_buts_encaisses": to_float(be_away),
-                "forme_away_over25": to_float(o25_away),
-            
-                # Variabilité
-                "std_marq_dom": to_float(std_marq_dom),
-                "std_enc_dom": to_float(std_enc_dom),
-                "std_marq_ext": to_float(std_marq_ext),
-                "std_enc_ext": to_float(std_enc_ext),
-            
-                # Clean sheets réels
-                "clean_dom": to_float(clean_dom),
-                "clean_ext": to_float(clean_ext),
-            
-                # Expected Goals bruts
-                "moyenne_xg_dom": to_float(xg_dom),
-                "moyenne_xg_ext": to_float(xg_ext),
-            
-                # Buts encaissés bruts
-                "buts_encaissés_dom": to_float(enc_dom),
-                "buts_encaissés_ext": to_float(enc_ext),
-            
-                # Possession et tirs
-                "poss_moyenne": to_float(poss_moyenne),
+                "attaque_home": to_float(attaque_home),
+                "defense_home": to_float(defense_home),
+                "attaque_away": to_float(attaque_away),
+                "defense_away": to_float(defense_away),
+                "xg_dom": to_float(xg_dom),
+                "xg_ext": to_float(xg_ext),
                 "tirs_dom": to_float(tirs_dom),
                 "tirs_ext": to_float(tirs_ext),
-                "tirs_cadres_dom": to_float(tirs_cadres_dom),
-                "tirs_cadres_ext": to_float(tirs_cadres_ext),
-            
-                # Discipline et corners
-                "corners_dom": to_float(corners_dom),
-                "corners_ext": to_float(corners_ext),
-                "cartons_total": to_float(cartons_total)
+                "league_avg_goals_60d": to_float(league_avg),
+                "xg_exp_total": to_float(xg_exp_total),
             }
-            
-            # --- Vector de features final ---
-            feature_vector = [features_dict.get(f, 0.0) for f in features]
-            
-            # --- Stockage match ---
+
+            feature_vector = [features_dict.get(f, 0.0) for f in FEATURES]
+
             matchs.append({
                 "match": f"{dom} vs {ext}",
                 "competition": competition,
                 "features": feature_vector,
-                "poss": poss_moyenne,
-                "corners": num(corners_dom) + num(corners_ext),
-                "fautes": num(fautes_dom) + num(fautes_ext),
-                "cartons": cartons_total,
-                "clean_sheets_dom": float(clean_dom),
-                "clean_sheets_ext": float(clean_ext)
+                "xg_exp_total": xg_exp_total,
             })
-            
-                    
+
         cursor.close()
         return matchs
 
-
+    # 3) Récupération des matchs du jour + features
     matchs_jour = get_matchs_jour_for_prediction()
 
-    # === Prédictions ===
-    # ✅ Transformation
-    X_live = pd.DataFrame([m["features"] for m in matchs_jour], columns=features)
+    if not matchs_jour:
+        print("ℹ️ Aucun match à prédire aujourd'hui.")
+    else:
+        # X_live : même ordre de colonnes que le train
+        X_live = pd.DataFrame([m["features"] for m in matchs_jour], columns=FEATURES)
 
-    # 1) Tout en numérique + inf -> NaN
-    X_live = X_live.apply(pd.to_numeric, errors="coerce")
-    X_live.replace([np.inf, -np.inf], np.nan, inplace=True)
-    
-    # 2) Médianes colonne par colonne
-    col_medians = X_live.median(numeric_only=True)
-    X_live = X_live.fillna(col_medians)
-    
-    # 3) Filet de sécurité (si une médiane vaut encore NaN → 0.0)
-    X_live = X_live.fillna(0.0)
-    
-    # (optionnel) Sanity check
-    if np.isnan(X_live.values).any():
-        raise ValueError("Still NaN in X_live after imputation.")
-    
-    X_live_scaled = scaler_ml.transform(X_live)
+        # prédictions ML
+        preds_cat = model_cat.predict(X_live.values)
+        preds_hgb = model_hgb.predict(X_live.values)
+        pred_ml = 0.5 * (preds_cat + preds_hgb)
 
-    # prédiction principale
-    preds_cat = model_cat.predict(X_live_scaled)
-    preds_hgb = model_hgb.predict(X_live_scaled)
-    # Prédiction des bornes conformal
-    pred_p25 = model_p25.predict(X_live_scaled) - OFFSET
-    pred_p75 = model_p75.predict(X_live_scaled) + OFFSET
+        # baseline Poisson + xg_exp_total
+        baseline_vals = []
+        xg_exp_vals = []
+        for i in range(len(matchs_jour)):
+            row = X_live.iloc[i]
+            baseline_vals.append(baseline_poisson_row(row))
+            xg_exp_vals.append(float(row.get("xg_exp_total", 0.0)))
 
+        baseline_vals = np.array(baseline_vals)
+        xg_exp_vals = np.array(xg_exp_vals)
 
-    # Prédiction classification over 2.5
-    try:
-        probas_over25 = model_over25.predict_proba(X_live_scaled)[:, 1]
-    except Exception as e:
-        print("⚠️ Over2.5 classifier failed, fallback to 0.5:", e)
-        probas_over25 = np.full(shape=(len(X_live_scaled),), fill_value=0.5, dtype=float)
-    
+        # ensemble final
+        pred_final = w_ml * pred_ml + w_poisson * baseline_vals + w_xg_exp * xg_exp_vals
 
-    # === Pondération par LIGUE (biais de modèles) + micro-biais de buts (baseline ligue)
-    LEAGUE_MODEL_WEIGHTS = {
-        "Ligue 1": (0.60, 0.40),
-        "Bundesliga": (0.40, 0.60),
-        "Eredivisie": (0.45, 0.55),
-        "Premier League": (0.50, 0.50),
-        "Serie A": (0.50, 0.50),
-        "La Liga": (0.55, 0.45),
-    }
-    LEAGUE_GOAL_BIAS = {
-        # petit ajustement de tendance de ligue (en buts)
-        "Bundesliga": +0.10,
-        "Eredivisie": +0.10,
-        "Premier League": +0.05,
-        "Serie A": +0.05,
-        "La Liga": -0.05,
-        "Ligue 1": -0.10,
-    }
+        for i, m in enumerate(matchs_jour):
+            m["pred_total"] = float(pred_final[i])
 
-    matchs_over, matchs_under, matchs_opps = [], [], []
+        # 4) Buckets simples : Faible / Moyen / Fort
+        matchs_low, matchs_mid, matchs_high = [], [], []
 
-    def clip01(x):
-        return max(0.0, min(1.0, float(x)))
-
-    for i, match in enumerate(matchs_jour):
-        comp = match.get("competition", "")
-    
-        # d’abord on calcule l’incertitude
-        p25, p75 = float(pred_p25[i]), float(pred_p75[i])
-        incertitude = p75 - p25
-        prob_over25 = float(probas_over25[i])
-        prob_under25 = 1.0 - prob_over25
-    
-        # puis on fait la pondération adaptative Cat/HGB
-        w_cat0, w_hgb0 = LEAGUE_MODEL_WEIGHTS.get(comp, (0.50, 0.50))
-        if incertitude <= 1.2:
-            k = 0.0
-        elif incertitude >= 2.0:
-            k = 1.0
-        else:
-            k = (incertitude - 1.2) / (2.0 - 1.2)
-    
-        w_cat = (1.0 - k)*w_cat0 + k*0.50
-        w_hgb = 1.0 - w_cat
-    
-        pred_mix = w_cat * float(preds_cat[i]) + w_hgb * float(preds_hgb[i])
-        pred_total = float(pred_mix) + float(LEAGUE_GOAL_BIAS.get(comp, 0.0))
-
-        # ligne propre (non-scalée) pour features heuristiques déjà construite au-dessus
-        row = X_live.iloc[i]
-        enc_dom_val = float(row.get("buts_encaissés_dom", 0.0))
-        enc_ext_val = float(row.get("buts_encaissés_ext", 0.0))
-        solidite_dom = 1.0 / (enc_dom_val + 0.1)
-        solidite_ext = 1.0 / (enc_ext_val + 0.1)
-    
-        corners_total = float(match.get("corners", num(row.get("corners_dom", 0.0)) + num(row.get("corners_ext", 0.0))))
-        fautes_total  = float(match.get("fautes", num(row.get("fautes_dom", 0.0)) + num(row.get("fautes_ext", 0.0))))
-        cartons_total = float(match.get("cartons", row.get("cartons_total", 0.0)))
-        poss_moy      = float(match.get("poss", row.get("poss_moyenne", 50.0)))
-    
-        def getf(name, default=0.0):
-            v = row.get(name, default)
-            return float(v if pd.notna(v) else default)
-    
-        d = {
-            "buts_dom": getf("forme_home_buts_marques"),
-            "buts_ext": getf("forme_away_buts_marques"),
-            "over25_dom": getf("forme_home_over25"),
-            "over25_ext": getf("forme_away_over25"),
-            "btts_dom": 0.0, "btts_ext": 0.0,
-            "moyenne_xg_dom": getf("moyenne_xg_dom"),
-            "moyenne_xg_ext": getf("moyenne_xg_ext"),
-            "tirs_cadres_total": getf("tirs_cadres_dom") + getf("tirs_cadres_ext"),
-            "forme_dom_marq": getf("forme_home_buts_marques"),
-            "forme_ext_marq": getf("forme_away_buts_marques"),
-            "solidite_dom": solidite_dom, "solidite_ext": solidite_ext,
-            "corners": corners_total, "fautes": fautes_total,
-            "cartons_total": cartons_total, "poss": poss_moy,
-        }
-    
-        # Vérif que toutes les features attendues sont présentes
-        missing_feats = [f for f in features_heur if f not in d]
-        if missing_feats:
-            print(f"[WARN] Features manquantes pour score_heur: {missing_feats}")
-    
-        # Construction dans le bon ordre
-        X_input_heur = pd.DataFrame([[d.get(f, 0.0) for f in features_heur]], columns=features_heur)
-    
-        # Prédiction heuristique
-        score_heur = float(model_heuristique.predict(X_input_heur)[0])
-    
-        # Contrôle bornes et clamp
-        if score_heur < -0.05 or score_heur > 2:
-            print(f"[WARN] score_heur aberrant ({score_heur:.2f}) pour {match.get('match', 'inconnu')}")
-        score_heur = max(0.0, min(score_heur, 1.5))
-        match["score_heur"] = score_heur
-    
-        # === Confiance composite (plus de poids à l'intervalle)
-        sharp = 1.0 - min(1.0, incertitude / 3.0)
-        prob_strength = abs(prob_over25 - 0.5) * 2.0
-        margin_strength = min(1.0, abs(pred_total - 2.5) / 2.0)
-        heur_pct = score_heur / 1.5
-        agree_bits = [
-            1.0 if pred_total >= 2.5 else 0.0,
-            1.0 if prob_over25 >= 0.5 else 0.0,
-            1.0 if heur_pct >= 0.5 else 0.0,
-        ]
-        agreement_ratio = sum(agree_bits) / 3.0
-        consistency = abs(agreement_ratio - 0.5) * 2.0
-        # → on renforce l’impact de l’intervalle
-        w1, w2, w3, w4 = 0.25, 0.30, 0.25, 0.20
-        confidence_score = w1*sharp + w2*prob_strength + w3*margin_strength + w4*consistency
-        confidence_pct = int(round(confidence_score * 100))
-    
-        # Catégorie d’intervalle (réintroduit comme signal lisible)
-        if incertitude < 1.2:
-            bucket_ci = "sharp"
-        elif incertitude <= 2.0:
-            bucket_ci = "moyen"
-        else:
-            bucket_ci = "flou"
-    
-        # Bandes de proba (seulement interprétation)
-        if prob_over25 >= 0.68:
-            band_proba = "forte"
-        elif prob_over25 >= 0.55:
-            band_proba = "moyenne"
-        else:
-            band_proba = "faible"
-    
-        if confidence_score >= 0.68:
-            commentaire = f"✅ Confiance élevée ({confidence_pct}%) • {bucket_ci} • proba {band_proba}"
-        elif confidence_score >= 0.50:
-            commentaire = f"ℹ️ Confiance modérée ({confidence_pct}%) • {bucket_ci} • proba {band_proba}"
-        else:
-            commentaire = f"⚠️ Confiance faible ({confidence_pct}%) • {bucket_ci} • proba {band_proba}"
-    
-        match["confiance"] = commentaire
-        match["confidence_pct"] = confidence_pct
-        match["bucket_ci"] = bucket_ci
-        match["band_proba"] = band_proba
-        match["pred_total"] = pred_total
-
-        # === OpenScore / CloseScore + drivers lisibles (pour Telegram)
-        def nz(x, d=0.0):
-            try:
-                v = float(x)
-                if np.isnan(v):
-                    return d
-                return v
-            except:
-                return d
-        
-        # On réutilise 'row' (déjà défini), 'match', et clip01() existant
-        xg_tot = nz(row.get("moyenne_xg_dom")) + nz(row.get("moyenne_xg_ext"))
-        tc_tot = nz(row.get("tirs_cadres_dom")) + nz(row.get("tirs_cadres_ext"))
-        fm_dom = nz(row.get("forme_home_buts_marques"))
-        fm_ext = nz(row.get("forme_away_buts_marques"))
-        be_dom = nz(row.get("buts_encaissés_dom"))
-        be_ext = nz(row.get("buts_encaissés_ext"))
-        
-        # Composantes normalisées (0–1)
-        SO_xg  = clip01(xg_tot / 3.5)                 # signal offensif via xG
-        SO_tc  = clip01(tc_tot / 10.0)                # signal via tirs cadrés
-        SO_fm  = clip01((fm_dom + fm_ext) / 3.0)      # forme offensive
-        SO     = (SO_xg + SO_tc + SO_fm) / 3.0
-        
-        SDm    = clip01((be_dom + be_ext) / 3.0)      # faiblesse défensive (inverse de solidité)
-        solid  = clip01(((1.0/(be_dom+0.1)) + (1.0/(be_ext+0.1))) / 2.0)
-        
-        pos_moy = nz(match.get("poss"), 50.0)         # déjà moyenne dom/ext plus haut
-        rt_pos  = clip01(abs(pos_moy - 50.0) / 20.0)  # déséquilibre vs neutre 50/50
-        rt_int  = clip01((corners_total/14.0 + fautes_total/30.0) / 2.0)
-        RT      = (rt_pos + rt_int) / 2.0
-        
-        
-        # Drivers compacts (on en garde 2–3 max)
-        drivers = []
-        if SO_xg >= 0.60: drivers.append("xG↑")
-        if SO_tc >= 0.60: drivers.append("tirs cadrés↑")
-        if rt_pos >= 0.60: drivers.append("déséquilibre pos↑")
-        if rt_int >= 0.60: drivers.append("intensité↑")
-        if SDm   >= 0.60: drivers.append("défenses friables")
-        if solid >= 0.60: drivers.append("solidités↑")
-        if SO    <= 0.40: drivers.append("signal offensif↓")
-        if RT    <= 0.40: drivers.append("rythme↓")
-        
-        drivers_str = ", ".join(drivers[:3])
-        
-        # On enrichit le texte 'commentaire' utilisé dans les tableaux Telegram
-        commentaire = f"{commentaire} • {drivers_str}".strip()
-        match["drivers"]    = drivers_str
-        match["confiance"]  = commentaire   # <-- pour que le CSV récupère aussi OS/CS/drivers
-
-        # === Score global continu (remplace les règles OR)
-        score_global = 0.50*prob_over25 + 0.30*min(pred_total/4.0, 1.0) + 0.20*heur_pct
-        score_global -= 0.10 * max(0.0, (incertitude - 1.5))  # pénalité si intervalle large
-        score_global = clip01(score_global)
-        match["score_global"] = float(score_global)
-
-        META = int(round(100 * score_global))
-        match["META"] = META
-    
-        if score_global >= 0.68:
-            matchs_over.append((
-                prob_over25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}",
-                commentaire, score_heur, confidence_pct, META
-            ))
-        elif score_global <= 0.38:
-            matchs_under.append((
-                prob_under25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}",
-                commentaire, score_heur, confidence_pct, META
-            ))
-        else:
-            matchs_opps.append((
-                prob_over25, match["match"], pred_total, f"{p25:.2f} – {p75:.2f}",
-                commentaire, score_heur, confidence_pct, META
-            ))
+        for m in matchs_jour:
+            p = m["pred_total"]
+            name = m["match"]
+            comp = m.get("competition", "")
+            if p <= 2.0:
+                matchs_low.append((p, name, comp))
+            elif p >= 3.0:
+                matchs_high.append((p, name, comp))
+            else:
+                matchs_mid.append((p, name, comp))
 
 except Exception as e:
     print("❌ Erreur pendant la génération des prédictions :", e)
 
-def build_table(title_emoji: str, title_text: str, rows, is_under: bool = False) -> str:
-    """
-    Rend un bloc compact adapté mobile :
-    - 2 lignes par match
-    - Ligne 1 : Match + G (buts attendus)
-    - Ligne 2 : O2.5 / U2.5 / XGS / Conf + OS/CS + drivers
-    """
+# === Affichage Telegram simplifié ===
+
+def build_table(title_emoji: str, title_text: str, rows) -> str:
     header = f"*{mdv2_escape(title_emoji + ' ' + title_text)}*"
     if not rows:
         return f"{header}\n_{mdv2_escape('Aucun match détecté.')}_\n"
 
-    # Tri par le dernier champ (META) si présent, sinon par proba
-    try:
-        ordered = sorted(rows, key=lambda x: x[-1], reverse=True)
-    except Exception:
-        ordered = rows
+    ordered = sorted(rows, key=lambda x: x[0], reverse=True)
+    lines = [header]
 
-    lines = [header]  # ✅ pas de bloc ``` (pre) → on évite les erreurs Telegram
-
-    for prob, name, pred, intervalle, conf_txt, heur, *rest in ordered:
-        prob_pct = int(round(float(prob) * 100))
-        label = "Proba Under2.5" if is_under else "Proba Over2.5"
-
-        try:
-            p25_str, p75_str = [s.strip() for s in str(intervalle).split("–")]
-        except Exception:
-            p25_str, p75_str = "?", "?"
-
-        META = int(rest[-1]) if rest else 0
-
-        # Drivers (on garde 3 max)
-        drivers = ""
-        parts = (conf_txt or "").split("•")
-        if len(parts) >= 3:
-            drv = parts[-1].strip()
-            drivers = ", ".join([d.strip() for d in drv.split(",")][:3])
-
-        # ✅ Échapper chaque ligne complète (les points, tirets, etc. seront safe)
-        line1 = mdv2_escape(name)
-        line2 = mdv2_escape(
-            f"Buts attendus : {pred:.2f} ({p25_str}–{p75_str}) | META {META} | {label} : {prob_pct}%"
-        )
+    for pred_buts, name, comp in ordered:
+        line1 = mdv2_escape(f"{comp} — {name}")
+        line2 = mdv2_escape(f"Buts attendus : {pred_buts:.2f}")
         lines.append(line1)
         lines.append(line2)
-        if drivers:
-            lines.append(mdv2_escape(f"Drivers : {drivers}"))
-        lines.append("")  # ligne vide entre matchs
+        lines.append("")
 
     return "\n".join(lines)
 
 recap_md = (
     f"*{mdv2_escape('📅 Prévisions du ' + str(today))}*\n"
-    f"{mdv2_escape('Over:')} *{len(matchs_over)}*  •  "
-    f"{mdv2_escape('Under:')} *{len(matchs_under)}*  •  "
-    f"{mdv2_escape('Opps:')} *{len(matchs_opps)}*\n"
+    f"{mdv2_escape('Fort buts:')} *{len(matchs_high)}*  •  "
+    f"{mdv2_escape('Moyen:')} *{len(matchs_mid)}*  •  "
+    f"{mdv2_escape('Faible:')} *{len(matchs_low)}*\n"
 )
 
-sec_over  = build_table("🔥", "TOP CONFIANCE OVER",   matchs_over,  is_under=False)
-sec_under = build_table("❄️", "TOP CONFIANCE UNDER",  matchs_under, is_under=True)
-sec_opps  = build_table("🎯", "OPPORTUNITÉS CACHÉES", matchs_opps,  is_under=False)
+sec_high = build_table("🔥", "MATCHS À FORT POTENTIEL DE BUTS", matchs_high)
+sec_mid  = build_table("⚖️", "MATCHS ÉQUILIBRÉS", matchs_mid)
+sec_low  = build_table("❄️", "MATCHS À FAIBLE POTENTIEL", matchs_low)
 
-messages = [recap_md, sec_over, sec_under, sec_opps]
+messages = [recap_md, sec_high, sec_mid, sec_low]
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 for chunk in messages:
-    # Telegram MarkdownV2: 4096 chars max → on reste safe à ~3800
     if len(chunk) > 3800:
         chunk = chunk[:3800] + "\n_" + mdv2_escape("(troncature…)") + "_"
-    send_telegram_message(BOT_TOKEN, CHAT_ID, chunk, parse_mode="MarkdownV2")
+    if BOT_TOKEN and CHAT_ID:
+        send_telegram_message(BOT_TOKEN, CHAT_ID, chunk, parse_mode="MarkdownV2")
+
+# === Sauvegarde CSV historique_predictions (simplifié) ===
 
 today_str = datetime.now().strftime("%Y-%m-%d")
 
 def run(cmd, cwd=None):
-    """Exécute une commande shell et lève en cas d’erreur (log propre)."""
     print("→", " ".join(cmd))
     subprocess.check_call(cmd, cwd=cwd)
 
@@ -1162,58 +795,26 @@ def split_home_away(s):
     return (parts[0], parts[1]) if len(parts) == 2 else (s, "")
 
 rows_csv = []
-for i, m in enumerate(matchs_jour):
+for m in matchs_jour:
     home, away = split_home_away(m["match"])
-    prob_o25 = float(probas_over25[i])
-    p25 = float(pred_p25[i])
-    p75 = float(pred_p75[i])
     pred_b = float(m.get("pred_total", 0.0))
-    heur_pct = float(m.get("score_heur", 0.0)) / 1.5  # normalisé [0,1]
+    competition = m.get("competition", "")
 
-    # Décision par score global (même logique que plus haut)
-    incert = p75 - p25
-    score_global = 0.50*prob_o25 + 0.30*min(pred_b/4.0, 1.0) + 0.20*heur_pct
-    score_global -= 0.10 * max(0.0, (incert - 1.5))
-    score_global = max(0.0, min(1.0, float(score_global)))
-    if score_global >= 0.68:
-        categorie = "Ouvert"
-    elif score_global <= 0.38:
-        categorie = "Fermé"
+    if pred_b <= 2.0:
+        categorie = "Faible"
+    elif pred_b >= 3.0:
+        categorie = "Fort"
     else:
-        categorie = "Neutre"
-
-    # Buckets pour analyse hebdo
-    if prob_o25 >= 0.68:
-        prob_band = "forte"
-    elif prob_o25 >= 0.55:
-        prob_band = "moyenne"
-    else:
-        prob_band = "faible"
-    if incert < 1.2:
-        ci_bucket = "sharp"
-    elif incert <= 2.0:
-        ci_bucket = "moyen"
-    else:
-        ci_bucket = "flou"
+        categorie = "Moyen"
 
     rows_csv.append({
         "date": today_str,
         "home": home,
         "away": away,
         "match": m["match"],
+        "competition": competition,
         "prediction_buts": round(pred_b, 2),
-        "p25": round(p25, 2),
-        "p75": round(p75, 2),
-        "incertitude": round(incert, 2),
-        "prob_over25": round(prob_o25, 3),
-        "prob_under25": round(1.0 - prob_o25, 3),
-        "confiance": m.get("confiance", ""),
-        "score_heuristique": round(float(m.get("score_heur", 0.0)), 2),
         "categorie": categorie,
-        "score_global": round(float(score_global), 3),
-        "prob_band": prob_band,
-        "ci_bucket": ci_bucket,
-        "competition": m.get("competition", "")
     })
 
 df_today = pd.DataFrame(rows_csv)
@@ -1222,30 +823,25 @@ TOKEN_HUB = os.getenv("TOKEN_HUB")
 if not TOKEN_HUB:
     raise ValueError("❌ Le token GitHub (TOKEN_HUB) n'est pas défini.")
 
-# --- Git config (comme dans le train) ---
 run(["git", "config", "--global", "user.email", "lilian.pamphile.bts@gmail.com"])
 run(["git", "config", "--global", "user.name", "LilianPamphile"])
 
 REPO_DIR = "main_push"
 REPO_URL = f"https://{TOKEN_HUB}@github.com/LilianPamphile/xgenius.git"
 
-# Nettoyage / clone
 if os.path.exists(REPO_DIR):
     shutil.rmtree(REPO_DIR)
 run(["git", "clone", REPO_URL, REPO_DIR])
 
-# (Optionnel mais utile en CI/root)
 try:
     run(["git", "config", "--global", "--add", "safe.directory", os.path.abspath(REPO_DIR)])
 except subprocess.CalledProcessError:
-    pass  # pas bloquant
+    pass
 
-# Chemins
 suivi_path = os.path.join(REPO_DIR, "suivi_predictions")
 os.makedirs(suivi_path, exist_ok=True)
 csv_path = os.path.join(suivi_path, "historique_predictions.csv")
 
-# Fusion avec l’historique s’il existe
 if os.path.exists(csv_path):
     try:
         df_hist = pd.read_csv(csv_path)
@@ -1255,13 +851,10 @@ if os.path.exists(csv_path):
 else:
     df_combined = df_today
 
-# Écriture
 df_combined.to_csv(csv_path, index=False)
 print(f"💾 Écrit: {csv_path} ({len(df_today)} lignes ajoutées)")
 
-# Commit & push (avec erreurs visibles)
 run(["git", "add", "suivi_predictions/historique_predictions.csv"], cwd=REPO_DIR)
-# Si aucune diff, 'commit' renvoie code ≠0. On gère proprement.
 try:
     run(["git", "commit", "-m", f"📊 Ajout des prédictions du {today_str}"], cwd=REPO_DIR)
 except subprocess.CalledProcessError:
