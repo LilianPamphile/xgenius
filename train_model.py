@@ -7,6 +7,8 @@
 #   - backtest chrono + test final, sauvegarde artefacts
 # ================================================================================
 
+# -------------------------- CONFIG --------------------------
+
 import os
 import json
 from decimal import Decimal
@@ -15,22 +17,15 @@ from typing import Dict, Any, List, Tuple
 import numpy as np
 import pandas as pd
 import psycopg2
-
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from sklearn.ensemble import HistGradientBoostingRegressor
 from catboost import CatBoostRegressor
 import joblib
 
-
-# -------------------------- CONFIG --------------------------
-
-OUT_DIR = "models_files"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+OUT_DIR = os.path.join(BASE_DIR, "model_files")  # <- même nom que ton dossier GitHub
 os.makedirs(OUT_DIR, exist_ok=True)
-
-DATABASE_URL = "postgresql://postgres:jDDqfaqpspVDBBwsqxuaiSDNXjTxjMmP@shortline.proxy.rlwy.net:36536/railway"
-if not DATABASE_URL:
-    raise ValueError("DATABASE_URL manquant.")
 
 
 # -------------------------- UTILS ---------------------------
@@ -435,15 +430,12 @@ print(json.dumps(test_metrics, indent=2, ensure_ascii=False))
 
 # --------------------------- SAVE ARTEFACTS ---------------------------
 
-# modèles
 joblib.dump(model_cat_final, os.path.join(OUT_DIR, "model_cat_total_goals.pkl"))
 joblib.dump(model_hgb_final, os.path.join(OUT_DIR, "model_hgb_total_goals.pkl"))
 
-# features
 with open(os.path.join(OUT_DIR, "FEATURES_TOTAL_BUTS.json"), "w", encoding="utf-8") as f:
     json.dump(FEATURES, f, indent=2, ensure_ascii=False)
 
-# poids ensemble + métriques
 with open(os.path.join(OUT_DIR, "ensemble_weights_and_metrics.json"), "w", encoding="utf-8") as f:
     json.dump(
         {
@@ -461,4 +453,5 @@ with open(os.path.join(OUT_DIR, "ensemble_weights_and_metrics.json"), "w", encod
         ensure_ascii=False,
     )
 
-print("\n=== DONE: modèles & métriques sauvegardés dans ./models_files ===")
+print("\n=== DONE: modèles & métriques sauvegardés dans", OUT_DIR, "===")
+print("Contenu du dossier :", os.listdir(OUT_DIR))
