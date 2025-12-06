@@ -25,7 +25,7 @@ import joblib
 
 # -------------------------- CONFIG --------------------------
 
-OUT_DIR = "models"
+OUT_DIR = "models_files"
 os.makedirs(OUT_DIR, exist_ok=True)
 
 DATABASE_URL = "postgresql://postgres:jDDqfaqpspVDBBwsqxuaiSDNXjTxjMmP@shortline.proxy.rlwy.net:36536/railway"
@@ -461,4 +461,4 @@ with open(os.path.join(OUT_DIR, "ensemble_weights_and_metrics.json"), "w", encod
         ensure_ascii=False,
     )
 
-print("\n=== DONE: modèles & métriques sauvegardés dans ./models ===")
+print("\n=== DONE: modèles & métriques sauvegardés dans ./models_files ===")
