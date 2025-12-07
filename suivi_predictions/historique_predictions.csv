@@ -1951,3 +1951,26 @@ date,home,away,match,prediction_buts,p25,p75,incertitude,prob_over25,prob_under2
 2025-11-30,SV Elversberg,SV Darmstadt 98,SV Elversberg vs SV Darmstadt 98,2.97,1.75,4.28,2.53,0.572,0.428,"⚠️ Confiance faible (34%) • flou • proba moyenne • tirs cadrés↑, intensité↑, défenses friables",1.5,Neutre,0.606,moyenne,flou,2. Bundesliga
 2025-12-01,Bologna,Cremonese,Bologna vs Cremonese,3.5,1.7,3.83,2.13,0.572,0.428,"⚠️ Confiance faible (44%) • flou • proba moyenne • tirs cadrés↑, intensité↑, défenses friables",1.5,Ouvert,0.685,moyenne,flou,Serie A
 2025-12-01,Rayo Vallecano,Valencia,Rayo Vallecano vs Valencia,2.82,2.3,4.0,1.7,0.572,0.428,"⚠️ Confiance faible (39%) • moyen • proba moyenne • tirs cadrés↑, intensité↑, défenses friables",1.5,Neutre,0.678,moyenne,moyen,La Liga
+2025-12-07,Nice,Angers,Nice vs Angers,2.51,,,,,,,,Moyen,,,,Ligue 1
+2025-12-07,Auxerre,Metz,Auxerre vs Metz,2.27,,,,,,,,Moyen,,,,Ligue 1
+2025-12-07,Le Havre,Paris FC,Le Havre vs Paris FC,2.33,,,,,,,,Moyen,,,,Ligue 1
+2025-12-07,Lorient,Lyon,Lorient vs Lyon,2.32,,,,,,,,Moyen,,,,Ligue 1
+2025-12-07,Brighton,West Ham,Brighton vs West Ham,2.16,,,,,,,,Moyen,,,,Premier League
+2025-12-07,Fulham,Crystal Palace,Fulham vs Crystal Palace,2.25,,,,,,,,Moyen,,,,Premier League
+2025-12-07,Hamburger SV,Werder Bremen,Hamburger SV vs Werder Bremen,1.89,,,,,,,,Faible,,,,Bundesliga
+2025-12-07,Borussia Dortmund,1899 Hoffenheim,Borussia Dortmund vs 1899 Hoffenheim,3.0,,,,,,,,Moyen,,,,Bundesliga
+2025-12-07,Cremonese,Lecce,Cremonese vs Lecce,1.91,,,,,,,,Faible,,,,Serie A
+2025-12-07,Cagliari,AS Roma,Cagliari vs AS Roma,2.66,,,,,,,,Moyen,,,,Serie A
+2025-12-07,Lazio,Bologna,Lazio vs Bologna,2.02,,,,,,,,Moyen,,,,Serie A
+2025-12-07,Napoli,Juventus,Napoli vs Juventus,1.55,,,,,,,,Faible,,,,Serie A
+2025-12-07,Utrecht,Twente,Utrecht vs Twente,1.97,,,,,,,,Faible,,,,Eredivisie
+2025-12-07,AZ Alkmaar,GO Ahead Eagles,AZ Alkmaar vs GO Ahead Eagles,2.87,,,,,,,,Moyen,,,,Eredivisie
+2025-12-07,FC Volendam,NEC Nijmegen,FC Volendam vs NEC Nijmegen,2.26,,,,,,,,Moyen,,,,Eredivisie
+2025-12-07,Sparta Rotterdam,NAC Breda,Sparta Rotterdam vs NAC Breda,2.01,,,,,,,,Moyen,,,,Eredivisie
+2025-12-07,Elche,Girona,Elche vs Girona,2.03,,,,,,,,Moyen,,,,La Liga
+2025-12-07,Valencia,Sevilla,Valencia vs Sevilla,2.25,,,,,,,,Moyen,,,,La Liga
+2025-12-07,Espanyol,Rayo Vallecano,Espanyol vs Rayo Vallecano,2.11,,,,,,,,Moyen,,,,La Liga
+2025-12-07,Real Madrid,Celta Vigo,Real Madrid vs Celta Vigo,2.23,,,,,,,,Moyen,,,,La Liga
+2025-12-07,Hertha BSC,1. FC Magdeburg,Hertha BSC vs 1. FC Magdeburg,2.62,,,,,,,,Moyen,,,,2. Bundesliga
+2025-12-07,1. FC Nürnberg,SpVgg Greuther Fürth,1. FC Nürnberg vs SpVgg Greuther Fürth,2.68,,,,,,,,Moyen,,,,2. Bundesliga
+2025-12-07,Eintracht Braunschweig,Holstein Kiel,Eintracht Braunschweig vs Holstein Kiel,3.5,,,,,,,,Fort,,,,2. Bundesliga
