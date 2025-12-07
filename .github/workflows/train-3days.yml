@@ -11,7 +11,7 @@ jobs:
     permissions:
       contents: write
 
-    env:                      # <<— variables d'env visibles par toutes les étapes
+    env:
       TOKEN_HUB: ${{ secrets.TOKEN_HUB }}
       LIGHT_MODE: "1"
       OPTUNA_TRIALS: "2"
@@ -38,3 +38,19 @@ jobs:
 
       - name: Run train_model.py
         run: python train_model.py
+
+      - name: Commit and push model_files
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN_HUB }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Ajoute le dossier model_files s'il existe
+          git add model_files || true
+
+          # Essaie de commit — pas d'erreur si aucun changement
+          git commit -m "Update model_files (train-3days)" || echo "No changes to commit"
+
+          # Push vers main
+          git push origin main
