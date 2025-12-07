@@ -12,6 +12,9 @@ import joblib
 
 from telegram_message import send_telegram_message
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODELS_DIR = os.path.join(BASE_DIR, "model_files")
+
 # 🔑 Clé API SportsData.io
 API_KEY = os.getenv("RAPIDAPI_KEY")
 
@@ -457,17 +460,19 @@ try:
     print("✅ Récupération des données terminée !")
 
     # 2) Chargement des modèles et features (nouveau train)
-    model_cat = joblib.load("models_files/model_cat_total_goals.pkl")
-    model_hgb = joblib.load("models_files/model_hgb_total_goals.pkl")
-
-    with open("models_files/FEATURES_TOTAL_BUTS.json", "r", encoding="utf-8") as f:
+    model_cat = joblib.load(os.path.join(MODELS_DIR, "model_cat_total_goals.pkl"))
+    model_hgb = joblib.load(os.path.join(MODELS_DIR, "model_hgb_total_goals.pkl"))
+    
+    with open(os.path.join(MODELS_DIR, "FEATURES_TOTAL_BUTS.json"), "r", encoding="utf-8") as f:
         FEATURES = json.load(f)
-
-    with open("models_files/ensemble_weights_and_metrics.json", "r", encoding="utf-8") as f:
+    
+    with open(os.path.join(MODELS_DIR, "ensemble_weights_and_metrics.json"), "r", encoding="utf-8") as f:
         conf = json.load(f)
+    
     w_ml = float(conf["weights"]["w_ml"])
     w_poisson = float(conf["weights"]["w_poisson"])
     w_xg_exp = float(conf["weights"]["w_xg_exp"])
+
 
     def get_matchs_jour_for_prediction():
         cursor = conn.cursor()
