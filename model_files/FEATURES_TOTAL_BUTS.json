@@ -1,0 +1,16 @@
+[
+  "forme_home_buts_marques",
+  "forme_home_buts_encaisses",
+  "forme_away_buts_marques",
+  "forme_away_buts_encaisses",
+  "attaque_home",
+  "defense_home",
+  "attaque_away",
+  "defense_away",
+  "xg_dom",
+  "xg_ext",
+  "tirs_dom",
+  "tirs_ext",
+  "league_avg_goals_60d",
+  "xg_exp_total"
+]
