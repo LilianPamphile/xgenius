@@ -3813,3 +3813,56 @@ date,home,away,match,prediction_buts,p25,p75,incertitude,prob_over25,prob_under2
 2026-05-16,Al-Hilal Saudi FC,NEOM,Al-Hilal Saudi FC vs NEOM,3.62,,,,,,,,Fort,,,,Saudi Professional League
 2026-05-16,Al Okhdood,Al Khaleej Saihat,Al Okhdood vs Al Khaleej Saihat,2.75,,,,,,,,Moyen,,,,Saudi Professional League
 2026-05-16,Al-Ahli Jeddah,Al Kholood,Al-Ahli Jeddah vs Al Kholood,3.81,,,,,,,,Fort,,,,Saudi Professional League
+2026-05-17,Lille,Auxerre,Lille vs Auxerre,2.18,,,,,,,,Moyen,,,,Ligue 1
+2026-05-17,Lyon,Lens,Lyon vs Lens,2.59,,,,,,,,Moyen,,,,Ligue 1
+2026-05-17,Marseille,Rennes,Marseille vs Rennes,2.9,,,,,,,,Moyen,,,,Ligue 1
+2026-05-17,Nantes,Toulouse,Nantes vs Toulouse,2.31,,,,,,,,Moyen,,,,Ligue 1
+2026-05-17,Nice,Metz,Nice vs Metz,2.58,,,,,,,,Moyen,,,,Ligue 1
+2026-05-17,Strasbourg,Monaco,Strasbourg vs Monaco,2.55,,,,,,,,Moyen,,,,Ligue 1
+2026-05-17,Lorient,Le Havre,Lorient vs Le Havre,2.58,,,,,,,,Moyen,,,,Ligue 1
+2026-05-17,Stade Brestois 29,Angers,Stade Brestois 29 vs Angers,2.68,,,,,,,,Moyen,,,,Ligue 1
+2026-05-17,Paris FC,Paris Saint Germain,Paris FC vs Paris Saint Germain,2.99,,,,,,,,Moyen,,,,Ligue 1
+2026-05-17,Manchester United,Nottingham Forest,Manchester United vs Nottingham Forest,1.82,,,,,,,,Faible,,,,Premier League
+2026-05-17,Wolves,Fulham,Wolves vs Fulham,2.01,,,,,,,,Moyen,,,,Premier League
+2026-05-17,Everton,Sunderland,Everton vs Sunderland,2.27,,,,,,,,Moyen,,,,Premier League
+2026-05-17,Brentford,Crystal Palace,Brentford vs Crystal Palace,2.2,,,,,,,,Moyen,,,,Premier League
+2026-05-17,Leeds,Brighton,Leeds vs Brighton,1.93,,,,,,,,Faible,,,,Premier League
+2026-05-17,Newcastle,West Ham,Newcastle vs West Ham,1.99,,,,,,,,Faible,,,,Premier League
+2026-05-17,Genoa,AC Milan,Genoa vs AC Milan,2.47,,,,,,,,Moyen,,,,Serie A
+2026-05-17,Juventus,Fiorentina,Juventus vs Fiorentina,2.65,,,,,,,,Moyen,,,,Serie A
+2026-05-17,AS Roma,Lazio,AS Roma vs Lazio,2.08,,,,,,,,Moyen,,,,Serie A
+2026-05-17,Pisa,Napoli,Pisa vs Napoli,1.93,,,,,,,,Faible,,,,Serie A
+2026-05-17,Como,Parma,Como vs Parma,2.37,,,,,,,,Moyen,,,,Serie A
+2026-05-17,Inter,Hellas Verona,Inter vs Hellas Verona,4.11,,,,,,,,Fort,,,,Serie A
+2026-05-17,Atalanta,Bologna,Atalanta vs Bologna,1.86,,,,,,,,Faible,,,,Serie A
+2026-05-17,Sassuolo,Lecce,Sassuolo vs Lecce,1.94,,,,,,,,Faible,,,,Serie A
+2026-05-17,Cagliari,Torino,Cagliari vs Torino,2.06,,,,,,,,Moyen,,,,Serie A
+2026-05-17,Udinese,Cremonese,Udinese vs Cremonese,1.91,,,,,,,,Faible,,,,Serie A
+2026-05-17,PEC Zwolle,Feyenoord,PEC Zwolle vs Feyenoord,2.94,,,,,,,,Moyen,,,,Eredivisie
+2026-05-17,PSV Eindhoven,Twente,PSV Eindhoven vs Twente,2.82,,,,,,,,Moyen,,,,Eredivisie
+2026-05-17,AZ Alkmaar,NAC Breda,AZ Alkmaar vs NAC Breda,3.03,,,,,,,,Fort,,,,Eredivisie
+2026-05-17,Heracles,Groningen,Heracles vs Groningen,2.75,,,,,,,,Moyen,,,,Eredivisie
+2026-05-17,Utrecht,Fortuna Sittard,Utrecht vs Fortuna Sittard,2.88,,,,,,,,Moyen,,,,Eredivisie
+2026-05-17,Heerenveen,Ajax,Heerenveen vs Ajax,2.45,,,,,,,,Moyen,,,,Eredivisie
+2026-05-17,NEC Nijmegen,GO Ahead Eagles,NEC Nijmegen vs GO Ahead Eagles,3.33,,,,,,,,Fort,,,,Eredivisie
+2026-05-17,FC Volendam,Telstar,FC Volendam vs Telstar,1.56,,,,,,,,Faible,,,,Eredivisie
+2026-05-17,Sparta Rotterdam,Excelsior,Sparta Rotterdam vs Excelsior,2.53,,,,,,,,Moyen,,,,Eredivisie
+2026-05-17,Atletico Madrid,Girona,Atletico Madrid vs Girona,1.95,,,,,,,,Faible,,,,La Liga
+2026-05-17,Athletic Club,Celta Vigo,Athletic Club vs Celta Vigo,2.24,,,,,,,,Moyen,,,,La Liga
+2026-05-17,Sevilla,Real Madrid,Sevilla vs Real Madrid,2.13,,,,,,,,Moyen,,,,La Liga
+2026-05-17,Levante,Mallorca,Levante vs Mallorca,4.01,,,,,,,,Fort,,,,La Liga
+2026-05-17,Real Sociedad,Valencia,Real Sociedad vs Valencia,2.41,,,,,,,,Moyen,,,,La Liga
+2026-05-17,Oviedo,Alaves,Oviedo vs Alaves,2.31,,,,,,,,Moyen,,,,La Liga
+2026-05-17,Osasuna,Espanyol,Osasuna vs Espanyol,3.01,,,,,,,,Fort,,,,La Liga
+2026-05-17,Rayo Vallecano,Villarreal,Rayo Vallecano vs Villarreal,2.1,,,,,,,,Moyen,,,,La Liga
+2026-05-17,Elche,Getafe,Elche vs Getafe,2.64,,,,,,,,Moyen,,,,La Liga
+2026-05-17,Barcelona,Real Betis,Barcelona vs Real Betis,3.01,,,,,,,,Fort,,,,La Liga
+2026-05-17,Hannover 96,1. FC Nürnberg,Hannover 96 vs 1. FC Nürnberg,2.49,,,,,,,,Moyen,,,,2. Bundesliga
+2026-05-17,FC Schalke 04,Eintracht Braunschweig,FC Schalke 04 vs Eintracht Braunschweig,3.2,,,,,,,,Fort,,,,2. Bundesliga
+2026-05-17,SpVgg Greuther Fürth,Fortuna Düsseldorf,SpVgg Greuther Fürth vs Fortuna Düsseldorf,3.36,,,,,,,,Fort,,,,2. Bundesliga
+2026-05-17,1. FC Magdeburg,1. FC Kaiserslautern,1. FC Magdeburg vs 1. FC Kaiserslautern,2.81,,,,,,,,Moyen,,,,2. Bundesliga
+2026-05-17,SV Darmstadt 98,SC Paderborn 07,SV Darmstadt 98 vs SC Paderborn 07,2.7,,,,,,,,Moyen,,,,2. Bundesliga
+2026-05-17,Dynamo Dresden,Holstein Kiel,Dynamo Dresden vs Holstein Kiel,2.75,,,,,,,,Moyen,,,,2. Bundesliga
+2026-05-17,Arminia Bielefeld,Hertha BSC,Arminia Bielefeld vs Hertha BSC,3.5,,,,,,,,Fort,,,,2. Bundesliga
+2026-05-17,Karlsruher SC,VfL Bochum,Karlsruher SC vs VfL Bochum,2.51,,,,,,,,Moyen,,,,2. Bundesliga
+2026-05-17,SV Elversberg,Preußen Münster,SV Elversberg vs Preußen Münster,2.47,,,,,,,,Moyen,,,,2. Bundesliga
