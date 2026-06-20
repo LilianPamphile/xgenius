@@ -1,33 +1,28 @@
 # XGenius Match Radar
 
-Version volontairement minimale de XGenius.
-
-Deux fois par semaine, le projet :
-
-- actualise les résultats récents ;
-- publie un bilan des anciennes prédictions ;
-- récupère les prochains matchs ;
-- appelle les prédictions d'API-Football ;
-- calcule un signal Over 2,5 et BTTS avec une approximation Poisson ;
-- publie un radar sous forme de thread sur X.
+Version minimale de XGenius avec PostgreSQL Railway, GitHub Actions, API-Football et Telegram.
 
 ## Fonctionnement
 
 ### Lundi à 08 h 17, heure de Paris
 
-- bilan des matchs terminés depuis la précédente exécution ;
-- calendrier du lundi au dimanche ;
-- radar de la semaine.
+- récupération des résultats récents ;
+- bilan des anciennes prédictions ;
+- récupération des matchs du lundi au dimanche ;
+- génération du radar de la semaine ;
+- envoi automatique sur Telegram.
 
 ### Jeudi à 08 h 17, heure de Paris
 
-- bilan des matchs terminés depuis la précédente exécution ;
-- calendrier du jeudi au dimanche ;
-- radar du week-end.
+- récupération des nouveaux résultats ;
+- bilan des matchs joués depuis lundi ;
+- récupération des matchs du jeudi au dimanche ;
+- actualisation du radar du week-end ;
+- envoi automatique sur Telegram.
 
 Les tables PostgreSQL sont créées automatiquement au premier lancement.
 
-## Fichiers nécessaires
+## Fichiers du dépôt
 
 ```text
 main.py
@@ -37,67 +32,60 @@ requirements.txt
 README.md
 ```
 
-Tout l'ancien système ML, Telegram, TikTok et CSV peut être supprimé.
+## Secrets GitHub à conserver
 
-## Secrets GitHub à créer
-
-Dans `Settings > Secrets and variables > Actions > New repository secret` :
+Dans `Settings > Secrets and variables > Actions` :
 
 ```text
-DATABASE_URL
 RAPIDAPI_KEY
-X_API_KEY
-X_API_SECRET
-X_ACCESS_TOKEN
-X_ACCESS_TOKEN_SECRET
+TELEGRAM_BOT_TOKEN
+TELEGRAM_CHAT_ID
 ```
 
-L'application X doit disposer des droits de lecture et d'écriture. Après avoir modifié les droits, régénérer les Access Token et Access Token Secret.
+La connexion Railway est déjà écrite directement dans `main.py`. Aucun secret `DATABASE_URL` n'est nécessaire.
+
+## Créer le bot Telegram
+
+1. Ouvrir Telegram et écrire à `@BotFather`.
+2. Envoyer `/newbot` et récupérer le token.
+3. Envoyer un message au nouveau bot.
+4. Ouvrir dans un navigateur :
+
+```text
+https://api.telegram.org/bot<VOTRE_TOKEN>/getUpdates
+```
+
+5. Copier la valeur `message.chat.id` dans le secret `TELEGRAM_CHAT_ID`.
 
 ## Premier test
 
 1. Aller dans l'onglet **Actions** du dépôt.
 2. Ouvrir **XGenius Match Radar**.
 3. Cliquer sur **Run workflow**.
-4. Choisir `monday` ou `thursday`.
+4. Choisir `monday`.
 5. Laisser `dry_run` activé.
 
-Les publications sont alors affichées dans les logs sans être envoyées sur X.
+Le script appelle API-Football et PostgreSQL, mais affiche les messages dans les logs sans les envoyer.
 
-Quand le résultat est correct, relancer manuellement avec `dry_run` désactivé. Les exécutions programmées du lundi et du jeudi publient automatiquement.
-
-## Compétitions suivies
-
-La liste se trouve en haut de `main.py` dans `COMPETITIONS`. Pour retirer une compétition, supprimer simplement sa ligne.
-
-## Lancement local
-
-```bash
-pip install -r requirements.txt
-python main.py --mode monday
-```
-
-Variables requises :
-
-```text
-DATABASE_URL
-RAPIDAPI_KEY
-```
-
-Pour publier réellement sur X, ajouter également les quatre variables `X_*` et définir :
-
-```text
-DRY_RUN=false
-```
+Après validation, relancer avec `dry_run` désactivé.
 
 ## Tables créées
 
 - `radar_matches` : matchs, prédictions et résultats ;
-- `radar_reports` : publications déjà envoyées, afin d'éviter les doublons.
+- `radar_reports` : bilans et radars déjà envoyés, pour éviter les doublons.
 
-## Limites assumées
+## Prédictions affichées
 
-- les probabilités 1X2 viennent directement d'API-Football ;
-- toutes les compétitions ne disposent pas forcément de prédictions ;
-- le signal BTTS est une estimation Poisson simple, pas une cote bookmaker ;
-- le nombre de matchs analysés est limité à 70 par exécution pour préserver le quota API.
+- probabilités domicile, nul et extérieur ;
+- buts estimés ;
+- probabilité Over 2,5 ;
+- probabilité BTTS ;
+- signal principal ;
+- confiance ;
+- profil du match.
+
+Les probabilités 1X2 viennent de l'endpoint `/predictions` d'API-Football. Les estimations de buts, Over 2,5 et BTTS utilisent une approximation Poisson simple basée sur la forme récente fournie par l'API.
+
+## Compétitions suivies
+
+La liste se trouve dans `COMPETITIONS` en haut de `main.py`.

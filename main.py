@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """XGenius Match Radar - version minimale.
 
-Deux exécutions par semaine via GitHub Actions :
+Deux exécutions par semaine via GitHub Actions avec diffusion Telegram :
 - lundi : bilan + radar de la semaine ;
 - jeudi : bilan + radar du week-end.
 
@@ -17,7 +17,6 @@ import argparse
 import math
 import os
 import sys
-import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any, Iterable
@@ -27,8 +26,6 @@ import psycopg2
 import requests
 from psycopg2.extras import RealDictCursor
 from requests.adapters import HTTPAdapter
-from requests.auth import AuthBase
-from requests_oauthlib import OAuth1
 from urllib3.util.retry import Retry
 
 # ---------------------------------------------------------------------------
@@ -38,7 +35,7 @@ from urllib3.util.retry import Retry
 PARIS_TZ = ZoneInfo("Europe/Paris")
 API_BASE_URL = "https://api-football-v1.p.rapidapi.com/v3"
 API_HOST = "api-football-v1.p.rapidapi.com"
-X_POST_URL = "https://api.x.com/2/tweets"
+TELEGRAM_API_BASE = "https://api.telegram.org"
 
 # Compétitions suivies. Ajouter/supprimer simplement un identifiant ici.
 # Les saisons ne sont pas codées : les matchs sont récupérés par date.
@@ -56,10 +53,9 @@ COMPETITIONS = {
     848: "UEFA Conference League",
 }
 
-FINAL_STATUSES = {"FT", "AET", "PEN"}
 FUTURE_STATUSES = {"NS", "TBD"}
 
-DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+DATABASE_URL = "postgresql://postgres:jDDqfaqpspVDBBwsqxuaiSDNXjTxjMmP@shortline.proxy.rlwy.net:36536/railway"
 RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "").strip()
 DRY_RUN = os.getenv("DRY_RUN", "true").strip().lower() in {"1", "true", "yes", "oui"}
 MAX_RADAR_MATCHES = int(os.getenv("MAX_RADAR_MATCHES", "5"))
@@ -83,8 +79,6 @@ class Periods:
 
 def require_settings() -> None:
     missing = []
-    if not DATABASE_URL:
-        missing.append("DATABASE_URL")
     if not RAPIDAPI_KEY:
         missing.append("RAPIDAPI_KEY")
     if missing:
@@ -184,12 +178,6 @@ def profile_label(confidence: float, over_25: float, btts: float, home: float, d
         return "très indécis"
     return "équilibré"
 
-
-def truncate(text: str, limit: int = 278) -> str:
-    text = " ".join(text.split()) if "\n" not in text else text.strip()
-    if len(text) <= limit:
-        return text
-    return text[: limit - 1].rstrip() + "…"
 
 
 # ---------------------------------------------------------------------------
@@ -291,9 +279,12 @@ CREATE INDEX IF NOT EXISTS idx_radar_matches_unreported
 
 CREATE TABLE IF NOT EXISTS radar_reports (
     report_key TEXT PRIMARY KEY,
-    x_post_id TEXT,
+    message_id TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE radar_reports
+    ADD COLUMN IF NOT EXISTS message_id TEXT;
 """
 
 
@@ -412,33 +403,33 @@ class Database:
             cur.execute("SELECT 1 FROM radar_reports WHERE report_key = %s", (report_key,))
             return cur.fetchone() is not None
 
-    def save_report(self, report_key: str, x_post_id: str | None) -> None:
+    def save_report(self, report_key: str, message_id: str | None) -> None:
         with self.conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO radar_reports (report_key, x_post_id)
+                INSERT INTO radar_reports (report_key, message_id)
                 VALUES (%s, %s)
                 ON CONFLICT (report_key) DO NOTHING
                 """,
-                (report_key, x_post_id),
+                (report_key, message_id),
             )
         self.conn.commit()
 
     def complete_bilan(
         self,
         report_key: str,
-        x_post_id: str | None,
+        message_id: str | None,
         fixture_ids: list[int],
     ) -> None:
         """Enregistre le bilan et marque les matchs dans une seule transaction."""
         with self.conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO radar_reports (report_key, x_post_id)
+                INSERT INTO radar_reports (report_key, message_id)
                 VALUES (%s, %s)
                 ON CONFLICT (report_key) DO NOTHING
                 """,
-                (report_key, x_post_id),
+                (report_key, message_id),
             )
             cur.execute(
                 "UPDATE radar_matches SET reported_at = NOW() WHERE fixture_id = ANY(%s)",
@@ -483,65 +474,59 @@ class Database:
 
 
 # ---------------------------------------------------------------------------
-# X / Twitter
+# Telegram
 # ---------------------------------------------------------------------------
 
-class XClient:
+class TelegramClient:
     def __init__(self):
-        self.api_key = os.getenv("X_API_KEY", "").strip()
-        self.api_secret = os.getenv("X_API_SECRET", "").strip()
-        self.access_token = os.getenv("X_ACCESS_TOKEN", "").strip()
-        self.access_token_secret = os.getenv("X_ACCESS_TOKEN_SECRET", "").strip()
+        self.bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+        self.chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
 
-    def _auth(self) -> AuthBase:
-        if not all([self.api_key, self.api_secret, self.access_token, self.access_token_secret]):
+    def _require_settings(self) -> None:
+        if not self.bot_token or not self.chat_id:
             raise RuntimeError(
-                "Identifiants X manquants : X_API_KEY, X_API_SECRET, "
-                "X_ACCESS_TOKEN et X_ACCESS_TOKEN_SECRET."
+                "Identifiants Telegram manquants : "
+                "TELEGRAM_BOT_TOKEN et TELEGRAM_CHAT_ID."
             )
-        return OAuth1(
-            self.api_key,
-            self.api_secret,
-            self.access_token,
-            self.access_token_secret,
-        )
 
-    def post_thread(self, messages: list[str]) -> str | None:
-        cleaned = [truncate(message) for message in messages if message.strip()]
+    def send_messages(self, messages: list[str]) -> str | None:
+        cleaned = [message.strip() for message in messages if message.strip()]
         if not cleaned:
             return None
 
         if DRY_RUN:
-            print("\n===== DRY RUN X =====")
+            print("\n===== DRY RUN TELEGRAM =====")
             for index, message in enumerate(cleaned, start=1):
-                print(f"\n--- Post {index}/{len(cleaned)} ---\n{message}")
-            print("\n=====================\n")
+                print(f"\n--- Message {index}/{len(cleaned)} ---\n{message}")
+            print("\n============================\n")
             return None
 
-        auth = self._auth()
-        root_id: str | None = None
-        previous_id: str | None = None
+        self._require_settings()
+        first_message_id: str | None = None
+        url = f"{TELEGRAM_API_BASE}/bot{self.bot_token}/sendMessage"
 
         for message in cleaned:
-            body: dict[str, Any] = {"text": message}
-            if previous_id:
-                body["reply"] = {"in_reply_to_tweet_id": previous_id}
+            # Telegram limite un message texte à 4096 caractères.
+            chunks = [message[i:i + 4000] for i in range(0, len(message), 4000)]
+            for chunk in chunks:
+                response = requests.post(
+                    url,
+                    json={
+                        "chat_id": self.chat_id,
+                        "text": chunk,
+                        "disable_web_page_preview": True,
+                    },
+                    timeout=30,
+                )
+                if response.status_code >= 300:
+                    raise RuntimeError(
+                        f"Erreur Telegram {response.status_code}: {response.text}"
+                    )
+                payload = response.json()
+                message_id = str(payload["result"]["message_id"])
+                first_message_id = first_message_id or message_id
 
-            response = requests.post(
-                X_POST_URL,
-                auth=auth,
-                json=body,
-                timeout=30,
-            )
-            if response.status_code >= 300:
-                raise RuntimeError(f"Erreur X {response.status_code}: {response.text}")
-
-            post_id = str(response.json()["data"]["id"])
-            root_id = root_id or post_id
-            previous_id = post_id
-            time.sleep(1)
-
-        return root_id
+        return first_message_id
 
 
 # ---------------------------------------------------------------------------
@@ -645,7 +630,7 @@ def format_match_post(emoji: str, title: str, row: dict[str, Any]) -> str:
     )
 
 
-def build_radar_thread(rows: list[dict[str, Any]], periods: Periods) -> list[str]:
+def build_radar_messages(rows: list[dict[str, Any]], periods: Periods) -> list[str]:
     selected = choose_radar_matches(rows, MAX_RADAR_MATCHES)
     if not selected:
         return []
@@ -654,7 +639,7 @@ def build_radar_thread(rows: list[dict[str, Any]], periods: Periods) -> list[str
         f"⚽ XGenius — {periods.label}\n"
         f"Du {periods.future_start.strftime('%d/%m')} au {periods.future_end.strftime('%d/%m')}\n"
         f"{len(rows)} matchs analysés, {len(selected)} affichés.\n"
-        "1X2, buts, BTTS et confiance 👇"
+        "1X2, buts, BTTS et confiance"
     )
     return [root] + [format_match_post(emoji, title, row) for emoji, title, row in selected]
 
@@ -701,7 +686,7 @@ def collect_dates(api: FootballAPI, db: Database, days: Iterable[date]) -> list[
     return collected
 
 
-def publish_bilan(db: Database, x_client: XClient, mode: str, today: date) -> None:
+def publish_bilan(db: Database, telegram: TelegramClient, mode: str, today: date) -> None:
     rows = db.unreported_completed()
     if not rows:
         print("Aucun nouveau match terminé à intégrer au bilan.")
@@ -714,12 +699,12 @@ def publish_bilan(db: Database, x_client: XClient, mode: str, today: date) -> No
 
     label = "Bilan du week-end" if mode == "monday" else "Bilan de la semaine"
     message = build_bilan(rows, label)
-    post_id = x_client.post_thread([message])
+    message_id = telegram.send_messages([message])
 
     if not DRY_RUN:
         db.complete_bilan(
             report_key,
-            post_id,
+            message_id,
             [int(row["fixture_id"]) for row in rows],
         )
 
@@ -766,7 +751,7 @@ def generate_predictions(
 
 def publish_radar(
     db: Database,
-    x_client: XClient,
+    telegram: TelegramClient,
     mode: str,
     today: date,
     periods: Periods,
@@ -777,14 +762,14 @@ def publish_radar(
         return
 
     rows = db.future_predictions(periods.future_start, periods.future_end)
-    thread = build_radar_thread(rows, periods)
-    if not thread:
+    messages = build_radar_messages(rows, periods)
+    if not messages:
         print("Aucune prédiction disponible pour le radar.")
         return
 
-    post_id = x_client.post_thread(thread)
+    message_id = telegram.send_messages(messages)
     if not DRY_RUN:
-        db.save_report(report_key, post_id)
+        db.save_report(report_key, message_id)
 
 
 def run(mode: str) -> None:
@@ -794,7 +779,7 @@ def run(mode: str) -> None:
 
     api = FootballAPI(RAPIDAPI_KEY)
     db = Database(DATABASE_URL)
-    x_client = XClient()
+    telegram = TelegramClient()
 
     try:
         db.ensure_schema()
@@ -804,7 +789,7 @@ def run(mode: str) -> None:
         past_end = today - timedelta(days=1)
         past_fixtures = collect_dates(api, db, daterange(past_start, past_end))
         print(f"Historique actualisé : {len(past_fixtures)} matchs récupérés.")
-        publish_bilan(db, x_client, mode, today)
+        publish_bilan(db, telegram, mode, today)
 
         future_fixtures = collect_dates(
             api,
@@ -813,7 +798,7 @@ def run(mode: str) -> None:
         )
         saved = generate_predictions(api, db, future_fixtures)
         print(f"{saved} prédictions enregistrées ou actualisées.")
-        publish_radar(db, x_client, mode, today, periods)
+        publish_radar(db, telegram, mode, today, periods)
 
     finally:
         db.close()
