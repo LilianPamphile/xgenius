@@ -1,0 +1,65 @@
+name: XGenius Match Radar
+
+on:
+  schedule:
+    - cron: "17 8 * * 1"
+      timezone: "Europe/Paris"
+    - cron: "17 8 * * 4"
+      timezone: "Europe/Paris"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Traitement à lancer"
+        required: true
+        default: "monday"
+        type: choice
+        options:
+          - monday
+          - thursday
+      dry_run:
+        description: "Afficher les messages sans les envoyer sur Telegram"
+        required: true
+        default: true
+        type: boolean
+
+concurrency:
+  group: xgenius-match-radar
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+
+      - name: Installer Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Installer les dépendances
+        run: pip install -r requirements.txt
+
+      - name: Lancer XGenius
+        env:
+          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          MAX_RADAR_MATCHES: "5"
+          MAX_PREDICTIONS_PER_RUN: "70"
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            MODE="${{ inputs.mode }}"
+            DRY="${{ inputs.dry_run }}"
+          else
+            MODE="auto"
+            DRY="false"
+          fi
+
+          echo "Mode=$MODE | Dry run=$DRY"
+          DRY_RUN="$DRY" python main.py --mode "$MODE"
