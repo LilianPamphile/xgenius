@@ -1,0 +1,82 @@
+name: XGenius IA Auto
+
+on:
+  schedule:
+    # 08:17 Europe/Paris en heure d'été/hiver.
+    # Le code vérifie l'heure locale et ignore le mauvais créneau.
+    - cron: '17 6 * * 1,4'
+    - cron: '17 7 * * 1,4'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Mode d’exécution'
+        required: true
+        default: 'monday'
+        type: choice
+        options:
+          - monday
+          - thursday
+          - bootstrap
+          - status
+      dry_run:
+        description: 'true = test sans envoyer Telegram'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+      force:
+        description: 'true = renvoyer même si le rapport existe déjà'
+        required: true
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+      bootstrap_days:
+        description: 'Nombre de jours à importer en mode bootstrap'
+        required: false
+        default: '90'
+
+jobs:
+  xgenius:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run XGenius scheduled
+        if: github.event_name == 'schedule'
+        env:
+          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python main.py --mode auto --dry-run false --force false
+
+      - name: Run XGenius manual
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python main.py \
+            --mode "${{ inputs.mode }}" \
+            --dry-run "${{ inputs.dry_run }}" \
+            --force "${{ inputs.force }}" \
+            --bootstrap-days "${{ inputs.bootstrap_days }}"
