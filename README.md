@@ -1,61 +1,111 @@
-# XGenius Match Radar — Telegram minimal
+# XGenius IA Auto
 
-Version minimale de XGenius avec :
+Projet football Data Science/IA auto-apprenant.
 
-- API-Football ;
-- PostgreSQL Railway ;
-- GitHub Actions ;
-- Telegram.
+Le système :
 
-La connexion Railway est écrite directement dans `main.py`, comme demandé.
+1. récupère les calendriers et résultats via API-Football ;
+2. stocke l’historique dans PostgreSQL Railway ;
+3. construit des features prématch sans fuite temporelle ;
+4. entraîne automatiquement un modèle IA ;
+5. compare le nouveau modèle avec l’ancien ;
+6. active le meilleur modèle ;
+7. prédit les matchs du lundi → mercredi et du jeudi → dimanche ;
+8. envoie les bilans et radars sur Telegram.
 
-## Logique des périodes
+---
 
-Le projet fonctionne avec deux exécutions métier par semaine.
+## Fonctionnement
 
-### Lundi
+### Lundi matin
 
-Le lundi, le script fait :
+- Bilan du week-end : vendredi → dimanche.
+- Import des résultats et statistiques.
+- Évaluation des anciennes prédictions.
+- Réentraînement automatique.
+- Radar IA : lundi → mercredi.
 
-- bilan des matchs du week-end : vendredi, samedi, dimanche ;
-- radar des matchs à venir : lundi, mardi, mercredi.
+### Jeudi matin
 
-Période utilisée :
+- Bilan de la semaine : lundi → mercredi.
+- Import des résultats et statistiques.
+- Évaluation des anciennes prédictions.
+- Réentraînement automatique.
+- Radar IA : jeudi → dimanche.
 
-```text
-Bilan : vendredi 00:00 → lundi 00:00
-Radar : lundi 00:00 → jeudi 00:00
-```
+---
 
-### Jeudi
+## Ce que prédit l’IA
 
-Le jeudi, le script fait :
+Pour chaque match :
 
-- bilan des matchs de début de semaine : lundi, mardi, mercredi ;
-- radar des matchs à venir : jeudi, vendredi, samedi, dimanche.
+- buts attendus domicile ;
+- buts attendus extérieur ;
+- probabilité victoire domicile ;
+- probabilité nul ;
+- probabilité victoire extérieur ;
+- probabilité Over 2.5 ;
+- probabilité BTTS ;
+- signal principal ;
+- profil du match ;
+- score de confiance.
 
-Période utilisée :
+L’IA entraîne deux modèles ExtraTrees :
 
-```text
-Bilan : lundi 00:00 → jeudi 00:00
-Radar : jeudi 00:00 → lundi 00:00
-```
+- un modèle pour les buts de l’équipe domicile ;
+- un modèle pour les buts de l’équipe extérieure.
 
-Cela évite le problème de l’ancienne version qui récupérait trop large, par exemple samedi → vendredi en lancement manuel.
+Les probabilités 1X2, Over 2.5 et BTTS sont ensuite dérivées par distribution de Poisson.
 
-## Fichiers du dépôt
+---
+
+## Structure
 
 ```text
 main.py
 requirements.txt
-README.md
-.gitignore
-.github/workflows/xgenius.yml
+.github/workflows/xgenius_ai.yml
+xgenius/
+  api_football.py
+  config.py
+  db.py
+  evaluation.py
+  features.py
+  jobs.py
+  modeling.py
+  reporting.py
+  telegram.py
+  time_windows.py
 ```
+
+---
+
+## Base de données
+
+Le code crée automatiquement les tables :
+
+```text
+ai_fixtures
+ai_team_match_stats
+ai_predictions
+ai_model_runs
+ai_reports
+```
+
+Le modèle entraîné est stocké directement en base PostgreSQL dans `ai_model_runs.artifact`.
+Aucun fichier `.pkl` n’est nécessaire dans GitHub.
+
+---
 
 ## Secrets GitHub nécessaires
 
-Dans `Settings > Secrets and variables > Actions` :
+Dans :
+
+```text
+Settings → Secrets and variables → Actions
+```
+
+Créer uniquement :
 
 ```text
 RAPIDAPI_KEY
@@ -63,63 +113,120 @@ TELEGRAM_BOT_TOKEN
 TELEGRAM_CHAT_ID
 ```
 
-Aucun secret `DATABASE_URL` n’est nécessaire.
+La `DATABASE_URL` est volontairement dans `xgenius/config.py`, comme demandé.
 
-## GitHub Actions
+---
 
-GitHub Actions planifie les cron en UTC. Le workflow lance donc un contrôle à `06:17` et `07:17` UTC les lundis et jeudis, puis le job ne continue que lorsque l’heure locale de Paris est bien `08:17`.
+## Installation dans GitHub
 
-Cela permet de gérer automatiquement l’heure d’été et l’heure d’hiver.
-
-## Premier test
-
-Dans GitHub :
+1. Supprimer les anciens fichiers du dépôt.
+2. Copier tous les fichiers de ce projet à la racine du dépôt.
+3. Ajouter les 3 secrets GitHub.
+4. Aller dans `Actions`.
+5. Lancer d’abord :
 
 ```text
-Actions > XGenius Match Radar > Run workflow
+XGenius IA Auto → Run workflow
+mode = bootstrap
+dry_run = true
+bootstrap_days = 90
 ```
 
-Choisir :
+6. Si les logs sont propres, relancer :
 
 ```text
-mode = monday
- dry_run = true
+mode = bootstrap
+dry_run = false
+bootstrap_days = 90
 ```
 
-En `dry_run`, le script appelle API-Football et PostgreSQL, mais affiche les messages dans les logs sans les envoyer sur Telegram.
-
-Après vérification, relancer avec :
+7. Lancer ensuite :
 
 ```text
+mode = status
 dry_run = false
 ```
 
-## Tables PostgreSQL créées
+8. Puis tester :
 
-Le script crée automatiquement :
+```text
+mode = monday
+dry_run = true
+```
 
-- `radar_matches` : matchs, prédictions et résultats ;
-- `radar_reports` : bilans et radars déjà envoyés pour éviter les doublons.
+9. Si tout est bon :
 
-## Sorties Telegram
+```text
+mode = monday
+dry_run = false
+```
 
-Chaque radar affiche jusqu’à 5 matchs :
+---
 
-- signal 1X2 le plus net ;
-- potentiel offensif ;
-- BTTS à surveiller ;
-- match le plus indécis ;
-- match potentiellement fermé.
+## Important : première utilisation
 
-## Sortie Telegram
+Au début, si la base ne contient pas assez de matchs terminés, XGenius utilise une baseline dynamique.
+Dès que l’historique atteint assez de matchs, il entraîne automatiquement le modèle IA.
 
-Le radar envoie maintenant deux niveaux de lecture :
+Le seuil par défaut est :
 
-1. les tops par catégorie : 1X2 le plus net, potentiel offensif, BTTS, match indécis, match fermé ;
-2. la liste compacte de tous les matchs analysés sur la période.
+```text
+MIN_TRAIN_MATCHES = 120
+```
 
-Variables optionnelles :
+Tu peux le modifier dans `xgenius/config.py`.
 
-- `MAX_RADAR_MATCHES` : nombre de tops affichés, défaut `5` ;
-- `SHOW_ALL_MATCHES` : `true` ou `false`, défaut `true` ;
-- `MAX_FULL_MATCHES` : nombre maximum de matchs listés dans la liste complète, défaut `120`.
+---
+
+## Variables de réglage utiles
+
+Dans `xgenius/config.py` :
+
+```python
+MIN_TRAIN_MATCHES = 120
+MAX_STATS_IMPORT_PER_RUN = 80
+MAX_RADAR_TOP_MATCHES = 8
+MAX_FULL_LIST_MATCHES = 160
+SHOW_FULL_LIST = True
+```
+
+---
+
+## Ajouter ou retirer des compétitions
+
+Modifier simplement `MONITORED_LEAGUES` dans `xgenius/config.py`.
+
+Exemple :
+
+```python
+MONITORED_LEAGUES = {
+    61: "Ligue 1",
+    39: "Premier League",
+    1: "World Cup",
+}
+```
+
+---
+
+## Commandes locales
+
+```bash
+pip install -r requirements.txt
+python main.py --mode bootstrap --dry-run true --bootstrap-days 30
+python main.py --mode status --dry-run true
+python main.py --mode monday --dry-run true
+python main.py --mode thursday --dry-run true
+```
+
+---
+
+## Logique anti-doublon
+
+Les bilans et radars envoyés sont enregistrés dans `ai_reports`.
+Si GitHub Actions relance le même traitement, le message n’est pas renvoyé.
+
+Pour forcer un renvoi manuel :
+
+```bash
+python main.py --mode monday --dry-run false --force true
+```
