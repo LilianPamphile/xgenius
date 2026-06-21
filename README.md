@@ -1,38 +1,59 @@
-# XGenius Match Radar
+# XGenius Match Radar — Telegram minimal
 
-Version minimale de XGenius avec PostgreSQL Railway, GitHub Actions, API-Football et Telegram.
+Version minimale de XGenius avec :
 
-## Fonctionnement
+- API-Football ;
+- PostgreSQL Railway ;
+- GitHub Actions ;
+- Telegram.
 
-### Lundi à 08 h 17, heure de Paris
+La connexion Railway est écrite directement dans `main.py`, comme demandé.
 
-- récupération des résultats récents ;
-- bilan des anciennes prédictions ;
-- récupération des matchs du lundi au dimanche ;
-- génération du radar de la semaine ;
-- envoi automatique sur Telegram.
+## Logique des périodes
 
-### Jeudi à 08 h 17, heure de Paris
+Le projet fonctionne avec deux exécutions métier par semaine.
 
-- récupération des nouveaux résultats ;
-- bilan des matchs joués depuis lundi ;
-- récupération des matchs du jeudi au dimanche ;
-- actualisation du radar du week-end ;
-- envoi automatique sur Telegram.
+### Lundi
 
-Les tables PostgreSQL sont créées automatiquement au premier lancement.
+Le lundi, le script fait :
+
+- bilan des matchs du week-end : vendredi, samedi, dimanche ;
+- radar des matchs à venir : lundi, mardi, mercredi.
+
+Période utilisée :
+
+```text
+Bilan : vendredi 00:00 → lundi 00:00
+Radar : lundi 00:00 → jeudi 00:00
+```
+
+### Jeudi
+
+Le jeudi, le script fait :
+
+- bilan des matchs de début de semaine : lundi, mardi, mercredi ;
+- radar des matchs à venir : jeudi, vendredi, samedi, dimanche.
+
+Période utilisée :
+
+```text
+Bilan : lundi 00:00 → jeudi 00:00
+Radar : jeudi 00:00 → lundi 00:00
+```
+
+Cela évite le problème de l’ancienne version qui récupérait trop large, par exemple samedi → vendredi en lancement manuel.
 
 ## Fichiers du dépôt
 
 ```text
 main.py
 requirements.txt
-.github/workflows/xgenius.yml
-.gitignore
 README.md
+.gitignore
+.github/workflows/xgenius.yml
 ```
 
-## Secrets GitHub à conserver
+## Secrets GitHub nécessaires
 
 Dans `Settings > Secrets and variables > Actions` :
 
@@ -42,50 +63,63 @@ TELEGRAM_BOT_TOKEN
 TELEGRAM_CHAT_ID
 ```
 
-La connexion Railway est déjà écrite directement dans `main.py`. Aucun secret `DATABASE_URL` n'est nécessaire.
+Aucun secret `DATABASE_URL` n’est nécessaire.
 
-## Créer le bot Telegram
+## GitHub Actions
 
-1. Ouvrir Telegram et écrire à `@BotFather`.
-2. Envoyer `/newbot` et récupérer le token.
-3. Envoyer un message au nouveau bot.
-4. Ouvrir dans un navigateur :
+GitHub Actions planifie les cron en UTC. Le workflow lance donc un contrôle à `06:17` et `07:17` UTC les lundis et jeudis, puis le job ne continue que lorsque l’heure locale de Paris est bien `08:17`.
 
-```text
-https://api.telegram.org/bot<VOTRE_TOKEN>/getUpdates
-```
-
-5. Copier la valeur `message.chat.id` dans le secret `TELEGRAM_CHAT_ID`.
+Cela permet de gérer automatiquement l’heure d’été et l’heure d’hiver.
 
 ## Premier test
 
-1. Aller dans l'onglet **Actions** du dépôt.
-2. Ouvrir **XGenius Match Radar**.
-3. Cliquer sur **Run workflow**.
-4. Choisir `monday`.
-5. Laisser `dry_run` activé.
+Dans GitHub :
 
-Le script appelle API-Football et PostgreSQL, mais affiche les messages dans les logs sans les envoyer.
+```text
+Actions > XGenius Match Radar > Run workflow
+```
 
-Après validation, relancer avec `dry_run` désactivé.
+Choisir :
 
-## Tables créées
+```text
+mode = monday
+ dry_run = true
+```
+
+En `dry_run`, le script appelle API-Football et PostgreSQL, mais affiche les messages dans les logs sans les envoyer sur Telegram.
+
+Après vérification, relancer avec :
+
+```text
+dry_run = false
+```
+
+## Tables PostgreSQL créées
+
+Le script crée automatiquement :
 
 - `radar_matches` : matchs, prédictions et résultats ;
-- `radar_reports` : bilans et radars déjà envoyés, pour éviter les doublons.
+- `radar_reports` : bilans et radars déjà envoyés pour éviter les doublons.
 
-## Prédictions affichées
+## Sorties Telegram
 
-- probabilités domicile, nul et extérieur ;
-- buts estimés ;
-- probabilité Over 2,5 ;
-- probabilité BTTS ;
-- signal principal ;
-- confiance ;
-- profil du match.
+Chaque radar affiche jusqu’à 5 matchs :
 
-Les probabilités 1X2 viennent de l'endpoint `/predictions` d'API-Football. Les estimations de buts, Over 2,5 et BTTS utilisent une approximation Poisson simple basée sur la forme récente fournie par l'API.
+- signal 1X2 le plus net ;
+- potentiel offensif ;
+- BTTS à surveiller ;
+- match le plus indécis ;
+- match potentiellement fermé.
 
-## Compétitions suivies
+## Sortie Telegram
 
-La liste se trouve dans `COMPETITIONS` en haut de `main.py`.
+Le radar envoie maintenant deux niveaux de lecture :
+
+1. les tops par catégorie : 1X2 le plus net, potentiel offensif, BTTS, match indécis, match fermé ;
+2. la liste compacte de tous les matchs analysés sur la période.
+
+Variables optionnelles :
+
+- `MAX_RADAR_MATCHES` : nombre de tops affichés, défaut `5` ;
+- `SHOW_ALL_MATCHES` : `true` ou `false`, défaut `true` ;
+- `MAX_FULL_MATCHES` : nombre maximum de matchs listés dans la liste complète, défaut `120`.

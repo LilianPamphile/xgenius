@@ -2,8 +2,8 @@
 """XGenius Match Radar - version minimale.
 
 Deux exécutions par semaine via GitHub Actions avec diffusion Telegram :
-- lundi : bilan + radar de la semaine ;
-- jeudi : bilan + radar du week-end.
+- lundi : bilan du week-end + radar lundi-mercredi ;
+- jeudi : bilan lundi-mercredi + radar jeudi-dimanche.
 
 Les prévisions 1X2 proviennent de l'endpoint /predictions d'API-Football.
 Les probabilités Over 2.5 et BTTS sont calculées avec une approximation
@@ -60,6 +60,8 @@ RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "").strip()
 DRY_RUN = os.getenv("DRY_RUN", "true").strip().lower() in {"1", "true", "yes", "oui"}
 MAX_RADAR_MATCHES = int(os.getenv("MAX_RADAR_MATCHES", "5"))
 MAX_PREDICTIONS_PER_RUN = int(os.getenv("MAX_PREDICTIONS_PER_RUN", "70"))
+SHOW_ALL_MATCHES = os.getenv("SHOW_ALL_MATCHES", "true").strip().lower() in {"1", "true", "yes", "oui"}
+MAX_FULL_MATCHES = int(os.getenv("MAX_FULL_MATCHES", "120"))
 
 
 # ---------------------------------------------------------------------------
@@ -70,7 +72,18 @@ MAX_PREDICTIONS_PER_RUN = int(os.getenv("MAX_PREDICTIONS_PER_RUN", "70"))
 class Periods:
     label: str
     future_start: date
-    future_end: date
+    future_end_exclusive: date
+    bilan_label: str
+    bilan_start: date
+    bilan_end_exclusive: date
+
+    @property
+    def future_end_inclusive(self) -> date:
+        return self.future_end_exclusive - timedelta(days=1)
+
+    @property
+    def bilan_end_inclusive(self) -> date:
+        return self.bilan_end_exclusive - timedelta(days=1)
 
 
 # ---------------------------------------------------------------------------
@@ -85,9 +98,10 @@ def require_settings() -> None:
         raise RuntimeError("Variables manquantes : " + ", ".join(missing))
 
 
-def daterange(start: date, end: date) -> Iterable[date]:
+def daterange(start: date, end_exclusive: date) -> Iterable[date]:
+    """Dates entre start inclus et end_exclusive exclu."""
     current = start
-    while current <= end:
+    while current < end_exclusive:
         yield current
         current += timedelta(days=1)
 
@@ -437,7 +451,9 @@ class Database:
             )
         self.conn.commit()
 
-    def unreported_completed(self) -> list[dict[str, Any]]:
+    def unreported_completed(self, start: date, end_exclusive: date) -> list[dict[str, Any]]:
+        start_dt = datetime.combine(start, datetime.min.time(), tzinfo=PARIS_TZ)
+        end_dt = datetime.combine(end_exclusive, datetime.min.time(), tzinfo=PARIS_TZ)
         with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 """
@@ -448,14 +464,17 @@ class Database:
                   AND status IN ('FT', 'AET', 'PEN')
                   AND home_goals IS NOT NULL
                   AND away_goals IS NOT NULL
+                  AND kickoff >= %s
+                  AND kickoff < %s
                 ORDER BY kickoff
-                """
+                """,
+                (start_dt, end_dt),
             )
             return list(cur.fetchall())
 
-    def future_predictions(self, start: date, end: date) -> list[dict[str, Any]]:
+    def future_predictions(self, start: date, end_exclusive: date) -> list[dict[str, Any]]:
         start_dt = datetime.combine(start, datetime.min.time(), tzinfo=PARIS_TZ)
-        end_dt = datetime.combine(end + timedelta(days=1), datetime.min.time(), tzinfo=PARIS_TZ)
+        end_dt = datetime.combine(end_exclusive, datetime.min.time(), tzinfo=PARIS_TZ)
         with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 """
@@ -630,6 +649,51 @@ def format_match_post(emoji: str, title: str, row: dict[str, Any]) -> str:
     )
 
 
+def format_compact_match(row: dict[str, Any]) -> str:
+    kickoff = row["kickoff"].astimezone(PARIS_TZ)
+    signal = side_label(row["predicted_result"], row["home_team"], row["away_team"])
+    return (
+        f"• {kickoff.strftime('%d/%m %H:%M')} — {row['home_team']} – {row['away_team']}\n"
+        f"  1X2 {row['home_pct']:.0f}/{row['draw_pct']:.0f}/{row['away_pct']:.0f} | "
+        f"+2,5 {row['over_25_pct']:.0f}% | BTTS {row['btts_pct']:.0f}% | "
+        f"{signal} ({row['confidence']:.0f}%)"
+    )
+
+
+def build_all_matches_messages(rows: list[dict[str, Any]], periods: Periods) -> list[str]:
+    if not SHOW_ALL_MATCHES or not rows:
+        return []
+
+    ordered = sorted(rows, key=lambda row: row["kickoff"])[:MAX_FULL_MATCHES]
+    header = (
+        f"📋 Tous les matchs analysés — {periods.label}\n"
+        f"Du {periods.future_start.strftime('%d/%m')} au {periods.future_end_inclusive.strftime('%d/%m')}\n"
+        f"{len(ordered)} matchs listés sur {len(rows)}."
+    )
+
+    messages: list[str] = []
+    current_lines = [header]
+    current_len = len(header)
+
+    for row in ordered:
+        line = format_compact_match(row)
+        # Telegram accepte 4096 caractères ; on garde une marge.
+        if current_len + len(line) + 2 > 3600:
+            messages.append("\n".join(current_lines))
+            current_lines = ["📋 Suite des matchs analysés"]
+            current_len = len(current_lines[0])
+        current_lines.append(line)
+        current_len += len(line) + 1
+
+    if current_lines:
+        messages.append("\n".join(current_lines))
+
+    if len(rows) > len(ordered):
+        messages.append(f"ℹ️ Liste limitée à {MAX_FULL_MATCHES} matchs. Augmente MAX_FULL_MATCHES si besoin.")
+
+    return messages
+
+
 def build_radar_messages(rows: list[dict[str, Any]], periods: Periods) -> list[str]:
     selected = choose_radar_matches(rows, MAX_RADAR_MATCHES)
     if not selected:
@@ -637,11 +701,13 @@ def build_radar_messages(rows: list[dict[str, Any]], periods: Periods) -> list[s
 
     root = (
         f"⚽ XGenius — {periods.label}\n"
-        f"Du {periods.future_start.strftime('%d/%m')} au {periods.future_end.strftime('%d/%m')}\n"
-        f"{len(rows)} matchs analysés, {len(selected)} affichés.\n"
+        f"Du {periods.future_start.strftime('%d/%m')} au {periods.future_end_inclusive.strftime('%d/%m')}\n"
+        f"{len(rows)} matchs analysés, {len(selected)} tops affichés.\n"
         "1X2, buts, BTTS et confiance"
     )
-    return [root] + [format_match_post(emoji, title, row) for emoji, title, row in selected]
+    messages = [root] + [format_match_post(emoji, title, row) for emoji, title, row in selected]
+    messages.extend(build_all_matches_messages(rows, periods))
+    return messages
 
 
 # ---------------------------------------------------------------------------
@@ -659,17 +725,49 @@ def resolve_mode(requested: str) -> str:
     raise RuntimeError("Le mode auto ne s'exécute que le lundi ou le jeudi.")
 
 
+def anchor_for_mode(mode: str, reference: date) -> date:
+    """Calcule la date d'ancrage du traitement.
+
+    - monday couvre lundi → jeudi exclu.
+      Si on lance manuellement lundi, mardi ou mercredi, on garde le lundi
+      de la semaine en cours. Sinon on prépare le lundi suivant.
+
+    - thursday couvre jeudi → lundi exclu.
+      Si on lance manuellement jeudi, vendredi, samedi ou dimanche, on garde
+      le jeudi de la semaine en cours. Sinon on prépare le jeudi suivant.
+    """
+    weekday = reference.weekday()
+
+    if mode == "monday":
+        if 0 <= weekday <= 2:
+            return reference - timedelta(days=weekday)
+        return reference + timedelta(days=(7 - weekday) % 7)
+
+    if 3 <= weekday <= 6:
+        return reference - timedelta(days=weekday - 3)
+    return reference + timedelta(days=3 - weekday)
+
+
 def periods_for(mode: str, today: date) -> Periods:
     if mode == "monday":
+        anchor = anchor_for_mode(mode, today)
         return Periods(
-            label="Radar de la semaine",
-            future_start=today,
-            future_end=today + timedelta(days=6),
+            label="Radar lundi → mercredi",
+            future_start=anchor,
+            future_end_exclusive=anchor + timedelta(days=3),
+            bilan_label="Bilan du week-end",
+            bilan_start=anchor - timedelta(days=3),
+            bilan_end_exclusive=anchor,
         )
+
+    anchor = anchor_for_mode(mode, today)
     return Periods(
-        label="Radar du week-end",
-        future_start=today,
-        future_end=today + timedelta(days=3),
+        label="Radar jeudi → dimanche",
+        future_start=anchor,
+        future_end_exclusive=anchor + timedelta(days=4),
+        bilan_label="Bilan lundi → mercredi",
+        bilan_start=anchor - timedelta(days=3),
+        bilan_end_exclusive=anchor,
     )
 
 
@@ -686,18 +784,25 @@ def collect_dates(api: FootballAPI, db: Database, days: Iterable[date]) -> list[
     return collected
 
 
-def publish_bilan(db: Database, telegram: TelegramClient, mode: str, today: date) -> None:
-    rows = db.unreported_completed()
+def publish_bilan(db: Database, telegram: TelegramClient, mode: str, periods: Periods) -> None:
+    rows = db.unreported_completed(periods.bilan_start, periods.bilan_end_exclusive)
     if not rows:
-        print("Aucun nouveau match terminé à intégrer au bilan.")
+        print("Aucun nouveau match terminé à intégrer au bilan pour cette période.")
         return
 
-    report_key = f"bilan:{mode}:{today.isoformat()}"
+    report_key = (
+        f"bilan:{mode}:"
+        f"{periods.bilan_start.isoformat()}:{periods.bilan_end_exclusive.isoformat()}"
+    )
     if db.report_exists(report_key):
-        print("Bilan déjà publié pour cette exécution.")
+        print("Bilan déjà publié pour cette période.")
         return
 
-    label = "Bilan du week-end" if mode == "monday" else "Bilan de la semaine"
+    label = (
+        f"{periods.bilan_label} "
+        f"({periods.bilan_start.strftime('%d/%m')} → "
+        f"{periods.bilan_end_inclusive.strftime('%d/%m')})"
+    )
     message = build_bilan(rows, label)
     message_id = telegram.send_messages([message])
 
@@ -756,12 +861,15 @@ def publish_radar(
     today: date,
     periods: Periods,
 ) -> None:
-    report_key = f"radar:{mode}:{today.isoformat()}"
+    report_key = (
+        f"radar:{mode}:"
+        f"{periods.future_start.isoformat()}:{periods.future_end_exclusive.isoformat()}"
+    )
     if db.report_exists(report_key):
         print("Radar déjà publié pour cette exécution.")
         return
 
-    rows = db.future_predictions(periods.future_start, periods.future_end)
+    rows = db.future_predictions(periods.future_start, periods.future_end_exclusive)
     messages = build_radar_messages(rows, periods)
     if not messages:
         print("Aucune prédiction disponible pour le radar.")
@@ -776,6 +884,16 @@ def run(mode: str) -> None:
     require_settings()
     today = datetime.now(PARIS_TZ).date()
     periods = periods_for(mode, today)
+    print(
+        "Période bilan : "
+        f"{periods.bilan_start.isoformat()} → "
+        f"{periods.bilan_end_exclusive.isoformat()} exclu"
+    )
+    print(
+        "Période radar : "
+        f"{periods.future_start.isoformat()} → "
+        f"{periods.future_end_exclusive.isoformat()} exclu"
+    )
 
     api = FootballAPI(RAPIDAPI_KEY)
     db = Database(DATABASE_URL)
@@ -784,17 +902,18 @@ def run(mode: str) -> None:
     try:
         db.ensure_schema()
 
-        # Sept jours de recul suffisent pour récupérer tous les résultats non publiés.
-        past_start = today - timedelta(days=7)
-        past_end = today - timedelta(days=1)
-        past_fixtures = collect_dates(api, db, daterange(past_start, past_end))
+        past_fixtures = collect_dates(
+            api,
+            db,
+            daterange(periods.bilan_start, periods.bilan_end_exclusive),
+        )
         print(f"Historique actualisé : {len(past_fixtures)} matchs récupérés.")
-        publish_bilan(db, telegram, mode, today)
+        publish_bilan(db, telegram, mode, periods)
 
         future_fixtures = collect_dates(
             api,
             db,
-            daterange(periods.future_start, periods.future_end),
+            daterange(periods.future_start, periods.future_end_exclusive),
         )
         saved = generate_predictions(api, db, future_fixtures)
         print(f"{saved} prédictions enregistrées ou actualisées.")
